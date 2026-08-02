@@ -91,6 +91,52 @@ async def get_by_id(
 
 
 @router.get(
+    "/by-unit-of/{user_id}",
+    response_model=list[UserResponse],
+    summary="List every user sharing any unit/apartment with the given user (including themselves)",
+)
+async def list_unitmates(
+    user_id: UUID,
+    pool=Depends(get_pool),
+):
+    """Used by visitor-service so a resident's 'my visitor passes' view can
+    include passes created by any other household member on the same
+    unit/apartment, not just their own — residents otherwise have no local
+    concept of "household", only individual accounts. Matches sharing via
+    any of the three unit-link mechanisms _fetch_unit_label reads from
+    (user_units, legacy user_apartments, or the users.structure_node_id
+    fallback column), OR'd together rather than COALESCE-precedence since we
+    want anyone linked by any mechanism, not just the first that resolves."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT {_USER_COLS} FROM users u WHERE u.id IN (
+                SELECT user_id FROM user_units WHERE node_id IN (
+                    SELECT node_id FROM user_units WHERE user_id = $1
+                )
+                UNION
+                SELECT user_id FROM user_apartments WHERE apartment_id IN (
+                    SELECT apartment_id FROM user_apartments WHERE user_id = $1
+                )
+                UNION
+                SELECT id FROM users WHERE structure_node_id IS NOT NULL AND structure_node_id = (
+                    SELECT structure_node_id FROM users WHERE id = $1
+                )
+                UNION
+                SELECT $1
+            )
+            """,
+            user_id,
+        )
+        users = []
+        for row in rows:
+            user = _row_to_user(row, await _fetch_user_apartments(conn, row["id"]))
+            user.unit_label = await _fetch_unit_label(conn, row["id"])
+            users.append(user)
+        return users
+
+
+@router.get(
     "/by-role/{role}",
     response_model=list[UserResponse],
     summary="List active users with a given role (for broadcast notifications)",
