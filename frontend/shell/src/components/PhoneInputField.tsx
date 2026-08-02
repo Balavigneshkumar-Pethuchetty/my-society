@@ -255,13 +255,18 @@ export function PhoneInputField({
         </List>
       </Popover>
 
-      {/* Number input */}
+      {/* Number input — minWidth: 0 overrides the flex-item default of
+          min-width: auto, which otherwise refuses to shrink below the
+          browser's native <input> min-content width and pushes this row
+          (and its container) wider than available space on narrow
+          viewports, producing a horizontal scrollbar. */}
       <TextField
         label={label}
         value={localInput}
         onChange={(e) => handleNumberChange(e.target.value)}
         placeholder={placeholder}
         fullWidth
+        sx={{ minWidth: 0 }}
         size={size}
         required={required}
         autoFocus={autoFocus}

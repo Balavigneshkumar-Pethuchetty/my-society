@@ -1,3 +1,9 @@
 /* MUI CssBaseline handles the box-sizing reset, font, and body styles.
    Only keep things MUI doesn't cover. */
 html { font-size: 15px; }
+
+/* Defense-in-depth: no legitimate layout here needs to scroll sideways —
+   a stray fixed/min-width element overflowing by even a few px otherwise
+   forces a page-wide horizontal scrollbar (see PhoneInputField.tsx's
+   min-width: 0 fix for one such case). */
+html, body { overflow-x: hidden; max-width: 100%; }
