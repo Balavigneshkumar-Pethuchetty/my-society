@@ -23,6 +23,8 @@ from app.models import (
     RoleUpdateRequest,
     ApartmentResponse,
     UserListResponse,
+    ResidentDirectoryEntry,
+    ResidentDirectoryResponse,
     ForgotPasswordRequest,
     AdminStatsResponse,
     AdminBreakdown,
@@ -1136,6 +1138,60 @@ async def get_admin_stats(pool: Pool = Depends(get_pool)):
             action=r["action"], role=r["role"], performed_at=r["performed_at"],
         ) for r in recent],
     )
+
+
+# ── resident directory (must be before /{user_id} to avoid UUID match on "directory") ──
+# Lets security call any resident directly in an emergency (fire, medical, etc.) —
+# not just residents tied to a visitor pass that happens to be active right now.
+# Deliberately a minimal field set (name/phone/unit only, no email/keycloak_sub/
+# apartments) rather than reusing GET /users's full admin listing.
+
+@router.get(
+    "/directory",
+    response_model=ResidentDirectoryResponse,
+    summary="Flat-holder directory (name/unit/phone) — for security to call in an emergency",
+    dependencies=[Depends(require_role("admin", "committee_member", "security_guard"))],
+)
+async def resident_directory(pool: Pool = Depends(get_pool)):
+    async with pool.acquire() as conn:
+        # Anyone with a flat on record — not just role='resident'. Admins,
+        # committee members, etc. can be linked to a flat too and should be
+        # just as reachable in an emergency; 'guest' is excluded since those
+        # are placeholder rows for complimentary tickets, never real accounts.
+        # A user can be linked to more than one flat (user_units/user_apartments
+        # are both many-to-many) — aggregate every distinct label instead of
+        # arbitrarily picking one. The join to `flats` (not LEFT JOIN) is what
+        # excludes anyone with no flat on record at all.
+        rows = await conn.fetch(
+            """
+            WITH flat_labels AS (
+                SELECT uu.user_id, sn.name AS label
+                FROM user_units uu JOIN structure_nodes sn ON sn.id = uu.node_id
+                UNION
+                SELECT ua.user_id, a.block || ' – ' || a.unit_number AS label
+                FROM user_apartments ua JOIN apartment a ON a.id = ua.apartment_id
+                UNION
+                SELECT u.id, sn.name AS label
+                FROM users u JOIN structure_nodes sn ON sn.id = u.structure_node_id
+                WHERE u.structure_node_id IS NOT NULL
+            ),
+            flats AS (
+                SELECT user_id, STRING_AGG(DISTINCT label, ', ' ORDER BY label) AS unit_label
+                FROM flat_labels
+                GROUP BY user_id
+            )
+            SELECT u.id, u.name, u.phone, flats.unit_label
+            FROM users u
+            JOIN flats ON flats.user_id = u.id
+            WHERE u.is_active = TRUE AND u.role != 'guest'
+            ORDER BY u.name
+            LIMIT 500
+            """
+        )
+    return ResidentDirectoryResponse(items=[
+        ResidentDirectoryEntry(id=r["id"], name=r["name"], phone=r["phone"], unit_label=r["unit_label"])
+        for r in rows
+    ])
 
 
 @router.get(

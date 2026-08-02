@@ -144,6 +144,17 @@ class UserListResponse(BaseModel):
     items: list[UserResponse]
 
 
+class ResidentDirectoryEntry(BaseModel):
+    id: UUID
+    name: str
+    phone: Optional[str] = None
+    unit_label: Optional[str] = None
+
+
+class ResidentDirectoryResponse(BaseModel):
+    items: list[ResidentDirectoryEntry]
+
+
 class ForgotPasswordRequest(BaseModel):
     email: str
 
