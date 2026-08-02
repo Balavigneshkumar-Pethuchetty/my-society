@@ -264,6 +264,73 @@ services:
     networks:
       - society_net
 
+  # ─── Visitor Service — dedicated Postgres ─────────────────────────────────
+  # Deliberately NOT a database inside the shared `postgres` container — visitor
+  # management runs against its own Postgres instance so it stays a genuinely
+  # independent service (see services/visitor/db/init/01_schema.sql). No host
+  # port binding — society_postgres already uses host:${POSTGRES_PORT}; reach
+  # this via service name "visitor-postgres:5432" inside the compose network
+  # (mirrors ~/payment_reconcilation_service's standalone `db` service).
+  visitor-postgres:
+    image: postgres:16-alpine
+    container_name: society_visitor_postgres
+    restart: always
+    environment:
+      POSTGRES_USER:     ${VISITOR_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${VISITOR_POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${VISITOR_POSTGRES_DB:-visitor_service}
+    volumes:
+      - visitor_postgres_data:/var/lib/postgresql/data
+      - ./services/visitor/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VISITOR_POSTGRES_USER} -d ${VISITOR_POSTGRES_DB:-visitor_service}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - society_net
+
+  # ─── Visitor Service (port 3008) ──────────────────────────────────────────
+  visitor-service:
+    build:
+      context: ./services/visitor
+      dockerfile: Dockerfile
+    container_name: society_visitor_service
+    restart: always
+    environment:
+      DB_HOST:           visitor-postgres
+      DB_PORT:           5432
+      DB_NAME:           ${VISITOR_POSTGRES_DB:-visitor_service}
+      DB_USER:           ${VISITOR_POSTGRES_USER}
+      DB_PASSWORD:       ${VISITOR_POSTGRES_PASSWORD}
+      KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
+      KEYCLOAK_REALM:            society-events
+      KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
+      INTERNAL_API_KEY:          ${INTERNAL_API_KEY}
+      SOCIETY_ID:                11100000-0000-0000-0000-000000000001
+      SOCIETY_NAME:              ${SOCIETY_NAME:-GM Global Techies Town}
+      USER_SERVICE_INTERNAL_URL: http://user-service:3001/internal/users
+      AUTH_SERVICE_URL:          ${AUTH_SERVICE_URL:-http://host.containers.internal:8000}
+      AUTH_SERVICE_API_KEY:      ${AUTH_SERVICE_API_KEY:-}
+      SPLUNK_HEC_URL:            http://host.containers.internal:8088/services/collector/event
+      SPLUNK_HEC_TOKEN:          ${SPLUNK_HEC_TOKEN:-}
+    volumes:
+      - visitor_uploads:/app/uploads
+    depends_on:
+      visitor-postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - society_net
+
   # ─── Payment & Reconciliation Service (port 3007) ────────────────────────
   payment-service:
     build:
@@ -434,6 +501,25 @@ services:
     networks:
       - society_net
 
+  # ─── MFE: Visitors ───────────────────────────────────────────────────────────
+  mfe-visitors:
+    profiles: [frontend]
+    build:
+      context: ./frontend/mfe-visitors
+      dockerfile: Dockerfile
+      args:
+        VITE_MODE: ${VITE_MODE:-production}
+    container_name: society_mfe_visitors
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - society_net
+
 # ─── Volumes ─────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
@@ -450,6 +536,10 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME:-society}_payment_uploads
   user_uploads:
     name: ${COMPOSE_PROJECT_NAME:-society}_user_uploads
+  visitor_postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:-society}_visitor_postgres_data
+  visitor_uploads:
+    name: ${COMPOSE_PROJECT_NAME:-society}_visitor_uploads
 
 # ─── Network ─────────────────────────────────────────────────────────────────
 networks:

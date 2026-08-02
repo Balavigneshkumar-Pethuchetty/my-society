@@ -1,5 +1,14 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Box, Card, CardContent, Chip, Grid, Typography } from '@mui/material';
+
+export type ServiceAction = {
+  icon: React.ReactNode;
+  title: string;
+  cta: string;
+  path: string;
+  color: string;
+};
 
 export type ServiceTile = {
   icon: React.ReactNode;
@@ -7,6 +16,9 @@ export type ServiceTile = {
   title: string;
   desc: string;
   status: 'live' | 'soon';
+  // Quick-action shortcuts for this service, shown inline in the card
+  // (live services only) instead of in a separate section below the grid.
+  actions?: ServiceAction[];
 };
 
 // Shared tile grid for "what this platform covers" — used on both the
@@ -55,6 +67,27 @@ export function ServicesGrid({ services }: { services: ServiceTile[] }) {
               </Box>
               <Typography fontWeight={700} fontSize={17} mb={1}>{s.title}</Typography>
               <Typography fontSize={14} color="text.secondary" lineHeight={1.6}>{s.desc}</Typography>
+
+              {s.actions && s.actions.length > 0 && (
+                <Box sx={{ mt: 2.5, pt: 2, borderTop: '1px solid', borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {s.actions.map((a) => (
+                    <Box
+                      key={a.title}
+                      component={Link}
+                      to={a.path}
+                      sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        fontSize: 13.5, fontWeight: 600, color: a.color,
+                        textDecoration: 'none', lineHeight: 1.4,
+                        '&:hover': { textDecoration: 'underline' },
+                      }}
+                    >
+                      <span>{a.cta}</span>
+                      <span>→</span>
+                    </Box>
+                  ))}
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>

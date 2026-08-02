@@ -11,25 +11,35 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import SecurityIcon from '@mui/icons-material/Security';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSociety } from '../contexts/SocietyContext';
 import { ROADMAP } from '../data/roadmap';
 import { ServicesGrid } from '../components/ServicesGrid';
 
-// The one live service today, shown alongside the roadmap so the overview
+// The live services today, shown alongside the roadmap so the overview
 // section reads as "one growing platform" rather than "an events app plus
-// some ideas." Keep this in sync with FEATURES below — this is the summary,
-// FEATURES is the drill-down.
-const LIVE_SERVICE = {
-  icon: <EventIcon sx={{ fontSize: 30 }} />,
-  color: '#6366f1',
-  title: 'Events & Ticketing',
-  desc: 'Browse, book and attend community events with digital QR-code entry.',
-};
+// some ideas." Ticketing is a feature of Events (QR-code entry on booking),
+// not a separate service — it doesn't get its own card, same reasoning as
+// FEATURES below which drills into Events & Ticketing as one flow.
+const LIVE_SERVICES = [
+  {
+    icon: <EventIcon sx={{ fontSize: 30 }} />,
+    color: '#6366f1',
+    title: 'Events & Ticketing',
+    desc: 'Browse, book and attend community events with digital QR-code tickets for gate entry.',
+  },
+  {
+    icon: <HowToRegIcon sx={{ fontSize: 30 }} />,
+    color: '#ec4899',
+    title: 'Visitor Management',
+    desc: 'Residents create QR visitor passes for guests; security scans them at the gate or logs walk-ins directly.',
+  },
+];
 
 const SERVICES_OVERVIEW = [
-  { ...LIVE_SERVICE, status: 'live' as const },
+  ...LIVE_SERVICES.map((s) => ({ ...s, status: 'live' as const })),
   ...ROADMAP.map((r) => ({ ...r, status: 'soon' as const })),
 ];
 
@@ -282,7 +292,7 @@ export function Landing() {
             One app for everything your society runs
           </Typography>
           <Typography textAlign="center" color="text.secondary" fontSize={16} mb={6} maxWidth={560} mx="auto">
-            Events &amp; Ticketing is live today. Five more services are already on the roadmap for {name}.
+            Events &amp; Ticketing and Visitor Management are live today. Four more services are already on the roadmap for {name}.
           </Typography>
 
           <ServicesGrid services={SERVICES_OVERVIEW} />

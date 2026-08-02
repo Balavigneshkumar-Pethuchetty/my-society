@@ -1,0 +1,33 @@
+{
+  "name": "gmgt-visitors",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "preview": "vite preview --port 4006",
+    "preview:dev": "vite preview --port 4006 --mode development",
+    "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --mode development",
+    "start:dev": "npm run build:dev && npm run preview:dev",
+    "start": "npm run build && npm run preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.0",
+    "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^5.18.0",
+    "@mui/material": "^5.16.7",
+    "html5-qrcode": "^2.3.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.24.1"
+  },
+  "devDependencies": {
+    "@originjs/vite-plugin-federation": "^1.3.5",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
+  }
+}

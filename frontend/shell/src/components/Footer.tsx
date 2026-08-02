@@ -12,10 +12,14 @@ const QUICK_LINKS = [
   { label: 'My Registrations', to: '/registrations' },
 ];
 
-// Events is the one live service; the rest come from the shared roadmap so
-// the footer never drifts out of sync with the Landing/Home "coming soon" lists.
+// Events & Ticketing and Visitor Management are the live services; the rest
+// come from the shared roadmap so the footer never drifts out of sync with
+// the Landing/Home "coming soon" lists. Ticketing isn't listed separately
+// here — it's a feature of Events (QR-code entry on booking), not its own
+// service, and "My Tickets" already has its own link under Quick Links.
 const SERVICES = [
   { label: 'Events & Ticketing', to: '/events', live: true },
+  { label: 'Visitor Management', to: '/visitors', live: true },
   ...ROADMAP.map((r) => ({ label: r.title, to: undefined, live: false })),
 ];
 

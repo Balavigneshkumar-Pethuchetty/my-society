@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n shell,admin,events,booking,payment -c blue,magenta,cyan,green,yellow --kill-others-on-fail \"cd frontend/shell && npm run dev\" \"cd frontend/mfe-admin && npm run start:dev\" \"cd frontend/mfe-events && npm run start:dev\" \"cd frontend/mfe-booking && npm run start:dev\" \"cd frontend/mfe-payment && npm run start:dev\""
+    "dev": "concurrently -n shell,admin,events,booking,payment,tickets,visitors -c blue,magenta,cyan,green,yellow,red,white --kill-others-on-fail \"cd frontend/shell && npm run dev\" \"cd frontend/mfe-admin && npm run start:dev\" \"cd frontend/mfe-events && npm run start:dev\" \"cd frontend/mfe-booking && npm run start:dev\" \"cd frontend/mfe-payment && npm run start:dev\" \"cd frontend/mfe-tickets && npm run start:dev\" \"cd frontend/mfe-visitors && npm run start:dev\""
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

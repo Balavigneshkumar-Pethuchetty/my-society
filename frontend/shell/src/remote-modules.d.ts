@@ -42,3 +42,24 @@ declare module 'mfe_tickets/TicketsApp' {
   const TicketsApp: React.ComponentType<TicketsAppProps>;
   export { TicketsApp };
 }
+
+declare module 'mfe_visitors/VisitorResidentApp' {
+  import React from 'react';
+  interface VisitorAppProps { token?: string | null }
+  const VisitorResidentApp: React.ComponentType<VisitorAppProps>;
+  export { VisitorResidentApp };
+}
+
+declare module 'mfe_visitors/VisitorSecurityApp' {
+  import React from 'react';
+  interface VisitorAppProps { token?: string | null }
+  const VisitorSecurityApp: React.ComponentType<VisitorAppProps>;
+  export { VisitorSecurityApp };
+}
+
+declare module 'mfe_visitors/VisitorAdminApp' {
+  import React from 'react';
+  interface VisitorAppProps { token?: string | null }
+  const VisitorAdminApp: React.ComponentType<VisitorAppProps>;
+  export { VisitorAdminApp };
+}

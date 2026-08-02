@@ -57,6 +57,10 @@ interface TicketsAppProps {
   token?: string | null;
 }
 
+interface VisitorAppProps {
+  token?: string | null;
+}
+
 // ── MFE unavailable fallback ──────────────────────────────────────────────────
 // Shown when a remote's remoteEntry.js can't be fetched (container not running,
 // network error, 404, etc.). Prevents a white blank page.
@@ -152,6 +156,24 @@ const RemoteTicketsApp = React.lazy(() =>
   import('mfe_tickets/TicketsApp')
     .then((m) => ({ default: getRemoteComponent<TicketsAppProps>(m, 'TicketsApp') }))
     .catch(() => ({ default: () => <MfeUnavailable name="Tickets" /> }))
+);
+
+const RemoteVisitorResidentApp = React.lazy(() =>
+  import('mfe_visitors/VisitorResidentApp')
+    .then((m) => ({ default: getRemoteComponent<VisitorAppProps>(m, 'VisitorResidentApp') }))
+    .catch(() => ({ default: () => <MfeUnavailable name="Visitor Passes" /> }))
+);
+
+const RemoteVisitorSecurityApp = React.lazy(() =>
+  import('mfe_visitors/VisitorSecurityApp')
+    .then((m) => ({ default: getRemoteComponent<VisitorAppProps>(m, 'VisitorSecurityApp') }))
+    .catch(() => ({ default: () => <MfeUnavailable name="Visitor Gate" /> }))
+);
+
+const RemoteVisitorAdminApp = React.lazy(() =>
+  import('mfe_visitors/VisitorAdminApp')
+    .then((m) => ({ default: getRemoteComponent<VisitorAppProps>(m, 'VisitorAdminApp') }))
+    .catch(() => ({ default: () => <MfeUnavailable name="Visitor Ledger" /> }))
 );
 
 // ── Shared UI pieces ──────────────────────────────────────────────────────────
@@ -370,6 +392,28 @@ function AppShell() {
             <Route path="/tickets/*" element={
               <React.Suspense fallback={<MfeFallback label="My Tickets" />}>
                 <RemoteTicketsApp token={token} />
+              </React.Suspense>
+            } />
+
+            <Route path="/visitors/gate/*" element={
+              <ProtectedRoute allowedRoles={['security_guard', 'admin', 'committee_member']}>
+                <React.Suspense fallback={<MfeFallback label="Visitor Gate" />}>
+                  <RemoteVisitorSecurityApp token={token} />
+                </React.Suspense>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/visitors/ledger/*" element={
+              <ProtectedRoute allowedRoles={['admin', 'committee_member']}>
+                <React.Suspense fallback={<MfeFallback label="Visitor Ledger" />}>
+                  <RemoteVisitorAdminApp token={token} />
+                </React.Suspense>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/visitors/*" element={
+              <React.Suspense fallback={<MfeFallback label="Visitor Passes" />}>
+                <RemoteVisitorResidentApp token={token} />
               </React.Suspense>
             } />
 

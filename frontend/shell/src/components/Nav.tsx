@@ -24,11 +24,16 @@ import { ROADMAP } from '../data/roadmap';
 // these are clickable today. Kept in sync with the shared ROADMAP data.
 const MORE_SERVICES = ROADMAP.map((r) => r.title);
 
-// Links grouped under the "Events & ticketing" nav dropdown
+// Links grouped under the "Events & Ticketing" nav dropdown
 const EVENTS_LINKS = [
   { label: 'Browse Events',     to: '/events',         end: false },
   { label: 'My Tickets',        to: '/tickets',        end: false },
   { label: 'My Registrations',  to: '/registrations',  end: false },
+];
+
+// Links grouped under the separate "Visitor Management" nav dropdown
+const VISITOR_LINKS = [
+  { label: 'Visitor Passes',    to: '/visitors',       end: false },
 ];
 
 const navBtnSx = {
@@ -45,6 +50,7 @@ export function Nav() {
   const { user, login, register } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [eventsMenuAnchor, setEventsMenuAnchor] = useState<null | HTMLElement>(null);
+  const [visitorMenuAnchor, setVisitorMenuAnchor] = useState<null | HTMLElement>(null);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
 
   const role    = user?.primaryRole ?? '';
@@ -56,7 +62,10 @@ export function Nav() {
   // Guard/sponsor accounts keep a short flat link row — grouping only
   // matters where the nav is otherwise crowded with event-only links.
   const flatLinks = isGuard
-    ? [{ label: 'QR Scanner', to: '/scanner', end: false }]
+    ? [
+        { label: 'QR Scanner', to: '/scanner', end: false },
+        { label: 'Visitor Gate', to: '/visitors/gate', end: false },
+      ]
     : [
         { label: 'Events',           to: '/events',  end: false },
         { label: 'My Sponsorships',  to: '/sponsor', end: false },
@@ -69,6 +78,13 @@ export function Nav() {
       : []),
     ...(role === 'admin' || role === 'committee_member'
       ? [{ label: 'Admin Panel', to: '/admin', end: false }]
+      : []),
+  ];
+
+  const visitorMenuLinks = [
+    ...VISITOR_LINKS,
+    ...(role === 'admin' || role === 'committee_member'
+      ? [{ label: 'Visitor Ledger', to: '/visitors/ledger', end: false }]
       : []),
   ];
 
@@ -120,7 +136,7 @@ export function Nav() {
                     endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
                     sx={navBtnSx}
                   >
-                    Events &amp; ticketing
+                    Events &amp; Ticketing
                   </Button>
                   <Menu
                     anchorEl={eventsMenuAnchor}
@@ -135,6 +151,33 @@ export function Nav() {
                         to={l.to}
                         end={l.end}
                         onClick={() => setEventsMenuAnchor(null)}
+                        sx={menuItemSx}
+                      >
+                        {l.label}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+
+                  <Button
+                    onClick={(e) => setVisitorMenuAnchor(e.currentTarget)}
+                    endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
+                    sx={navBtnSx}
+                  >
+                    Visitor Management
+                  </Button>
+                  <Menu
+                    anchorEl={visitorMenuAnchor}
+                    open={!!visitorMenuAnchor}
+                    onClose={() => setVisitorMenuAnchor(null)}
+                    PaperProps={{ sx: { bgcolor: NAV_BG, mt: 0.5 } }}
+                  >
+                    {visitorMenuLinks.map((l) => (
+                      <MenuItem
+                        key={l.to}
+                        component={NavLink}
+                        to={l.to}
+                        end={l.end}
+                        onClick={() => setVisitorMenuAnchor(null)}
                         sx={menuItemSx}
                       >
                         {l.label}
@@ -281,9 +324,30 @@ export function Nav() {
                 </ListItemButton>
 
                 <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>
-                  Events &amp; ticketing
+                  Events &amp; Ticketing
                 </ListSubheader>
                 {eventsMenuLinks.map((l) => (
+                  <ListItemButton
+                    key={l.to}
+                    component={NavLink}
+                    to={l.to}
+                    end={l.end}
+                    onClick={() => setDrawerOpen(false)}
+                    sx={{
+                      pl: 4,
+                      color: 'rgba(203,213,225,0.9)',
+                      '&.active': { color: '#fff', bgcolor: 'rgba(99,102,241,0.28)' },
+                      '&:hover':  { bgcolor: 'rgba(255,255,255,0.08)' },
+                    }}
+                  >
+                    <ListItemText primary={l.label} primaryTypographyProps={{ fontWeight: 500 }} />
+                  </ListItemButton>
+                ))}
+
+                <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1, mt: 1 }}>
+                  Visitor Management
+                </ListSubheader>
+                {visitorMenuLinks.map((l) => (
                   <ListItemButton
                     key={l.to}
                     component={NavLink}

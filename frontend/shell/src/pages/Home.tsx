@@ -13,6 +13,10 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import BadgeIcon from '@mui/icons-material/Badge';
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
 import { useAuth } from '../contexts/AuthContext';
 import { useSociety } from '../contexts/SocietyContext';
 import { useUserService } from '../contexts/UserServiceContext';
@@ -21,50 +25,80 @@ import { ServicesGrid, ServiceTile } from '../components/ServicesGrid';
 
 type Slot = { icon: React.ReactNode; title: string; desc: string; path: string; cta: string; color: string };
 
-// Events is the one live service; the rest come from the shared roadmap so
-// this list never drifts out of sync with the pre-login Landing page.
-const SERVICES_OVERVIEW: ServiceTile[] = [
-  {
-    icon: <EventIcon sx={{ fontSize: 30 }} />,
-    color: '#6366f1',
-    title: 'Events & Ticketing',
-    desc: 'Browse, book and attend community events with digital QR-code entry.',
-    status: 'live',
-  },
-  ...ROADMAP.map((r) => ({ ...r, status: 'soon' as const })),
-];
+// Base card info for the two live services — role-specific quick actions
+// get attached to these (as `actions`) inside Home() and rendered inline in
+// the card by ServicesGrid, instead of in a separate section below the grid.
+const EVENTS_SERVICE_BASE = {
+  icon: <EventIcon sx={{ fontSize: 30 }} />,
+  color: '#6366f1',
+  title: 'Events & Ticketing',
+  desc: 'Browse, book and attend community events with digital QR-code tickets for gate entry.',
+};
 
-const RESIDENT_SLOTS: Slot[] = [
+const VISITOR_SERVICE_BASE = {
+  icon: <HowToRegIcon sx={{ fontSize: 30 }} />,
+  color: '#ec4899',
+  title: 'Visitor Management',
+  desc: 'Residents create QR visitor passes for guests; security scans them at the gate or logs walk-ins directly.',
+};
+
+// Event Management & Ticketing slots — kept in their own section, separate
+// from Visitor Management, per role.
+const RESIDENT_EVENT_SLOTS: Slot[] = [
   { icon: <EventIcon sx={{ fontSize: 28 }} />,             title: 'Events',         desc: 'Browse upcoming festivals, sports days, wellness sessions and more.',        path: '/events',   cta: 'Browse Events',     color: '#6366f1' },
   { icon: <ConfirmationNumberIcon sx={{ fontSize: 28 }} />, title: 'My Tickets',    desc: 'View your registrations and show the QR code at the gate.',                  path: '/tickets',  cta: 'View Tickets',      color: '#10b981' },
   { icon: <PaymentsIcon sx={{ fontSize: 28 }} />,           title: 'Payments',      desc: 'Check payment history and manage refunds.',                                  path: '/payments', cta: 'Payment History',   color: '#f59e0b' },
 ];
 
-const COMMITTEE_EXTRA: Slot[] = [
+const COMMITTEE_EVENT_EXTRA: Slot[] = [
   { icon: <EditCalendarIcon sx={{ fontSize: 28 }} />,       title: 'Manage Events', desc: 'Create, publish and manage events. Post announcements to registered users.', path: '/manage',   cta: 'Go to Event Manager', color: '#0ea5e9' },
 ];
 
-const ADMIN_EXTRA: Slot[] = [
+const ADMIN_EVENT_EXTRA: Slot[] = [
   { icon: <AdminPanelSettingsIcon sx={{ fontSize: 28 }} />, title: 'Admin Panel',   desc: 'User roles, revenue reports, categories and society settings.',              path: '/admin',    cta: 'Open Admin Panel',  color: '#7c3aed' },
 ];
 
-const GUARD_SLOTS: Slot[] = [
+const GUARD_EVENT_SLOTS: Slot[] = [
   { icon: <QrCodeScannerIcon sx={{ fontSize: 28 }} />,  title: 'QR Scanner',       desc: 'Scan resident tickets at the entry gate to mark attendance.',                                path: '/scanner',  cta: 'Open Scanner',         color: '#10b981' },
   { icon: <FactCheckIcon sx={{ fontSize: 28 }} />,      title: 'Entry Log',        desc: "Today's attendance log — who has checked in and when.",                                      path: '/entry-log', cta: 'View Entry Log',      color: '#6366f1' },
   { icon: <EventIcon sx={{ fontSize: 28 }} />,          title: 'Events',           desc: 'Browse upcoming events (view only).',                                                        path: '/events',   cta: 'Browse Events',         color: '#94a3b8' },
 ];
 
-const SPONSOR_SLOTS: Slot[] = [
+const SPONSOR_EVENT_SLOTS: Slot[] = [
   { icon: <MonetizationOnIcon sx={{ fontSize: 28 }} />, title: 'My Sponsorships', desc: 'View events you are sponsoring, track contribution status, and raise refund requests.', path: '/sponsor',  cta: 'View Sponsorships',     color: '#7c3aed' },
   { icon: <EventIcon sx={{ fontSize: 28 }} />,          title: 'Browse Events',   desc: 'Explore upcoming community events to discover sponsorship opportunities.',                path: '/events',   cta: 'Browse Events',         color: '#6366f1' },
 ];
 
-function useMfeSlots(role: string): Slot[] {
-  if (role === 'security_guard') return GUARD_SLOTS;
-  if (role === 'sponsor')        return SPONSOR_SLOTS;
-  if (role === 'admin')          return [...RESIDENT_SLOTS, ...COMMITTEE_EXTRA, ...ADMIN_EXTRA];
-  if (role === 'committee_member') return [...RESIDENT_SLOTS, ...COMMITTEE_EXTRA];
-  return RESIDENT_SLOTS;
+// Visitor Management slots — its own section, never mixed into the events
+// menus/options above.
+const RESIDENT_VISITOR_SLOTS: Slot[] = [
+  { icon: <BadgeIcon sx={{ fontSize: 28 }} />,              title: 'Visitor Passes', desc: 'Create QR visitor passes for guests and track entry/exit.',                 path: '/visitors', cta: 'Manage Visitors',   color: '#ec4899' },
+];
+
+const COMMITTEE_VISITOR_EXTRA: Slot[] = [
+  { icon: <ListAltIcon sx={{ fontSize: 28 }} />,            title: 'Visitor Ledger', desc: 'Review visitor logs, photos, and export reports.',                          path: '/visitors/ledger', cta: 'Open Ledger',  color: '#0891b2' },
+];
+
+const GUARD_VISITOR_SLOTS: Slot[] = [
+  { icon: <MeetingRoomIcon sx={{ fontSize: 28 }} />,    title: 'Visitor Gate',     desc: 'Scan visitor passes, log walk-ins, capture photos, and verify identity.',                     path: '/visitors/gate', cta: 'Open Visitor Gate', color: '#ec4899' },
+];
+
+function useMfeSlots(role: string): { events: Slot[]; visitor: Slot[] } {
+  if (role === 'security_guard') return { events: GUARD_EVENT_SLOTS, visitor: GUARD_VISITOR_SLOTS };
+  if (role === 'sponsor')        return { events: SPONSOR_EVENT_SLOTS, visitor: [] };
+  if (role === 'admin') {
+    return {
+      events: [...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA, ...ADMIN_EVENT_EXTRA],
+      visitor: [...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA],
+    };
+  }
+  if (role === 'committee_member') {
+    return {
+      events: [...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA],
+      visitor: [...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA],
+    };
+  }
+  return { events: RESIDENT_EVENT_SLOTS, visitor: RESIDENT_VISITOR_SLOTS };
 }
 
 const ROLE_WELCOME: Record<string, string> = {
@@ -99,11 +133,20 @@ export function Home() {
   const firstName          = user?.name.split(' ')[0] ?? 'there';
   const role               = user?.primaryRole ?? 'resident';
   const roleHint           = ROLE_WELCOME[role];
-  const slots              = useMfeSlots(role);
+  const { events: eventSlots, visitor: visitorSlots } = useMfeSlots(role);
   const apt                = dbUser?.apartments[0];
-  const quickActionsLabel  = role === 'security_guard' || role === 'sponsor'
-    ? 'Quick actions'
-    : 'Events & ticketing — quick actions';
+
+  // Live service cards carry their own role-specific quick actions inline
+  // (rendered by ServicesGrid) instead of separate sections below the grid.
+  const liveServices: ServiceTile[] = [
+    { ...EVENTS_SERVICE_BASE, status: 'live', actions: eventSlots },
+    ...(visitorSlots.length > 0
+      ? [{ ...VISITOR_SERVICE_BASE, status: 'live' as const, actions: visitorSlots }]
+      : []),
+  ];
+  const servicesOverview: ServiceTile[] = role === 'security_guard'
+    ? liveServices
+    : [...liveServices, ...ROADMAP.map((r) => ({ ...r, status: 'soon' as const }))];
 
   return (
     <Box component="main">
@@ -135,45 +178,20 @@ export function Home() {
         </Container>
       </Box>
 
-      {/* All society services */}
+      {/* Society services — Events & Ticketing and Visitor Management cards
+          carry their own quick actions inline, so residents don't need to
+          scroll past a separate "quick actions" section to find them. */}
       <Box sx={{ py: 6, px: { xs: 2, sm: 3 } }}>
         <Container maxWidth="lg">
           <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-            All society services
+            {role === 'security_guard' ? 'Your services' : 'All society services'}
           </Typography>
           <Typography fontSize={14} color="text.secondary" sx={{ mb: 3 }}>
-            Events &amp; ticketing is live today. Here's everything else coming to the platform.
+            {role === 'security_guard'
+              ? 'Quick access to your gate operations.'
+              : "Events & Ticketing and Visitor Management are live today — jump straight in from each card below. Here's everything else coming to the platform."}
           </Typography>
-          <ServicesGrid services={SERVICES_OVERVIEW} />
-        </Container>
-      </Box>
-
-      {/* Events & ticketing — quick actions */}
-      <Box sx={{ py: 6, px: { xs: 2, sm: 3 }, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
-            {quickActionsLabel}
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            {slots.map((s) => (
-              <Button
-                key={s.title}
-                component={Link}
-                to={s.path}
-                variant="outlined"
-                startIcon={s.icon}
-                sx={{
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  borderColor: s.color,
-                  color: s.color,
-                  '&:hover': { borderColor: s.color, bgcolor: `${s.color}14` },
-                }}
-              >
-                {s.cta} →
-              </Button>
-            ))}
-          </Box>
+          <ServicesGrid services={servicesOverview} />
         </Container>
       </Box>
 

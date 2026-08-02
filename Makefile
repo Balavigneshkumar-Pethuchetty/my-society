@@ -13,13 +13,14 @@
 #   make logs ENV=stage      # follow stage logs
 
 .PHONY: help up down restart free-ports validate-ports check-env logs ps reset seed \
-        shell-db shell-redis sync-users setup-google-idp \
+        shell-db shell-redis shell-visitor-db sync-users setup-google-idp \
         frontend frontend-install frontend-docker \
         restart-nginx restart-postgres restart-redis \
         restart-pgadmin restart-user-service restart-event-service \
-        restart-mfe-admin restart-mfe-events restart-mfe-booking restart-mfe-payment \
-        logs-nginx logs-db logs-user logs-events \
-        logs-mfe-admin logs-mfe-events logs-mfe-booking logs-mfe-payment \
+        restart-visitor-service restart-visitor-postgres \
+        restart-mfe-admin restart-mfe-events restart-mfe-booking restart-mfe-payment restart-mfe-visitors \
+        logs-nginx logs-db logs-user logs-events logs-visitor logs-visitor-db \
+        logs-mfe-admin logs-mfe-events logs-mfe-booking logs-mfe-payment logs-mfe-visitors \
         logs-splunk logs-fluent-bit \
         splunk-up splunk-down
 
@@ -238,6 +239,12 @@ restart-user-service: ## Rebuild & restart user service (picks up code changes)
 restart-event-service: ## Rebuild & restart event service (picks up code changes)
 	$(COMPOSE) up -d --build event-service
 
+restart-visitor-service: ## Rebuild & restart visitor service (picks up code changes)
+	$(COMPOSE) up -d --build visitor-service
+
+restart-visitor-postgres: ## Restart the visitor service's dedicated Postgres only
+	$(COMPOSE) restart visitor-postgres
+
 restart-cloudflared: ## Restart Cloudflare tunnel (managed by auth-service)
 	cd $(HOME)/auth-service && podman-compose restart cloudflared
 
@@ -252,6 +259,9 @@ restart-mfe-booking: ## Rebuild & restart mfe-booking container
 
 restart-mfe-payment: ## Rebuild & restart mfe-payment container
 	$(COMPOSE) --profile frontend up -d --build mfe-payment
+
+restart-mfe-visitors: ## Rebuild & restart mfe-visitors container
+	$(COMPOSE) --profile frontend up -d --build mfe-visitors
 
 ## ── Splunk / Fluent Bit (centralized ~/splunk-service) ──────────────────────
 splunk-up: ## Start centralized Splunk + Fluent Bit (~/splunk-service)
@@ -283,6 +293,12 @@ logs-user: ## Follow user service logs only
 logs-events: ## Follow event service logs only
 	$(COMPOSE) logs -f event-service
 
+logs-visitor: ## Follow visitor service logs only
+	$(COMPOSE) logs -f visitor-service
+
+logs-visitor-db: ## Follow visitor-postgres logs only
+	$(COMPOSE) logs -f visitor-postgres
+
 logs-cloudflared: ## Follow Cloudflare tunnel logs (managed by auth-service)
 	cd $(HOME)/auth-service && podman-compose logs -f cloudflared
 
@@ -298,6 +314,9 @@ logs-mfe-booking: ## Follow mfe-booking logs
 logs-mfe-payment: ## Follow mfe-payment logs
 	$(COMPOSE) --profile frontend logs -f mfe-payment
 
+logs-mfe-visitors: ## Follow mfe-visitors logs
+	$(COMPOSE) --profile frontend logs -f mfe-visitors
+
 logs-splunk: ## Follow Splunk logs (centralized ~/splunk-service)
 	cd $(HOME)/splunk-service && podman-compose logs -f splunk
 
@@ -310,6 +329,9 @@ shell-db: ## Open psql in the active environment's database
 
 shell-redis: ## Open redis-cli (authenticates if REDIS_PASSWORD is set)
 	$(COMPOSE) exec redis redis-cli $$(grep -m1 '^REDIS_PASSWORD=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]' | grep -q . && echo "-a $$(grep -m1 '^REDIS_PASSWORD=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]')") --no-auth-warning
+
+shell-visitor-db: ## Open psql in the visitor service's dedicated database
+	$(COMPOSE) exec visitor-postgres psql -U $$(grep -m1 '^VISITOR_POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]') -d $$(grep -m1 '^VISITOR_POSTGRES_DB=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]')
 
 seed: ## Re-run only the seed script (idempotent — uses ON CONFLICT DO NOTHING)
 	$(COMPOSE) exec -T postgres \

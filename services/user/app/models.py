@@ -29,6 +29,11 @@ class UserResponse(BaseModel):
     created_at: datetime
     structure_node_id: Optional[UUID] = None  # kept for compat; use unit_node_ids
     unit_node_ids: list[UUID] = []            # all flats this user is linked to
+    unit_label: Optional[str] = None          # resolved display label, e.g. "A-W1-F1-102" or
+                                               # "Block A – 101"; only populated by internal.py's
+                                               # endpoints (see services/visitor's user_client.py,
+                                               # which has no local DB to join structure_nodes/
+                                               # apartment itself)
 
 
 class UserUpdateRequest(BaseModel):
