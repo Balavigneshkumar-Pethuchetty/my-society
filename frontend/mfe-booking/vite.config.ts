@@ -20,6 +20,8 @@ export default defineConfig(({ command, mode }) => ({
         '@mui/material':   { singleton: true, requiredVersion: '^5.16.7' },
         '@emotion/react':  { singleton: true, requiredVersion: '^11.13.0' },
         '@emotion/styled': { singleton: true, requiredVersion: '^11.13.0' },
+        i18next:           { singleton: true, requiredVersion: '^26.3.6' },
+        'react-i18next':   { singleton: true, requiredVersion: '^17.0.11' },
       } as any,
     }),
   ],

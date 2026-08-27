@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box, Button, Card, CardContent, Chip, Container,
   Divider, Grid, Stack, Typography,
@@ -18,72 +19,77 @@ import { useSociety } from '../contexts/SocietyContext';
 import { ROADMAP } from '../data/roadmap';
 import { ServicesGrid } from '../components/ServicesGrid';
 
-// The live services today, shown alongside the roadmap so the overview
-// section reads as "one growing platform" rather than "an events app plus
-// some ideas." Ticketing is a feature of Events (QR-code entry on booking),
-// not a separate service — it doesn't get its own card, same reasoning as
-// FEATURES below which drills into Events & Ticketing as one flow.
-const LIVE_SERVICES = [
-  {
-    icon: <EventIcon sx={{ fontSize: 30 }} />,
-    color: '#6366f1',
-    title: 'Events & Ticketing',
-    desc: 'Browse, book and attend community events with digital QR-code tickets for gate entry.',
-  },
-  {
-    icon: <HowToRegIcon sx={{ fontSize: 30 }} />,
-    color: '#ec4899',
-    title: 'Visitor Management',
-    desc: 'Residents create QR visitor passes for guests; security scans them at the gate or logs walk-ins directly.',
-  },
-];
-
-const SERVICES_OVERVIEW = [
-  ...LIVE_SERVICES.map((s) => ({ ...s, status: 'live' as const })),
-  ...ROADMAP.map((r) => ({ ...r, status: 'soon' as const })),
-];
-
-const FEATURES = [
-  {
-    icon: <ConfirmationNumberIcon sx={{ fontSize: 36 }} />,
-    color: '#10b981',
-    title: 'Book & Pay Online',
-    desc: 'Reserve seats instantly and pay via UPI, card or net banking. Get a QR-code ticket on confirmation.',
-  },
-  {
-    icon: <QrCodeIcon sx={{ fontSize: 36 }} />,
-    color: '#ec4899',
-    title: 'QR-Code Entry',
-    desc: 'Show your digital ticket QR code at the gate for a smooth, paperless check-in experience.',
-  },
-  {
-    icon: <SecurityIcon sx={{ fontSize: 36 }} />,
-    color: '#7c3aed',
-    title: 'Secure & Private',
-    desc: 'Your data stays within the society. Secured by Keycloak SSO with role-based access control.',
-  },
-];
-
-const STATS = [
-  { value: '500+', label: 'Resident families' },
-  { value: '6', label: 'Society services' },
-  { value: '24h', label: 'Approval turnaround' },
-  { value: '100%', label: 'Digital & secure' },
-];
-
-const HOW_IT_WORKS = [
-  { step: '01', icon: <PersonAddIcon sx={{ fontSize: 28 }} />, title: 'Register', desc: 'Sign up with your email. The committee verifies your residency and activates your account within 24 hours.' },
-  { step: '02', icon: <EventIcon sx={{ fontSize: 28 }} />, title: 'Discover Events', desc: 'Browse upcoming events filtered by category. View details, schedules, and available seats.' },
-  { step: '03', icon: <EmojiEventsIcon sx={{ fontSize: 28 }} />, title: 'Book & Attend', desc: 'Reserve your spot, pay online, and show your QR-code ticket at the gate. It\'s that simple.' },
-];
-
 const showGoogleLogin = !!import.meta.env.VITE_GOOGLE_LOGIN;
 const showPhoneLogin  = !!import.meta.env.VITE_PHONE_LOGIN;
 
 export function Landing() {
+  const { t } = useTranslation('shell');
   const { login, loginWithGoogle, register } = useAuth();
   const { name, city } = useSociety();
   const navigate = useNavigate();
+
+  // The live services today, shown alongside the roadmap so the overview
+  // section reads as "one growing platform" rather than "an events app plus
+  // some ideas." Ticketing is a feature of Events (QR-code entry on booking),
+  // not a separate service — it doesn't get its own card, same reasoning as
+  // FEATURES below which drills into Events & Ticketing as one flow.
+  const LIVE_SERVICES = [
+    {
+      icon: <EventIcon sx={{ fontSize: 30 }} />,
+      color: '#6366f1',
+      title: t('services.eventsTicketing.title'),
+      desc: t('services.eventsTicketing.desc'),
+    },
+    {
+      icon: <HowToRegIcon sx={{ fontSize: 30 }} />,
+      color: '#ec4899',
+      title: t('services.visitorManagement.title'),
+      desc: t('services.visitorManagement.desc'),
+    },
+  ];
+
+  const SERVICES_OVERVIEW = [
+    ...LIVE_SERVICES.map((s) => ({ ...s, status: 'live' as const })),
+    ...ROADMAP.map((r) => ({
+      icon: r.icon, color: r.color,
+      title: t(`services.${r.id}.title`), desc: t(`services.${r.id}.desc`),
+      status: 'soon' as const,
+    })),
+  ];
+
+  const FEATURES = [
+    {
+      icon: <ConfirmationNumberIcon sx={{ fontSize: 36 }} />,
+      color: '#10b981',
+      title: t('landing.featuresBookPayTitle'),
+      desc: t('landing.featuresBookPayDesc'),
+    },
+    {
+      icon: <QrCodeIcon sx={{ fontSize: 36 }} />,
+      color: '#ec4899',
+      title: t('landing.featuresQrTitle'),
+      desc: t('landing.featuresQrDesc'),
+    },
+    {
+      icon: <SecurityIcon sx={{ fontSize: 36 }} />,
+      color: '#7c3aed',
+      title: t('landing.featuresSecureTitle'),
+      desc: t('landing.featuresSecureDesc'),
+    },
+  ];
+
+  const STATS = [
+    { value: '500+', label: t('landing.statsFamilies') },
+    { value: '6', label: t('landing.statsServices') },
+    { value: '24h', label: t('landing.statsApproval') },
+    { value: '100%', label: t('landing.statsDigital') },
+  ];
+
+  const HOW_IT_WORKS = [
+    { step: '01', icon: <PersonAddIcon sx={{ fontSize: 28 }} />, title: t('landing.howStep1Title'), desc: t('landing.howStep1Desc') },
+    { step: '02', icon: <EventIcon sx={{ fontSize: 28 }} />, title: t('landing.howStep2Title'), desc: t('landing.howStep2Desc') },
+    { step: '03', icon: <EmojiEventsIcon sx={{ fontSize: 28 }} />, title: t('landing.howStep3Title'), desc: t('landing.howStep3Desc') },
+  ];
 
   return (
     <Box component="main" sx={{ bgcolor: 'background.default' }}>
@@ -127,8 +133,7 @@ export function Landing() {
             {city}
           </Typography>
           <Typography sx={{ fontSize: { xs: 15, md: 18 }, color: '#c7d2fe', mb: 5, maxWidth: 560, mx: 'auto' }}>
-            The one platform for everything your society runs — events today, with visitor management,
-            vendor tracking, parking, and AI-powered security on the way.
+            {t('landing.heroSubtitle')}
           </Typography>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" alignItems="center" sx={{ mb: 2 }}>
@@ -145,7 +150,7 @@ export function Landing() {
                 minWidth: 180,
               }}
             >
-              Sign In
+              {t('landing.signIn')}
             </Button>
             <Button
               variant="outlined"
@@ -161,7 +166,7 @@ export function Landing() {
                 minWidth: 220,
               }}
             >
-              Register as Member
+              {t('landing.registerAsMember')}
             </Button>
           </Stack>
 
@@ -173,7 +178,7 @@ export function Landing() {
                 component="span"
                 sx={{ color: 'rgba(165,180,252,0.7)', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
               >
-                or continue with
+                {t('landing.orContinueWith')}
               </Box>
               <Box sx={{ flex: 1, maxWidth: 120, height: '1px', bgcolor: 'rgba(255,255,255,0.18)' }} />
             </Box>
@@ -206,7 +211,7 @@ export function Landing() {
                   />
                 }
               >
-                Continue with Google
+                {t('landing.continueWithGoogle')}
               </Button>
             </Box>
           )}
@@ -229,22 +234,22 @@ export function Landing() {
                   minWidth: 240,
                 }}
               >
-                Sign in with Phone
+                {t('landing.signInWithPhone')}
               </Button>
             </Box>
           )}
 
           <Typography sx={{ fontSize: 13, color: 'rgba(165,180,252,0.8)' }}>
-            New members: register with email — committee activates within 24 hours.
+            {t('landing.newMembersHint')}
           </Typography>
 
           <Typography sx={{ fontSize: 13, color: 'rgba(165,180,252,0.6)', mt: 1.5 }}>
-            Already registered?{' '}
+            {t('landing.alreadyRegistered')}{' '}
             <Link
               to="/forgot-password"
               style={{ color: '#a5b4fc', textDecoration: 'underline', cursor: 'pointer' }}
             >
-              Forgot your password?
+              {t('landing.forgotPassword')}
             </Link>
           </Typography>
         </Container>
@@ -281,7 +286,7 @@ export function Landing() {
       <Box sx={{ py: { xs: 7, md: 10 }, px: 3, bgcolor: 'background.default' }}>
         <Container maxWidth="lg">
           <Chip
-            label="THE PLATFORM"
+            label={t('landing.platformChip')}
             size="small"
             sx={{
               display: 'flex', mx: 'auto', mb: 2, fontWeight: 700, fontSize: 11,
@@ -289,16 +294,16 @@ export function Landing() {
             }}
           />
           <Typography variant="h4" fontWeight={800} textAlign="center" mb={1} sx={{ fontSize: { xs: 24, md: 32 } }}>
-            One app for everything your society runs
+            {t('landing.platformTitle')}
           </Typography>
           <Typography textAlign="center" color="text.secondary" fontSize={16} mb={6} maxWidth={560} mx="auto">
-            Events &amp; Ticketing and Visitor Management are live today. Four more services are already on the roadmap for {name}.
+            {t('landing.platformSubtitle', { name })}
           </Typography>
 
           <ServicesGrid services={SERVICES_OVERVIEW} />
 
           <Typography textAlign="center" fontSize={13} color="text.secondary" mt={4}>
-            Have an idea for your society? Let your committee know.
+            {t('landing.platformCta')}
           </Typography>
         </Container>
       </Box>
@@ -307,7 +312,7 @@ export function Landing() {
       <Box sx={{ py: { xs: 7, md: 10 }, px: 3, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="lg">
           <Chip
-            label="LIVE NOW"
+            label={t('landing.liveNowChip')}
             size="small"
             sx={{
               display: 'flex', mx: 'auto', mb: 2, fontWeight: 700, fontSize: 11,
@@ -315,10 +320,10 @@ export function Landing() {
             }}
           />
           <Typography variant="h4" fontWeight={800} textAlign="center" mb={1} sx={{ fontSize: { xs: 24, md: 32 } }}>
-            Inside Events &amp; Ticketing
+            {t('landing.eventsDetailTitle')}
           </Typography>
           <Typography textAlign="center" color="text.secondary" fontSize={16} mb={4} maxWidth={500} mx="auto">
-            Everything below is already live and ready to use.
+            {t('landing.eventsDetailSubtitle')}
           </Typography>
 
           <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -358,7 +363,7 @@ export function Landing() {
               to="/events"
               style={{ color: '#6366f1', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}
             >
-              See all Events features →
+              {t('landing.seeAllEventsFeatures')}
             </Link>
           </Box>
         </Container>
@@ -368,10 +373,10 @@ export function Landing() {
       <Box sx={{ py: { xs: 7, md: 10 }, px: 3, bgcolor: 'background.default', borderTop: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="md">
           <Typography variant="h4" fontWeight={800} textAlign="center" mb={1} sx={{ fontSize: { xs: 24, md: 32 } }}>
-            Get started in minutes
+            {t('landing.howItWorksTitle')}
           </Typography>
           <Typography textAlign="center" color="text.secondary" fontSize={15} mb={7}>
-            Three simple steps to get started — the same simple flow every future service will follow
+            {t('landing.howItWorksSubtitle')}
           </Typography>
 
           <Grid container spacing={4} alignItems="flex-start">
@@ -394,7 +399,7 @@ export function Landing() {
                   <Typography
                     sx={{ fontSize: 11, fontWeight: 700, color: '#6366f1', letterSpacing: 1.5, textTransform: 'uppercase', mb: 0.75 }}
                   >
-                    Step {step.step}
+                    {t('landing.step', { n: step.step })}
                   </Typography>
                   <Typography fontWeight={700} fontSize={18} mb={1}>{step.title}</Typography>
                   <Typography fontSize={14} color="text.secondary" lineHeight={1.65}>{step.desc}</Typography>
@@ -408,7 +413,7 @@ export function Landing() {
       {/* ── Footer ───────────────────────────────────────────────────── */}
       <Box sx={{ py: 2.5, px: 3, bgcolor: '#0f172a', textAlign: 'center' }}>
         <Typography sx={{ fontSize: 12, color: 'rgba(148,163,184,0.6)' }}>
-          © {new Date().getFullYear()} {name} · {city} · Society Management Portal
+          © {t('landing.footerCopyright', { year: new Date().getFullYear(), name, city })}
         </Typography>
       </Box>
 

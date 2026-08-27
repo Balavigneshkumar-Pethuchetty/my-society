@@ -1,9 +1,11 @@
+import './i18n';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Container, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, IconButton, Paper, Stack, TextField, ToggleButton,
   ToggleButtonGroup, Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -46,18 +48,6 @@ const EMPTY_FORM: FormState = {
   visitor_count: '1', additional_visitor_names: '', vehicle_number: '', visitor_category: 'other',
 };
 
-const PURPOSE_OPTIONS = [
-  'Delivery',
-  'Guest Visit',
-  'Cab / Driver',
-  'Domestic Help',
-  'Maintenance / Repair Work',
-  'Interview',
-  'Function / Event',
-  'Courier',
-  'Vendor',
-];
-
 function toIsoOrNull(local: string): string | null {
   return local ? new Date(local).toISOString() : null;
 }
@@ -65,6 +55,8 @@ function toIsoOrNull(local: string): string | null {
 // ── Create pass dialog ────────────────────────────────────────────────────────
 
 function CreatePassDialog({ token, onClose, onCreated }: { token: string; onClose: () => void; onCreated: () => void }) {
+  const { t } = useTranslation('visitors');
+  const purposeOptions = t('resident.purposeOptions', { returnObjects: true }) as string[];
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,24 +66,24 @@ function CreatePassDialog({ token, onClose, onCreated }: { token: string; onClos
 
   async function handleSubmit() {
     if (!form.visitor_name.trim() || !form.purpose.trim() || !form.valid_from || !form.valid_to) {
-      setError('Visitor name, purpose, and validity period are required.');
+      setError(t('resident.validation.requiredFields'));
       return;
     }
     if (new Date(form.valid_to) <= new Date(form.valid_from)) {
-      setError('"Valid To" must be after "Valid From".');
+      setError(t('resident.validation.validToAfterFrom'));
       return;
     }
     const visitorCount = parseInt(form.visitor_count, 10);
     if (!visitorCount || visitorCount < 1) {
-      setError('Number of visitors must be at least 1.');
+      setError(t('resident.validation.minVisitors'));
       return;
     }
     if (form.contact.trim() && !isValidE164(form.contact.trim())) {
-      setError('Please enter a complete contact number.');
+      setError(t('resident.validation.invalidPhone'));
       return;
     }
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setError('Please enter a valid email address.');
+      setError(t('resident.validation.invalidEmail'));
       return;
     }
     setSaving(true);
@@ -126,76 +118,76 @@ function CreatePassDialog({ token, onClose, onCreated }: { token: string; onClos
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        Create Visitor Pass
+        {t('resident.createDialog.title')}
         <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
           <Box>
-            <Typography variant="body2" fontWeight={600} mb={0.5}>Who is this pass for?</Typography>
+            <Typography variant="body2" fontWeight={600} mb={0.5}>{t('resident.createDialog.categoryQuestion')}</Typography>
             <ToggleButtonGroup
               exclusive fullWidth size="small" value={form.visitor_category}
               onChange={(_, v) => v && setForm((f) => ({ ...f, visitor_category: v }))}
             >
-              <ToggleButton value="family"><FavoriteIcon fontSize="small" sx={{ mr: 1 }} /> Family Member</ToggleButton>
-              <ToggleButton value="other"><GroupIcon fontSize="small" sx={{ mr: 1 }} /> Guest / Other</ToggleButton>
+              <ToggleButton value="family"><FavoriteIcon fontSize="small" sx={{ mr: 1 }} /> {t('resident.createDialog.categoryFamily')}</ToggleButton>
+              <ToggleButton value="other"><GroupIcon fontSize="small" sx={{ mr: 1 }} /> {t('resident.createDialog.categoryOther')}</ToggleButton>
             </ToggleButtonGroup>
             <Typography variant="caption" color="text.secondary">
-              Just changes the look of the pass — family gets a warm welcome theme, others get a standard access-pass theme.
+              {t('resident.createDialog.categoryHint')}
             </Typography>
           </Box>
-          <TextField label="Visitor Name" required fullWidth size="small" value={form.visitor_name} onChange={set('visitor_name')} helperText="Group lead / primary contact if this pass covers more than one person" />
+          <TextField label={t('resident.createDialog.nameLabel')} required fullWidth size="small" value={form.visitor_name} onChange={set('visitor_name')} helperText={t('resident.createDialog.nameHelper')} />
           <Autocomplete
             freeSolo
-            options={PURPOSE_OPTIONS}
+            options={purposeOptions}
             inputValue={form.purpose}
             onInputChange={(_, newValue) => setForm((f) => ({ ...f, purpose: newValue }))}
             renderInput={(params) => (
-              <TextField {...params} label="Purpose of Visit" required fullWidth size="small" />
+              <TextField {...params} label={t('resident.createDialog.purposeLabel')} required fullWidth size="small" />
             )}
           />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField
-              label="Valid From" type="datetime-local" required fullWidth size="small"
+              label={t('resident.createDialog.validFromLabel')} type="datetime-local" required fullWidth size="small"
               value={form.valid_from} onChange={set('valid_from')} InputLabelProps={{ shrink: true }}
             />
             <TextField
-              label="Valid To" type="datetime-local" required fullWidth size="small"
+              label={t('resident.createDialog.validToLabel')} type="datetime-local" required fullWidth size="small"
               value={form.valid_to} onChange={set('valid_to')} InputLabelProps={{ shrink: true }}
             />
           </Stack>
           <TextField
-            label="Number of Visitors" type="number" required size="small"
+            label={t('resident.createDialog.countLabel')} type="number" required size="small"
             inputProps={{ min: 1, max: 200 }}
             value={form.visitor_count} onChange={set('visitor_count')}
-            helperText="More than 1 for a family/group visiting on the same pass — security can let them in together or in batches."
+            helperText={t('resident.createDialog.countHelper')}
             sx={{ maxWidth: 220 }}
           />
           {parseInt(form.visitor_count, 10) > 1 && (
             <TextField
-              label="Additional Visitor Names (optional)" fullWidth size="small" multiline minRows={2}
+              label={t('resident.createDialog.additionalNamesLabel')} fullWidth size="small" multiline minRows={2}
               value={form.additional_visitor_names} onChange={set('additional_visitor_names')}
-              placeholder="e.g. Ravi, Sita, Meena…"
+              placeholder={t('resident.createDialog.additionalNamesPlaceholder')}
             />
           )}
           <PhoneInputField
-            label="Contact Number (optional)" size="small"
+            label={t('resident.createDialog.contactLabel')} size="small"
             value={form.contact} onChange={(e164) => setForm((f) => ({ ...f, contact: e164 }))}
           />
-          <TextField label="Email (optional)" fullWidth size="small" value={form.email} onChange={set('email')} />
-          <TextField label="Aadhaar Number (optional)" fullWidth size="small" value={form.aadhaar} onChange={set('aadhaar')} />
-          <TextField label="Address (optional)" fullWidth size="small" multiline minRows={2} value={form.address} onChange={set('address')} />
+          <TextField label={t('resident.createDialog.emailLabel')} fullWidth size="small" value={form.email} onChange={set('email')} />
+          <TextField label={t('resident.createDialog.aadhaarLabel')} fullWidth size="small" value={form.aadhaar} onChange={set('aadhaar')} />
+          <TextField label={t('resident.createDialog.addressLabel')} fullWidth size="small" multiline minRows={2} value={form.address} onChange={set('address')} />
           <TextField
-            label="Vehicle Number (optional)" fullWidth size="small" value={form.vehicle_number} onChange={set('vehicle_number')}
-            helperText="If the guest is coming by car/bike — security can also add or correct this at the gate"
+            label={t('resident.createDialog.vehicleLabel')} fullWidth size="small" value={form.vehicle_number} onChange={set('vehicle_number')}
+            helperText={t('resident.createDialog.vehicleHelper')}
           />
         </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
-        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={saving}>
-          {saving ? <CircularProgress size={18} color="inherit" /> : 'Create Pass'}
+          {saving ? <CircularProgress size={18} color="inherit" /> : t('resident.createDialog.submit')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -239,6 +231,7 @@ function PassDetailDialog({
 }: {
   pass: VisitorPass; token: string; onClose: () => void; onChanged: () => void;
 }) {
+  const { t } = useTranslation('visitors');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [extendOpen, setExtendOpen] = useState(false);
@@ -295,7 +288,7 @@ function PassDetailDialog({
         method: 'PATCH',
         body: JSON.stringify({ valid_to: toIsoOrNull(newValidTo) }),
       });
-      setNotice('Validity extended.');
+      setNotice(t('resident.detailDialog.validityExtended'));
       setExtendOpen(false);
       onChanged();
     } catch (e) {
@@ -313,24 +306,24 @@ function PassDetailDialog({
 
   async function handleEditSave() {
     if (!editForm.visitor_name.trim() || !editForm.purpose.trim()) {
-      setError('Visitor name and purpose cannot be empty.');
+      setError(t('resident.validation.nameAndPurposeRequired'));
       return;
     }
     const visitorCount = parseInt(editForm.visitor_count, 10);
     if (!visitorCount || visitorCount < 1) {
-      setError('Number of visitors must be at least 1.');
+      setError(t('resident.validation.minVisitors'));
       return;
     }
     if (visitorCount < pass.entered_count) {
-      setError(`Number of visitors can't be less than the ${pass.entered_count} already entered.`);
+      setError(t('resident.validation.cantReduceBelowEntered', { count: pass.entered_count }));
       return;
     }
     if (editForm.contact.trim() && !isValidE164(editForm.contact.trim())) {
-      setError('Please enter a complete contact number.');
+      setError(t('resident.validation.invalidPhone'));
       return;
     }
     if (editForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
-      setError('Please enter a valid email address.');
+      setError(t('resident.validation.invalidEmail'));
       return;
     }
     setBusy(true);
@@ -351,7 +344,7 @@ function PassDetailDialog({
           visitor_category: editForm.visitor_category,
         }),
       });
-      setNotice('Visitor pass updated — security has been notified.');
+      setNotice(t('resident.detailDialog.updated'));
       setEditOpen(false);
       onChanged();
     } catch (e) {
@@ -381,7 +374,9 @@ function PassDetailDialog({
       const res = await apiFetch<{ ok: boolean; sent_via?: string }>(
         `${apiBase('visitors')}/passes/${pass.id}/phone-verify/request`, token, { method: 'POST' },
       );
-      setNotice(res.ok ? `Verification code sent${res.sent_via ? ` via ${res.sent_via}` : ''}.` : 'Could not send verification code.');
+      setNotice(res.ok
+        ? t('resident.detailDialog.verificationSent', { via: res.sent_via ? t('resident.detailDialog.verificationSentVia', { via: res.sent_via }) : '' })
+        : t('resident.detailDialog.verificationFailed'));
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -412,17 +407,17 @@ function PassDetailDialog({
           <Box
             component="img"
             src={imageUrl}
-            alt="Visitor pass"
+            alt={t('resident.detailDialog.downloadAlt')}
             sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 2 }}
           />
         )}
 
         <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 2 }}>
           <Button size="small" variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownload} disabled={!imageUrl}>
-            Download
+            {t('common.download')}
           </Button>
           <Button size="small" variant="outlined" startIcon={<ShareIcon />} onClick={handleShare} disabled={!imageUrl}>
-            Share
+            {t('common.share')}
           </Button>
         </Stack>
 
@@ -430,35 +425,40 @@ function PassDetailDialog({
 
         <Stack spacing={1} sx={{ textAlign: 'left', mb: 2 }}>
           {!pass.is_own_pass && (
-            <Typography variant="body2"><strong>Created by:</strong> {pass.resident_name}</Typography>
+            <Typography variant="body2"><strong>{t('resident.detailDialog.createdBy', { name: pass.resident_name })}</strong></Typography>
           )}
           <Typography variant="body2">
-            <strong>Status:</strong> <Chip size="small" label={statusLabel(pass.status)} color={statusColor(pass.status)} />{' '}
-            <Chip size="small" variant="outlined" label={pass.visitor_category === 'family' ? 'Family' : 'Guest'} />
+            <strong>{t('resident.detailDialog.status')}</strong>{' '}
+            <Chip size="small" label={t(`common.status.${pass.status}`, statusLabel(pass.status))} color={statusColor(pass.status)} />{' '}
+            <Chip size="small" variant="outlined" label={pass.visitor_category === 'family' ? t('resident.detailDialog.categoryFamily') : t('resident.detailDialog.categoryGuest')} />
           </Typography>
-          <Typography variant="body2"><strong>Valid:</strong> {fmtDateTime(pass.valid_from)} → {fmtDateTime(pass.valid_to)}</Typography>
+          <Typography variant="body2">
+            <strong>{t('resident.detailDialog.valid', { from: fmtDateTime(pass.valid_from), to: fmtDateTime(pass.valid_to) })}</strong>
+          </Typography>
           {pass.visitor_count > 1 && (
             <Typography variant="body2">
-              <strong>Group:</strong> {pass.entered_count}/{pass.visitor_count} entered
-              {pass.exited_count > 0 ? `, ${pass.exited_count} exited` : ''}
+              <strong>
+                {t('resident.detailDialog.group', { entered: pass.entered_count, count: pass.visitor_count })}
+                {pass.exited_count > 0 ? t('resident.detailDialog.groupExited', { count: pass.exited_count }) : ''}
+              </strong>
             </Typography>
           )}
           {pass.additional_visitor_names && (
-            <Typography variant="body2"><strong>Also with:</strong> {pass.additional_visitor_names}</Typography>
+            <Typography variant="body2"><strong>{t('resident.detailDialog.also', { names: pass.additional_visitor_names })}</strong></Typography>
           )}
           {pass.vehicle_number && (
-            <Typography variant="body2"><strong>Vehicle:</strong> {pass.vehicle_number}</Typography>
+            <Typography variant="body2"><strong>{t('resident.detailDialog.vehicle', { number: pass.vehicle_number })}</strong></Typography>
           )}
-          {pass.log?.entry_time && <Typography variant="body2"><strong>Entered:</strong> {fmtDateTime(pass.log.entry_time)}</Typography>}
-          {pass.log?.exit_time && <Typography variant="body2"><strong>Exited:</strong> {fmtDateTime(pass.log.exit_time)}</Typography>}
+          {pass.log?.entry_time && <Typography variant="body2"><strong>{t('resident.detailDialog.entered', { time: fmtDateTime(pass.log.entry_time) })}</strong></Typography>}
+          {pass.log?.exit_time && <Typography variant="body2"><strong>{t('resident.detailDialog.exited', { time: fmtDateTime(pass.log.exit_time) })}</strong></Typography>}
           {pass.phone_verification && (
             <Typography variant="body2">
-              <strong>Phone verification:</strong> {pass.phone_verification.verification_status}
+              <strong>{t('resident.detailDialog.phoneVerification', { status: pass.phone_verification.verification_status })}</strong>
             </Typography>
           )}
           {pass.photos.length > 0 && (
             <>
-              <Typography variant="body2" fontWeight={600}>Photos ({pass.photos.length})</Typography>
+              <Typography variant="body2" fontWeight={600}>{t('common.photosCount', { count: pass.photos.length })}</Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 {pass.photos.map((p) => (
                   <Box
@@ -476,22 +476,22 @@ function PassDetailDialog({
         <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
           {canExtend && (
             <Button size="small" startIcon={<UpdateIcon />} onClick={() => { setExtendOpen(true); setEditOpen(false); }}>
-              Extend Validity
+              {t('resident.detailDialog.extendValidity')}
             </Button>
           )}
           {canEdit && (
             <Button size="small" startIcon={<EditIcon />} onClick={openEdit}>
-              Edit
+              {t('common.edit')}
             </Button>
           )}
           {pass.is_own_pass && pass.contact && !pass.phone_verification && (
             <Button size="small" startIcon={<PhoneAndroidIcon />} disabled={busy} onClick={() => void handlePhoneVerify()}>
-              Verify Phone
+              {t('resident.detailDialog.verifyPhone')}
             </Button>
           )}
           {canDelete && (
             <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => setDeleteConfirmOpen(true)}>
-              Delete
+              {t('common.delete')}
             </Button>
           )}
         </Stack>
@@ -499,11 +499,11 @@ function PassDetailDialog({
         {extendOpen && (
           <Stack spacing={1} sx={{ mt: 2 }}>
             <TextField
-              label="New Valid To" type="datetime-local" size="small"
+              label={t('resident.detailDialog.newValidToLabel')} type="datetime-local" size="small"
               value={newValidTo} onChange={(e) => setNewValidTo(e.target.value)} InputLabelProps={{ shrink: true }}
             />
             <Button variant="contained" size="small" disabled={busy || !newValidTo} onClick={() => void handleExtend()}>
-              {busy ? <CircularProgress size={16} color="inherit" /> : 'Confirm Extension'}
+              {busy ? <CircularProgress size={16} color="inherit" /> : t('resident.detailDialog.confirmExtension')}
             </Button>
           </Stack>
         )}
@@ -514,31 +514,31 @@ function PassDetailDialog({
               exclusive fullWidth size="small" value={editForm.visitor_category}
               onChange={(_, v) => v && setEditForm((f) => ({ ...f, visitor_category: v }))}
             >
-              <ToggleButton value="family"><FavoriteIcon fontSize="small" sx={{ mr: 1 }} /> Family Member</ToggleButton>
-              <ToggleButton value="other"><GroupIcon fontSize="small" sx={{ mr: 1 }} /> Guest / Other</ToggleButton>
+              <ToggleButton value="family"><FavoriteIcon fontSize="small" sx={{ mr: 1 }} /> {t('resident.createDialog.categoryFamily')}</ToggleButton>
+              <ToggleButton value="other"><GroupIcon fontSize="small" sx={{ mr: 1 }} /> {t('resident.createDialog.categoryOther')}</ToggleButton>
             </ToggleButtonGroup>
-            <TextField label="Visitor Name" size="small" value={editForm.visitor_name} onChange={setEditField('visitor_name')} />
-            <TextField label="Purpose" size="small" value={editForm.purpose} onChange={setEditField('purpose')} />
+            <TextField label={t('resident.createDialog.nameLabel')} size="small" value={editForm.visitor_name} onChange={setEditField('visitor_name')} />
+            <TextField label={t('resident.createDialog.purposeLabel')} size="small" value={editForm.purpose} onChange={setEditField('purpose')} />
             <TextField
-              label="Number of Visitors" type="number" size="small"
+              label={t('resident.createDialog.countLabel')} type="number" size="small"
               inputProps={{ min: pass.entered_count || 1, max: 200 }}
               value={editForm.visitor_count} onChange={setEditField('visitor_count')}
-              helperText={pass.entered_count > 0 ? `Raise this to let more people in — ${pass.entered_count} already entered` : undefined}
+              helperText={pass.entered_count > 0 ? t('resident.detailDialog.editCountHelper', { count: pass.entered_count }) : undefined}
               sx={{ maxWidth: 260 }}
             />
-            <TextField label="Additional Visitor Names" size="small" multiline minRows={2} value={editForm.additional_visitor_names} onChange={setEditField('additional_visitor_names')} />
+            <TextField label={t('resident.createDialog.additionalNamesLabel')} size="small" multiline minRows={2} value={editForm.additional_visitor_names} onChange={setEditField('additional_visitor_names')} />
             <PhoneInputField
-              label="Contact Number" size="small"
+              label={t('resident.createDialog.contactLabel')} size="small"
               value={editForm.contact} onChange={(e164) => setEditForm((f) => ({ ...f, contact: e164 }))}
             />
-            <TextField label="Email" size="small" value={editForm.email} onChange={setEditField('email')} />
-            <TextField label="Aadhaar Number" size="small" value={editForm.aadhaar} onChange={setEditField('aadhaar')} />
-            <TextField label="Address" size="small" multiline minRows={2} value={editForm.address} onChange={setEditField('address')} />
-            <TextField label="Vehicle Number" size="small" value={editForm.vehicle_number} onChange={setEditField('vehicle_number')} />
+            <TextField label={t('resident.createDialog.emailLabel')} size="small" value={editForm.email} onChange={setEditField('email')} />
+            <TextField label={t('resident.createDialog.aadhaarLabel')} size="small" value={editForm.aadhaar} onChange={setEditField('aadhaar')} />
+            <TextField label={t('resident.createDialog.addressLabel')} size="small" multiline minRows={2} value={editForm.address} onChange={setEditField('address')} />
+            <TextField label={t('resident.createDialog.vehicleLabel')} size="small" value={editForm.vehicle_number} onChange={setEditField('vehicle_number')} />
             <Stack direction="row" spacing={1}>
-              <Button size="small" onClick={() => setEditOpen(false)} disabled={busy}>Cancel</Button>
+              <Button size="small" onClick={() => setEditOpen(false)} disabled={busy}>{t('common.cancel')}</Button>
               <Button variant="contained" size="small" disabled={busy} onClick={() => void handleEditSave()}>
-                {busy ? <CircularProgress size={16} color="inherit" /> : 'Save Changes'}
+                {busy ? <CircularProgress size={16} color="inherit" /> : t('resident.detailDialog.saveChanges')}
               </Button>
             </Stack>
           </Stack>
@@ -546,16 +546,16 @@ function PassDetailDialog({
       </DialogContent>
 
       <Dialog open={deleteConfirmOpen} onClose={() => !deleting && setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Delete Visitor Pass</DialogTitle>
+        <DialogTitle>{t('resident.detailDialog.deleteTitle')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Delete the pass for "{pass.visitor_name}"? This cannot be undone, and security will be notified.
+            {t('resident.detailDialog.deleteBody', { name: pass.visitor_name })}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>Keep Pass</Button>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>{t('resident.detailDialog.keepPass')}</Button>
           <Button variant="contained" color="error" disabled={deleting} onClick={() => void handleDelete()}>
-            {deleting ? <CircularProgress size={18} color="inherit" /> : 'Delete Pass'}
+            {deleting ? <CircularProgress size={18} color="inherit" /> : t('resident.detailDialog.deletePass')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -566,6 +566,7 @@ function PassDetailDialog({
 // ── Pass list card ────────────────────────────────────────────────────────────
 
 function PassCard({ pass, onClick }: { pass: VisitorPass; onClick: () => void }) {
+  const { t } = useTranslation('visitors');
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, cursor: 'pointer' }} onClick={onClick}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
@@ -576,20 +577,20 @@ function PassCard({ pass, onClick }: { pass: VisitorPass; onClick: () => void })
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
             {pass.purpose}{pass.vehicle_number ? ` · ${pass.vehicle_number}` : ''}
-            {!pass.is_own_pass ? ` · by ${pass.resident_name}` : ''}
+            {!pass.is_own_pass ? ` · ${t('resident.card.byResident', { name: pass.resident_name })}` : ''}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {fmtDateTime(pass.valid_from)} → {fmtDateTime(pass.valid_to)}
-            {pass.visitor_count > 1 ? ` · ${pass.entered_count}/${pass.visitor_count} entered` : ''}
+            {pass.visitor_count > 1 ? ` · ${pass.entered_count}/${pass.visitor_count} ${t('common.status.entered')}` : ''}
           </Typography>
           {(pass.log?.entry_time || pass.log?.exit_time) && (
             <Typography variant="caption" display="block" color="success.main" fontWeight={600}>
-              {pass.log?.entry_time && `Arrived ${fmtDateTime(pass.log.entry_time)}`}
-              {pass.log?.exit_time && ` · Left ${fmtDateTime(pass.log.exit_time)}`}
+              {pass.log?.entry_time && t('resident.card.arrived', { time: fmtDateTime(pass.log.entry_time) })}
+              {pass.log?.exit_time && ` ${t('resident.card.left', { time: fmtDateTime(pass.log.exit_time) })}`}
             </Typography>
           )}
         </Box>
-        <Chip size="small" label={statusLabel(pass.status)} color={statusColor(pass.status)} />
+        <Chip size="small" label={t(`common.status.${pass.status}`, statusLabel(pass.status))} color={statusColor(pass.status)} />
       </Box>
     </Paper>
   );
@@ -598,6 +599,7 @@ function PassCard({ pass, onClick }: { pass: VisitorPass; onClick: () => void })
 // ── Walk-in visitors (no QR pass, logged by security at the gate) ────────────
 
 function AnonymousCard({ visitor, onClick }: { visitor: AnonymousVisitor; onClick: () => void }) {
+  const { t } = useTranslation('visitors');
   const status = visitor.exit_time ? 'exited' : 'entered';
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, cursor: 'pointer' }} onClick={onClick}>
@@ -605,47 +607,52 @@ function AnonymousCard({ visitor, onClick }: { visitor: AnonymousVisitor; onClic
         <Box sx={{ minWidth: 0 }}>
           <Typography fontWeight={700} noWrap>{visitor.visitor_name || visitor.purpose}</Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
-            {visitor.visitor_name ? visitor.purpose : 'Walk-in visitor (no QR pass)'}
+            {visitor.visitor_name ? visitor.purpose : t('resident.anonymousCard.walkInFallback')}
             {visitor.vehicle_number ? ` · ${visitor.vehicle_number}` : ''}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Arrived {fmtDateTime(visitor.entry_time)}
-            {visitor.exit_time ? ` · Left ${fmtDateTime(visitor.exit_time)}` : ''}
+            {t('resident.card.arrived', { time: fmtDateTime(visitor.entry_time) })}
+            {visitor.exit_time ? ` ${t('resident.card.left', { time: fmtDateTime(visitor.exit_time) })}` : ''}
           </Typography>
         </Box>
-        <Chip size="small" label={statusLabel(status)} color={statusColor(status)} />
+        <Chip size="small" label={t(`common.status.${status}`, statusLabel(status))} color={statusColor(status)} />
       </Box>
     </Paper>
   );
 }
 
 function AnonymousDetailDialog({ visitor, onClose }: { visitor: AnonymousVisitor; onClose: () => void }) {
+  const { t } = useTranslation('visitors');
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {visitor.visitor_name || 'Walk-in Visitor'}
+        {visitor.visitor_name || t('resident.anonymousDialog.titleFallback')}
         <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
       </DialogTitle>
       <DialogContent>
         <Stack spacing={1} sx={{ textAlign: 'left' }}>
-          <Typography variant="body2"><strong>Purpose:</strong> {visitor.purpose}</Typography>
+          <Typography variant="body2"><strong>{t('resident.anonymousDialog.purpose', { purpose: visitor.purpose })}</strong></Typography>
           <Typography variant="body2">
-            <strong>Logged at gate:</strong> {fmtDateTime(visitor.entry_time)}
-            {visitor.entry_security_name ? ` by ${visitor.entry_security_name}` : ''}
+            <strong>
+              {t('resident.anonymousDialog.loggedAtGate', { time: fmtDateTime(visitor.entry_time) })}
+              {visitor.entry_security_name ? t('resident.anonymousDialog.loggedBy', { name: visitor.entry_security_name }) : ''}
+            </strong>
           </Typography>
           {visitor.exit_time && (
             <Typography variant="body2">
-              <strong>Left:</strong> {fmtDateTime(visitor.exit_time)}
-              {visitor.exit_security_name ? ` (${visitor.exit_security_name})` : ''}
+              <strong>
+                {t('resident.anonymousDialog.left', { time: fmtDateTime(visitor.exit_time) })}
+                {visitor.exit_security_name ? t('resident.anonymousDialog.leftBy', { name: visitor.exit_security_name }) : ''}
+              </strong>
             </Typography>
           )}
-          {visitor.contact && <Typography variant="body2"><strong>Contact:</strong> {visitor.contact}</Typography>}
-          {visitor.vehicle_number && <Typography variant="body2"><strong>Vehicle:</strong> {visitor.vehicle_number}</Typography>}
-          {visitor.address && <Typography variant="body2"><strong>Address:</strong> {visitor.address}</Typography>}
-          {visitor.notes && <Typography variant="body2"><strong>Notes:</strong> {visitor.notes}</Typography>}
+          {visitor.contact && <Typography variant="body2"><strong>{t('resident.anonymousDialog.contact', { contact: visitor.contact })}</strong></Typography>}
+          {visitor.vehicle_number && <Typography variant="body2"><strong>{t('resident.anonymousDialog.vehicle', { number: visitor.vehicle_number })}</strong></Typography>}
+          {visitor.address && <Typography variant="body2"><strong>{t('resident.anonymousDialog.address', { address: visitor.address })}</strong></Typography>}
+          {visitor.notes && <Typography variant="body2"><strong>{t('resident.anonymousDialog.notes', { notes: visitor.notes })}</strong></Typography>}
           {visitor.photos.length > 0 && (
             <>
-              <Typography variant="body2" fontWeight={600}>Photos ({visitor.photos.length})</Typography>
+              <Typography variant="body2" fontWeight={600}>{t('common.photosCount', { count: visitor.photos.length })}</Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 {visitor.photos.map((p) => (
                   <Box
@@ -671,6 +678,7 @@ export interface VisitorResidentAppProps {
 }
 
 export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
+  const { t } = useTranslation('visitors');
   const [passes, setPasses] = useState<VisitorPass[]>([]);
   const [anonymousVisitors, setAnonymousVisitors] = useState<AnonymousVisitor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -702,8 +710,8 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
   if (!token) {
     return (
       <Container maxWidth="sm" sx={{ pt: 8, textAlign: 'center' }}>
-        <Typography variant="h6" color="text.secondary" mb={2}>Please log in to manage visitor passes.</Typography>
-        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>Go to Login</Button>
+        <Typography variant="h6" color="text.secondary" mb={2}>{t('resident.main.loginPrompt')}</Typography>
+        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>{t('resident.main.goToLogin')}</Button>
       </Container>
     );
   }
@@ -716,13 +724,13 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
     <Container maxWidth="sm" sx={{ py: 4 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>Visitor Passes</Typography>
+          <Typography variant="h5" fontWeight={800}>{t('resident.main.title')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Create QR passes for your guests and track entry — includes passes anyone in your household created.
+            {t('resident.main.subtitle')}
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          New Pass
+          {t('resident.main.newPass')}
         </Button>
       </Box>
 
@@ -734,7 +742,7 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
 
       {!loading && passes.length === 0 && anonymousVisitors.length === 0 && (
         <Box textAlign="center" py={8} color="text.secondary">
-          <Typography>No visitor passes yet. Create one for your next guest.</Typography>
+          <Typography>{t('resident.main.empty')}</Typography>
         </Box>
       )}
 
@@ -742,7 +750,7 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
         <Stack spacing={3}>
           {active.length > 0 && (
             <Box>
-              <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Active ({active.length})</Typography>
+              <Typography variant="subtitle2" fontWeight={700} mb={1.5}>{t('resident.main.active', { count: active.length })}</Typography>
               <Stack spacing={1.5}>
                 {active.map((p) => <PassCard key={p.id} pass={p} onClick={() => setSelected(p)} />)}
               </Stack>
@@ -750,9 +758,9 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
           )}
           {anonymousVisitors.length > 0 && (
             <Box>
-              <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Walk-in Visitors ({anonymousVisitors.length})</Typography>
+              <Typography variant="subtitle2" fontWeight={700} mb={0.5}>{t('resident.main.walkIns', { count: anonymousVisitors.length })}</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                Logged directly by security at the gate — no QR pass was created for these (e.g. deliveries, couriers, emergencies).
+                {t('resident.main.walkInsHint')}
               </Typography>
               <Stack spacing={1.5}>
                 {anonymousVisitors.map((v) => <AnonymousCard key={v.id} visitor={v} onClick={() => setSelectedAnon(v)} />)}
@@ -761,7 +769,7 @@ export function VisitorResidentApp({ token }: VisitorResidentAppProps) {
           )}
           {past.length > 0 && (
             <Box>
-              <Typography variant="subtitle2" color="text.secondary" fontWeight={700} mb={1.5}>History ({past.length})</Typography>
+              <Typography variant="subtitle2" color="text.secondary" fontWeight={700} mb={1.5}>{t('resident.main.history', { count: past.length })}</Typography>
               <Stack spacing={1.5}>
                 {past.map((p) => <PassCard key={p.id} pass={p} onClick={() => setSelected(p)} />)}
               </Stack>

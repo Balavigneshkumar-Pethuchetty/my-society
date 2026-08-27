@@ -1,0 +1,67 @@
+{
+  "common": {
+    "free": "ఉచితం"
+  },
+  "status": {
+    "attended": "హాజరైంది",
+    "refunded": "రీఫండ్ చేయబడింది",
+    "refundPending": "రీఫండ్ పెండింగ్‌లో ఉంది",
+    "cancelled": "రద్దు చేయబడింది",
+    "eventEnded": "ఈవెంట్ ముగిసింది",
+    "inProgress": "జరుగుతోంది",
+    "confirmed": "నిర్ధారించబడింది"
+  },
+  "ticketCount_one": "{{count}} టికెట్",
+  "ticketCount_other": "{{count}} టికెట్లు",
+  "qrDialog": {
+    "close": "మూసివేయి",
+    "ticketUsed": "టికెట్ ఉపయోగించబడింది",
+    "scannedOn": "{{date}} న స్కాన్ చేయబడింది",
+    "showQrHint": "ప్రవేశం కోసం గేటు వద్ద ఈ QR కోడ్‌ను చూపించండి",
+    "qrUnavailable": "QR కోడ్ అందుబాటులో లేదు.",
+    "ticketsLabel": "టికెట్లు",
+    "paidLabel": "చెల్లించారు",
+    "ticketIdLabel": "టికెట్ ID",
+    "paidReconciledOn": "{{date}} న చెల్లించి సరిచేయబడింది"
+  },
+  "card": {
+    "paidOn": "{{date}} న చెల్లించారు",
+    "refunded": "రీఫండ్ చేయబడింది",
+    "refundedOn": "{{date}} న రీఫండ్ చేయబడింది",
+    "refundPendingReview": "రీఫండ్ కమిటీ సమీక్ష కోసం పెండింగ్‌లో ఉంది",
+    "cancelledNoRefund": "రద్దు చేయబడింది — రీఫండ్ నమోదు లేదు",
+    "ticketIdPrefix": "టికెట్ ID: {{id}}",
+    "cancelButton": "రద్దు చేయి",
+    "cancelRefundButton": "రద్దు చేసి రీఫండ్ పొందండి",
+    "viewEntry": "ఎంట్రీ చూడండి",
+    "showTicket": "టికెట్ చూపించు"
+  },
+  "cancelDialog": {
+    "title": "టికెట్‌ను రద్దు చేయండి",
+    "confirmText": "\"{{title}}\" కోసం మీ టికెట్‌ను రద్దు చేయాలా?",
+    "refundNotice": "రీఫండ్ అభ్యర్థన కమిటీకి పంపబడుతుంది.",
+    "upiLabel": "రీఫండ్ పంపవలసిన UPI ID (ఐచ్ఛికం)",
+    "upiPlaceholder": "ఉదా. yourname@okhdfcbank",
+    "upiHelper": "ఖాళీగా వదిలేయండి — కమిటీ మీ అసలు చెల్లింపు నుండి UPI IDని (ఏదైనా ఉంటే) ఉపయోగిస్తుంది.",
+    "keepTicket": "టికెట్‌ను ఉంచుకోండి",
+    "confirmCancelRefund": "టికెట్‌ను రద్దు చేసి రీఫండ్ పొందండి",
+    "confirmCancel": "టికెట్‌ను రద్దు చేయండి"
+  },
+  "notices": {
+    "cancelledWithRefund": "టికెట్ రద్దు చేయబడింది. ఆమోదం కోసం రీఫండ్ అభ్యర్థన కమిటీకి పంపబడింది.",
+    "cancelledPlain": "టికెట్ రద్దు చేయబడింది."
+  },
+  "page": {
+    "title": "నా టికెట్లు",
+    "subtitle": "మీ నిర్ధారించిన ఈవెంట్ టికెట్లు మరియు గేటు ప్రవేశం కోసం QR కోడ్‌లు.",
+    "viewAllRegistrations": "అన్ని రిజిస్ట్రేషన్‌లను చూడండి",
+    "loginPrompt": "మీ టికెట్లను చూడటానికి దయచేసి లాగిన్ అవ్వండి.",
+    "goToLogin": "లాగిన్‌కు వెళ్లండి",
+    "emptyTitle": "ఇంకా టికెట్లు లేవు",
+    "emptyDesc": "ఇక్కడ మీ టికెట్ పొందడానికి ఒక ఈవెంట్ కోసం నమోదు చేసుకుని చెల్లింపు పూర్తి చేయండి.",
+    "browseEvents": "ఈవెంట్‌లను చూడండి",
+    "activeTickets": "యాక్టివ్ టికెట్లు ({{count}})",
+    "pastEvents": "గత ఈవెంట్లు ({{count}})",
+    "cancelledSection": "రద్దు చేయబడినవి ({{count}})"
+  }
+}

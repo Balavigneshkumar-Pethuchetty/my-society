@@ -1,0 +1,260 @@
+{
+  "common": {
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "download": "डाउनलोड करें",
+    "share": "शेयर करें",
+    "photosCount": "फ़ोटो ({{count}})",
+    "dash": "—",
+    "status": {
+      "pending": "लंबित",
+      "partially_entered": "आंशिक रूप से प्रवेश",
+      "entered": "प्रवेश किया",
+      "partially_exited": "आंशिक रूप से निकास",
+      "exited": "बाहर गए",
+      "cancelled": "रद्द",
+      "expired": "समाप्त"
+    }
+  },
+  "phoneInput": {
+    "defaultLabel": "फ़ोन नंबर",
+    "countryCodeAria": "देश कोड",
+    "searchPlaceholder": "देश या कोड खोजें",
+    "noCountriesMatch": "\"{{search}}\" से कोई देश मेल नहीं खाता",
+    "storedAs": "{{number}} के रूप में सहेजा जाएगा"
+  },
+  "photoUploader": {
+    "capture": "फ़ोटो लें",
+    "uploading": "अपलोड हो रहा है…"
+  },
+  "resident": {
+    "purposeOptions": [
+      "डिलीवरी",
+      "मेहमान की यात्रा",
+      "कैब / ड्राइवर",
+      "घरेलू सहायक",
+      "रखरखाव / मरम्मत कार्य",
+      "इंटरव्यू",
+      "समारोह / इवेंट",
+      "कूरियर",
+      "विक्रेता"
+    ],
+    "validation": {
+      "requiredFields": "विज़िटर का नाम, उद्देश्य और वैधता अवधि आवश्यक हैं।",
+      "validToAfterFrom": "\"तक मान्य\" को \"से मान्य\" के बाद होना चाहिए।",
+      "minVisitors": "विज़िटर की संख्या कम से कम 1 होनी चाहिए।",
+      "invalidPhone": "कृपया पूरा संपर्क नंबर दर्ज करें।",
+      "invalidEmail": "कृपया एक सही ईमेल पता दर्ज करें।",
+      "nameAndPurposeRequired": "विज़िटर का नाम और उद्देश्य खाली नहीं हो सकते।",
+      "cantReduceBelowEntered": "विज़िटर की संख्या पहले से प्रवेश कर चुके {{count}} से कम नहीं हो सकती।"
+    },
+    "createDialog": {
+      "title": "विज़िटर पास बनाएं",
+      "categoryQuestion": "यह पास किसके लिए है?",
+      "categoryFamily": "परिवार का सदस्य",
+      "categoryOther": "मेहमान / अन्य",
+      "categoryHint": "इससे केवल पास का रूप बदलता है — परिवार के लिए गर्मजोशी भरी थीम, बाकी के लिए मानक एक्सेस-पास थीम मिलती है।",
+      "nameLabel": "विज़िटर का नाम",
+      "nameHelper": "समूह का प्रमुख / मुख्य संपर्क, यदि यह पास एक से अधिक लोगों के लिए है",
+      "purposeLabel": "यात्रा का उद्देश्य",
+      "validFromLabel": "से मान्य",
+      "validToLabel": "तक मान्य",
+      "countLabel": "विज़िटर की संख्या",
+      "countHelper": "एक ही पास पर आने वाले परिवार/समूह के लिए 1 से अधिक रखें — सुरक्षा उन्हें एक साथ या बैचों में अंदर आने दे सकती है।",
+      "additionalNamesLabel": "अतिरिक्त विज़िटर के नाम (वैकल्पिक)",
+      "additionalNamesPlaceholder": "जैसे रवि, सीता, मीना…",
+      "contactLabel": "संपर्क नंबर (वैकल्पिक)",
+      "emailLabel": "ईमेल (वैकल्पिक)",
+      "aadhaarLabel": "आधार नंबर (वैकल्पिक)",
+      "addressLabel": "पता (वैकल्पिक)",
+      "vehicleLabel": "वाहन नंबर (वैकल्पिक)",
+      "vehicleHelper": "अगर मेहमान कार/बाइक से आ रहे हैं — सुरक्षा गेट पर भी इसे जोड़ या सही कर सकती है",
+      "submit": "पास बनाएं"
+    },
+    "detailDialog": {
+      "downloadAlt": "विज़िटर पास",
+      "createdBy": "बनाया गया: {{name}}",
+      "status": "स्थिति:",
+      "categoryFamily": "परिवार",
+      "categoryGuest": "मेहमान",
+      "valid": "मान्य: {{from}} → {{to}}",
+      "group": "समूह: {{entered}}/{{count}} प्रवेश किया",
+      "groupExited": ", {{count}} बाहर निकले",
+      "also": "साथ में: {{names}}",
+      "vehicle": "वाहन: {{number}}",
+      "entered": "प्रवेश: {{time}}",
+      "exited": "निकास: {{time}}",
+      "phoneVerification": "फ़ोन सत्यापन: {{status}}",
+      "extendValidity": "वैधता बढ़ाएं",
+      "verifyPhone": "फ़ोन सत्यापित करें",
+      "newValidToLabel": "नई \"तक मान्य\" तिथि",
+      "confirmExtension": "विस्तार की पुष्टि करें",
+      "saveChanges": "परिवर्तन सहेजें",
+      "editCountHelper": "अधिक लोगों को अंदर आने देने के लिए इसे बढ़ाएं — {{count}} पहले से प्रवेश कर चुके हैं",
+      "deleteTitle": "विज़िटर पास हटाएं",
+      "deleteBody": "\"{{name}}\" के लिए पास हटाएं? यह वापस नहीं लिया जा सकता, और सुरक्षा को सूचित किया जाएगा।",
+      "keepPass": "पास रखें",
+      "deletePass": "पास हटाएं",
+      "validityExtended": "वैधता बढ़ा दी गई है।",
+      "updated": "विज़िटर पास अपडेट हो गया है — सुरक्षा को सूचित कर दिया गया है।",
+      "verificationSent": "सत्यापन कोड भेजा गया{{via}}।",
+      "verificationSentVia": " {{via}} के माध्यम से",
+      "verificationFailed": "सत्यापन कोड नहीं भेजा जा सका।"
+    },
+    "card": {
+      "byResident": "{{name}} द्वारा",
+      "arrived": "पहुंचे {{time}}",
+      "left": "· गए {{time}}"
+    },
+    "anonymousCard": {
+      "walkInFallback": "बिना पास आया विज़िटर (कोई QR पास नहीं)"
+    },
+    "anonymousDialog": {
+      "titleFallback": "बिना पास आया विज़िटर",
+      "purpose": "उद्देश्य: {{purpose}}",
+      "loggedAtGate": "गेट पर दर्ज किया गया: {{time}}",
+      "loggedBy": " {{name}} द्वारा",
+      "left": "गए: {{time}}",
+      "leftBy": " ({{name}})",
+      "contact": "संपर्क: {{contact}}",
+      "vehicle": "वाहन: {{number}}",
+      "address": "पता: {{address}}",
+      "notes": "टिप्पणी: {{notes}}"
+    },
+    "main": {
+      "loginPrompt": "विज़िटर पास प्रबंधित करने के लिए कृपया लॉग इन करें।",
+      "goToLogin": "लॉगिन पर जाएं",
+      "title": "विज़िटर पास",
+      "subtitle": "अपने मेहमानों के लिए QR पास बनाएं और प्रवेश ट्रैक करें — इसमें आपके घर के किसी भी सदस्य द्वारा बनाए गए पास शामिल हैं।",
+      "newPass": "नया पास",
+      "empty": "अभी तक कोई विज़िटर पास नहीं है। अपने अगले मेहमान के लिए एक बनाएं।",
+      "active": "सक्रिय ({{count}})",
+      "walkIns": "बिना पास आए विज़िटर ({{count}})",
+      "walkInsHint": "सुरक्षा द्वारा सीधे गेट पर दर्ज किए गए — इनके लिए कोई QR पास नहीं बनाया गया था (जैसे डिलीवरी, कूरियर, आपातकाल)।",
+      "history": "इतिहास ({{count}})"
+    }
+  },
+  "security": {
+    "callButton": {
+      "defaultLabel": "निवासी को कॉल करें",
+      "callName": "{{name}} को कॉल करें"
+    },
+    "scan": {
+      "description": "प्रवेश दर्ज करने के लिए विज़िटर पास QR स्कैन करें, फिर निकास दर्ज करने के लिए जाते समय फिर से स्कैन करें। समूह पास के लिए, बाकी को अंदर लाने या बाहर भेजने के लिए कभी भी दोबारा स्कैन करें।",
+      "stopCamera": "कैमरा बंद करें",
+      "startCamera": "कैमरे से स्कैन करें",
+      "or": "या",
+      "tokenLabel": "पास QR टोकन",
+      "tokenPlaceholder": "QR टोकन स्कैन करें या पेस्ट करें…",
+      "scanButton": "स्कैन करें",
+      "cameraError": "कैमरा एक्सेस नहीं हो सका: {{message}}",
+      "groupTitle": "{{name}} का समूह",
+      "entryProgress": "अब तक {{entered}}/{{count}} प्रवेश कर चुके हैं — {{remaining}} और अपेक्षित हैं।",
+      "exitProgress": "अब तक {{exited}}/{{entered}} बाहर निकल चुके हैं — {{remaining}} अभी भी अंदर हैं।",
+      "admittingNow": "अभी प्रवेश दे रहे हैं",
+      "exitingNow": "अभी बाहर भेज रहे हैं",
+      "confirmEntry": "प्रवेश की पुष्टि करें",
+      "confirmExit": "निकास की पुष्टि करें",
+      "overrideHint": "आप तकनीकी रूप से शेष से अधिक को प्रवेश/निकास दे सकते हैं — इसे कभी रोका नहीं जाएगा, केवल दर्ज किया जाएगा।",
+      "alreadyExited": "यह पास पहले ही बाहर जा चुका है।",
+      "entryAdmittedNow": "{{admitted}} को अभी प्रवेश मिला — {{entered}}/{{count}} प्रवेश कर चुके हैं।",
+      "exitAdmittedNow": "{{admitted}} अभी बाहर गए — {{exited}}/{{entered}} बाहर जा चुके हैं।",
+      "overExpected": "अपेक्षित {{count}} से अधिक लोग प्रवेश कर चुके हैं ({{entered}})।",
+      "entryTime": "प्रवेश: {{time}}",
+      "exitTime": "निकास: {{time}}"
+    },
+    "anonymous": {
+      "description": "बिना पूर्व-पंजीकृत QR पास वाले विज़िटर को दर्ज करें — एम्बुलेंस, डिलीवरी, आपातकालीन कर्मी, आदि। केवल उद्देश्य आवश्यक है; समय हो तो बाकी जानकारी भी जोड़ें।",
+      "purposeRequired": "उद्देश्य आवश्यक है।",
+      "purposeLabel": "उद्देश्य",
+      "nameLabel": "विज़िटर का नाम (वैकल्पिक)",
+      "contactLabel": "संपर्क नंबर (वैकल्पिक)",
+      "emailLabel": "ईमेल (वैकल्पिक)",
+      "aadhaarLabel": "आधार नंबर (वैकल्पिक)",
+      "addressLabel": "पता (वैकल्पिक)",
+      "vehicleLabel": "वाहन नंबर (वैकल्पिक)",
+      "vehiclePlaceholder": "जैसे TN 09 AB 1234",
+      "notesLabel": "टिप्पणी (वैकल्पिक)",
+      "submit": "विज़िटर दर्ज करें",
+      "loggedAt": "{{time}} पर दर्ज किया गया"
+    },
+    "today": {
+      "passesTitle": "विज़िटर पास ({{count}})",
+      "noPasses": "आज कोई पास अपेक्षित या सक्रिय नहीं है।",
+      "visiting": "{{name}} से मिलने आए",
+      "vehicleLabel": "वाहन नंबर",
+      "vehiclePlaceholder": "जैसे TN 09 AB 1234",
+      "save": "सहेजें",
+      "phoneCodeLabel": "फ़ोन कोड",
+      "verify": "सत्यापित करें",
+      "anonymousTitle": "बिना पास / आपातकालीन विज़िटर ({{count}})",
+      "noAnonymous": "आज कोई दर्ज नहीं किया गया।",
+      "exitedChip": "बाहर गए",
+      "markExit": "निकास दर्ज करें",
+      "phoneVerified": "फ़ोन सफलतापूर्वक सत्यापित हो गया।",
+      "incorrectCode": "गलत कोड।",
+      "vehicleUpdated": "वाहन नंबर अपडेट हो गया।"
+    },
+    "directory": {
+      "description": "रिकॉर्ड में फ़्लैट वाला हर कोई — निवासी, एडमिन, समिति सदस्य — न कि केवल अभी सक्रिय विज़िटर पास वाले लोग। आपातकाल (आग, चिकित्सा, आदि) के लिए जब आपको सीधे किसी से संपर्क करना हो।",
+      "searchPlaceholder": "नाम, फ़्लैट या फ़ोन से खोजें…",
+      "noResidents": "कोई निवासी नहीं मिला।",
+      "noMatch": "\"{{search}}\" से कोई निवासी मेल नहीं खाता।",
+      "noFlat": "कोई फ़्लैट रिकॉर्ड में नहीं है",
+      "call": "कॉल करें"
+    },
+    "main": {
+      "loginRequired": "विज़िटर गेट का उपयोग करने के लिए आपको लॉग इन होना चाहिए।",
+      "title": "विज़िटर गेट",
+      "subtitle": "विज़िटर पास स्कैन करें, बिना पास आए विज़िटर दर्ज करें, फ़ोटो लें और पहचान सत्यापित करें।",
+      "tabs": {
+        "scan": "पास स्कैन करें",
+        "anonymous": "बिना पास एंट्री",
+        "today": "आज की गतिविधि",
+        "directory": "निवासी डायरेक्टरी"
+      }
+    }
+  },
+  "admin": {
+    "title": "विज़िटर लेजर",
+    "subtitle": "फ़ोटो और आधार/पहचान स्थिति के साथ सभी विज़िटर पास और बिना पास एंट्री।",
+    "filtersTitle": "फ़िल्टर",
+    "fromLabel": "से",
+    "toLabel": "तक",
+    "purposeLabel": "उद्देश्य में शामिल है",
+    "statusLabel": "स्थिति",
+    "statusAll": "सभी",
+    "statusOptions": {
+      "pending": "लंबित",
+      "partially_entered": "आंशिक रूप से प्रवेश",
+      "entered": "प्रवेश किया",
+      "partially_exited": "आंशिक रूप से निकास",
+      "exited": "बाहर गए",
+      "cancelled": "रद्द",
+      "expired": "समाप्त"
+    },
+    "clear": "साफ़ करें",
+    "exportExcel": "एक्सेल निर्यात करें",
+    "exportPdf": "PDF निर्यात करें",
+    "table": {
+      "visitor": "विज़िटर",
+      "purpose": "उद्देश्य",
+      "resident": "निवासी",
+      "status": "स्थिति",
+      "visitors": "विज़िटर",
+      "entry": "प्रवेश",
+      "exit": "निकास",
+      "photo": "फ़ोटो",
+      "aadhaar": "आधार",
+      "outSuffix": "({{count}} बाहर)"
+    },
+    "empty": "इन फ़िल्टर से कोई विज़िटर रिकॉर्ड मेल नहीं खाता।",
+    "walkIn": "बिना पास आया",
+    "registeredPass": "पंजीकृत पास",
+    "aadhaarTooltip": "आधार दिया गया है (सत्यापन लागू नहीं है)",
+    "loginRequired": "विज़िटर लेजर देखने के लिए आपको लॉग इन होना चाहिए।",
+    "aadhaarNotice": "आधार सत्यापन भविष्य का इंटीग्रेशन है — आधार कॉलम केवल यह दिखाता है कि पास पर नंबर दर्ज किया गया था या नहीं, यह नहीं कि इसे किसी सरकारी API से सत्यापित किया गया है।"
+  }
+}

@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Lazy-load so Leaflet CSS is only injected when the Location tab is opened
 const InteractiveMap = lazy(() =>
@@ -59,12 +60,10 @@ async function eventsApiFetch<T>(path: string, token: string, init?: RequestInit
 }
 
 function paymentsApiBase(): string {
-  const { hostname, port, protocol, origin } = window.location;
+  const { hostname, port, origin } = window.location;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
   if (isLocal && ['4004', '4005'].includes(port)) return `${origin}/api/payments`;
-  if (isLocal && port !== '8080' && port !== '80')
-    return `${protocol}//${hostname}:8080/api/payments`;
-  return `${origin}/api/payments`;
+  return '/api/payments';
 }
 
 async function paymentsApiFetch<T>(path: string, token: string): Promise<T> {
@@ -123,11 +122,11 @@ interface NominatimResult { place_id: string; display_name: string; lat: string;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<string, { label: string; color: 'default'|'warning'|'success'|'error'|'info' }> = {
-  draft:     { label: 'Draft',     color: 'default'  },
-  published: { label: 'Published', color: 'success'  },
-  cancelled: { label: 'Cancelled', color: 'error'    },
-  completed: { label: 'Completed', color: 'info'     },
+const STATUS_STYLE: Record<string, { labelKey: string; color: 'default'|'warning'|'success'|'error'|'info' }> = {
+  draft:     { labelKey: 'manageEvents.status.draft',     color: 'default'  },
+  published: { labelKey: 'manageEvents.status.published', color: 'success'  },
+  cancelled: { labelKey: 'manageEvents.status.cancelled', color: 'error'    },
+  completed: { labelKey: 'manageEvents.status.completed', color: 'info'     },
 };
 
 function fmtDate(iso: string) {
@@ -201,6 +200,7 @@ function LocationTab({
   venueLng: string;
   onChange: (patch: { venue?: string; venueAddress?: string; venueLat?: string; venueLng?: string }) => void;
 }) {
+  const { t } = useTranslation('admin');
   const [query,       setQuery]       = useState(venue || venueAddress);
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
   const [searching,   setSearching]   = useState(false);
@@ -232,7 +232,7 @@ function LocationTab({
     if (pos) {
       await handleMapPositionChange(pos.lat, pos.lng);
     } else {
-      setLocateError('Couldn\'t detect your location — search for an address above, or open the map and drag the pin to the right spot.');
+      setLocateError(t('manageEvents.location.locateErrorGeneric'));
     }
     setLocatingMe(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,14 +261,14 @@ function LocationTab({
     try {
       const results = await nominatimSearch(text);
       if (results.length === 0) {
-        setLocateError(`No location found for "${text}". Try a more specific address or city name.`);
+        setLocateError(t('manageEvents.location.locateErrorNotFound', { query: text }));
         return;
       }
       const r = results[0];
       onChange({ venueLat: r.lat, venueLng: r.lon });
       if (!venueAddress) onChange({ venueAddress: r.display_name });
     } catch {
-      setLocateError('Could not reach the geocoding service. Check your internet connection.');
+      setLocateError(t('manageEvents.location.locateErrorNetwork'));
     } finally {
       setLocating(false);
     }
@@ -313,7 +313,7 @@ function LocationTab({
       {/* ── Search box ──────────────────────────────────────────────────── */}
       <Box>
         <TextField
-          label="Search venue / address"
+          label={t('manageEvents.location.searchLabel')}
           size="small" fullWidth
           value={query}
           onChange={e => handleSearchInput(e.target.value)}
@@ -324,8 +324,8 @@ function LocationTab({
               void geocodeAddress(query);
             }
           }}
-          placeholder="e.g. Whitefield Bengaluru, Society Clubhouse…"
-          helperText="Type and pick a suggestion, or press Enter to locate"
+          placeholder={t('manageEvents.location.searchPlaceholder')}
+          helperText={t('manageEvents.location.searchHelper')}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -363,11 +363,11 @@ function LocationTab({
       {/* ── Full address + "Find on Map" button ─────────────────────────── */}
       <Box>
         <TextField
-          label="Full address"
+          label={t('manageEvents.location.fullAddressLabel')}
           size="small" fullWidth multiline rows={2}
           value={venueAddress}
           onChange={e => onChange({ venueAddress: e.target.value })}
-          placeholder="Street, area, city, state — shown to attendees"
+          placeholder={t('manageEvents.location.fullAddressPlaceholder')}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
           <Button
@@ -379,16 +379,16 @@ function LocationTab({
             onClick={() => void geocodeAddress(venueAddress || query)}
             sx={{ fontSize: 12, textTransform: 'none', fontWeight: 600 }}
           >
-            {locating ? 'Locating…' : 'Find on Map'}
+            {locating ? t('manageEvents.location.locating') : t('manageEvents.location.findOnMap')}
           </Button>
           {needsGeocode && !locating && (
             <Typography fontSize={11} color="warning.main" fontWeight={600}>
-              ⚠ Address entered but no coordinates yet — click "Find on Map"
+              {t('manageEvents.location.addressNoCoords')}
             </Typography>
           )}
           {hasCoords && !locating && (
             <Typography fontSize={11} color="success.main" fontWeight={600}>
-              ✓ Coordinates set
+              {t('manageEvents.location.coordsSet')}
             </Typography>
           )}
         </Box>
@@ -403,16 +403,16 @@ function LocationTab({
       <Box>
         <Typography fontSize={12} fontWeight={700} color="text.secondary"
           textTransform="uppercase" letterSpacing={0.5} mb={1}>
-          GPS Coordinates
+          {t('manageEvents.location.gpsCoordinates')}
         </Typography>
         <Grid container spacing={2}>
           <Grid item xs={6}>
             <TextField
-              label="Latitude"
+              label={t('manageEvents.location.latitude')}
               size="small" fullWidth
               value={venueLat}
               onChange={e => handleLatChange(e.target.value)}
-              placeholder="e.g. 12.9716"
+              placeholder={t('manageEvents.location.latPlaceholder')}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -424,11 +424,11 @@ function LocationTab({
           </Grid>
           <Grid item xs={6}>
             <TextField
-              label="Longitude"
+              label={t('manageEvents.location.longitude')}
               size="small" fullWidth
               value={venueLng}
               onChange={e => handleLngChange(e.target.value)}
-              placeholder="e.g. 77.5946"
+              placeholder={t('manageEvents.location.lngPlaceholder')}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -457,10 +457,10 @@ function LocationTab({
           <Box>
             <Typography fontSize={12} fontWeight={700} color="text.secondary"
               textTransform="uppercase" letterSpacing={0.5}>
-              Map — drag the pin or click to set location
+              {t('manageEvents.location.mapInstructions')}
             </Typography>
             <Typography fontSize={11} color="text.secondary">
-              "Use current location" is often approximate on desktops (no GPS) — always drag the pin to the exact spot.
+              {t('manageEvents.location.mapHint')}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1.5} alignItems="center">
@@ -468,7 +468,7 @@ function LocationTab({
               startIcon={locatingMe ? <CircularProgress size={12} /> : <MyLocationIcon sx={{ fontSize: 14 }} />}
               onClick={() => void useCurrentLocation()} disabled={locatingMe}
               sx={{ fontSize: 11, textTransform: 'none', fontWeight: 600 }}>
-              Use current location
+              {t('manageEvents.location.useCurrentLocation')}
             </Button>
             {hasCoords && (
               <Typography fontSize={11} color="text.secondary" fontFamily="monospace">
@@ -501,8 +501,8 @@ function LocationTab({
         ) : (
           <Alert severity="info" icon={<LocationOnIcon fontSize="inherit" />} sx={{ borderRadius: 1.5 }}>
             {hasAddress
-              ? 'Click "Find on Map" above to geocode the address — then drag the pin to fine-tune.'
-              : 'Enter an address and click "Find on Map", or "Use current location" above, to open the map.'}
+              ? t('manageEvents.location.clickFindOnMap')
+              : t('manageEvents.location.enterAddressHint')}
           </Alert>
         )}
       </Box>
@@ -512,7 +512,7 @@ function LocationTab({
         <Box>
           <Typography fontSize={12} fontWeight={700} color="text.secondary"
             textTransform="uppercase" letterSpacing={0.5} mb={1}>
-            Open in Navigation App
+            {t('manageEvents.location.openInNav')}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {[
@@ -547,6 +547,7 @@ function TicketTypesTab({
   eventId: string | undefined;
   token: string;
 }) {
+  const { t } = useTranslation('admin');
   const [types,    setTypes]    = useState<TicketType[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
@@ -622,7 +623,7 @@ function TicketTypesTab({
   if (!eventId) {
     return (
       <Alert severity="info" sx={{ mt: 1, borderRadius: 1.5 }}>
-        Save the event as a draft first, then come back here to add ticket types.
+        {t('manageEvents.ticketTypes.saveStepFirst')}
       </Alert>
     );
   }
@@ -633,10 +634,10 @@ function TicketTypesTab({
 
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography fontWeight={700} fontSize={14} sx={{ flex: 1 }}>
-          Ticket Types ({types.filter(t => t.is_active).length} active)
+          {t('manageEvents.ticketTypes.title', { count: types.filter(tt => tt.is_active).length })}
         </Typography>
         <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
-          Add Type
+          {t('manageEvents.ticketTypes.addType')}
         </Button>
       </Box>
 
@@ -644,47 +645,47 @@ function TicketTypesTab({
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
       ) : types.length === 0 ? (
         <Alert severity="info" sx={{ borderRadius: 1.5 }}>
-          No ticket types yet. Single-price from the event details will be used. Add types for sub-events like "Play Area", "Lunch Coupon", "Music Pass", etc.
+          {t('manageEvents.ticketTypes.emptyMsg')}
         </Alert>
       ) : (
         <Stack spacing={1}>
-          {[...types].sort((a, b) => a.sort_order - b.sort_order).map(t => (
-            <Box key={t.id} sx={{
+          {[...types].sort((a, b) => a.sort_order - b.sort_order).map(tt => (
+            <Box key={tt.id} sx={{
               display: 'flex', alignItems: 'center', gap: 1.5,
               p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5,
-              opacity: t.is_active ? 1 : 0.55, bgcolor: 'action.hover',
+              opacity: tt.is_active ? 1 : 0.55, bgcolor: 'action.hover',
             }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography fontWeight={700} fontSize={13}>{t.name}</Typography>
-                  {!t.is_active && <Chip label="Inactive" size="small" sx={{ height: 16, fontSize: 10 }} />}
+                  <Typography fontWeight={700} fontSize={13}>{tt.name}</Typography>
+                  {!tt.is_active && <Chip label={t('manageEvents.ticketTypes.inactiveChip')} size="small" sx={{ height: 16, fontSize: 10 }} />}
                 </Box>
-                {t.description && (
-                  <Typography fontSize={11} color="text.secondary" noWrap>{t.description}</Typography>
+                {tt.description && (
+                  <Typography fontSize={11} color="text.secondary" noWrap>{tt.description}</Typography>
                 )}
                 <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
-                  <Typography fontSize={12} fontWeight={700} color={t.is_free ? 'success.main' : '#6366f1'}>
-                    {t.is_free ? 'Free' : `₹${Number(t.price).toLocaleString('en-IN')}`}
+                  <Typography fontSize={12} fontWeight={700} color={tt.is_free ? 'success.main' : '#6366f1'}>
+                    {tt.is_free ? t('manageEvents.ticketTypes.freeLabel') : `₹${Number(tt.price).toLocaleString('en-IN')}`}
                   </Typography>
-                  {t.capacity && (
+                  {tt.capacity && (
                     <Typography fontSize={12} color="text.secondary">
-                      Capacity: {t.capacity}
+                      {t('manageEvents.ticketTypes.capacityLabel', { count: tt.capacity })}
                     </Typography>
                   )}
-                  <Typography fontSize={12} color="text.secondary">Order: {t.sort_order}</Typography>
+                  <Typography fontSize={12} color="text.secondary">{t('manageEvents.ticketTypes.orderLabel', { order: tt.sort_order })}</Typography>
                 </Box>
               </Box>
               <Stack direction="row" spacing={0.5}>
-                <Tooltip title={t.is_active ? 'Deactivate' : 'Activate'}>
-                  <Switch size="small" checked={t.is_active} onChange={() => void toggleActive(t)} />
+                <Tooltip title={tt.is_active ? t('manageEvents.ticketTypes.deactivate') : t('manageEvents.ticketTypes.activate')}>
+                  <Switch size="small" checked={tt.is_active} onChange={() => void toggleActive(tt)} />
                 </Tooltip>
-                <Tooltip title="Edit">
-                  <IconButton size="small" onClick={() => openEdit(t)}>
+                <Tooltip title={t('common.edit')}>
+                  <IconButton size="small" onClick={() => openEdit(tt)}>
                     <EditIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Delete">
-                  <IconButton size="small" color="error" onClick={() => void handleDelete(t.id)}>
+                <Tooltip title={t('common.delete')}>
+                  <IconButton size="small" color="error" onClick={() => void handleDelete(tt.id)}>
                     <DeleteIcon sx={{ fontSize: 16 }} />
                   </IconButton>
                 </Tooltip>
@@ -698,51 +699,51 @@ function TicketTypesTab({
       {showForm && (
         <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, bgcolor: 'action.hover' }}>
           <Typography fontWeight={700} fontSize={13} mb={1.5}>
-            {editId ? 'Edit Ticket Type' : 'New Ticket Type'}
+            {editId ? t('manageEvents.ticketTypes.editTitle') : t('manageEvents.ticketTypes.newTitle')}
           </Typography>
           {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
           <Stack spacing={1.5}>
             <Grid container spacing={1.5}>
               <Grid item xs={8}>
-                <TextField label="Name *" size="small" fullWidth value={form.name}
+                <TextField label={t('manageEvents.ticketTypes.nameLabel')} size="small" fullWidth value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. Play Area, Lunch Coupon, Water Games…" />
+                  placeholder={t('manageEvents.ticketTypes.namePlaceholder')} />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Sort Order" type="number" size="small" fullWidth
+                <TextField label={t('manageEvents.ticketTypes.sortOrderLabel')} type="number" size="small" fullWidth
                   value={form.sort_order}
                   onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))} />
               </Grid>
             </Grid>
-            <TextField label="Description" size="small" fullWidth multiline rows={2}
+            <TextField label={t('manageEvents.ticketTypes.descriptionLabel')} size="small" fullWidth multiline rows={2}
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="What does this ticket include?" />
+              placeholder={t('manageEvents.ticketTypes.descriptionPlaceholder')} />
             <Grid container spacing={1.5} alignItems="center">
               <Grid item xs={4}>
                 <FormControlLabel
                   control={<Switch size="small" checked={form.is_free}
                     onChange={e => setForm(f => ({ ...f, is_free: e.target.checked, price: e.target.checked ? '0' : f.price }))} />}
-                  label={<Typography fontSize={12} fontWeight={600}>Free</Typography>}
+                  label={<Typography fontSize={12} fontWeight={600}>{t('manageEvents.ticketTypes.freeSwitch')}</Typography>}
                 />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Price (₹)" type="number" size="small" fullWidth
+                <TextField label={t('manageEvents.ticketTypes.priceLabel')} type="number" size="small" fullWidth
                   value={form.price} disabled={form.is_free}
                   onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Capacity (∞ if blank)" type="number" size="small" fullWidth
+                <TextField label={t('manageEvents.ticketTypes.capacityInputLabel')} type="number" size="small" fullWidth
                   value={form.capacity}
                   onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} />
               </Grid>
             </Grid>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button size="small" onClick={() => { setShowForm(false); setEditId(null); }}>Cancel</Button>
+              <Button size="small" onClick={() => { setShowForm(false); setEditId(null); }}>{t('common.cancel')}</Button>
               <Button size="small" variant="contained" disabled={!form.name || saving}
                 startIcon={saving ? <CircularProgress size={12} /> : <SaveIcon />}
                 onClick={() => void handleSave()}>
-                {editId ? 'Save' : 'Add'}
+                {editId ? t('common.save') : t('manageEvents.ticketTypes.addBtn')}
               </Button>
             </Stack>
           </Stack>
@@ -769,6 +770,7 @@ interface CollectorSettings {
 }
 
 function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; token: string }) {
+  const { t } = useTranslation('admin');
   const [cfg,     setCfg]     = useState<CollectorSettings | null>(null);
   const [upiId,   setUpiId]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -788,7 +790,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
   useEffect(() => { load(); }, [load]);
 
   if (!eventId) {
-    return <Alert severity="info">Save step 1 first, then come back here to set this event's payment collection UPI ID.</Alert>;
+    return <Alert severity="info">{t('manageEvents.paymentSettings.saveStep1First')}</Alert>;
   }
 
   const save = async () => {
@@ -805,7 +807,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
       setSaved(true);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('common.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -816,24 +818,24 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
   return (
     <Stack spacing={2.5} sx={{ pt: 1, maxWidth: 480 }}>
       <Box>
-        <Typography fontWeight={700} mb={0.5}>Event Payment Settings</Typography>
+        <Typography fontWeight={700} mb={0.5}>{t('manageEvents.paymentSettings.title')}</Typography>
         <Typography variant="body2" color="text.secondary">
-          Assign a UPI ID to each event to manage registration fees and collections.
+          {t('manageEvents.paymentSettings.subtitle')}
         </Typography>
       </Box>
 
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-      {saved && <Alert severity="success" onClose={() => setSaved(false)}>Payment settings saved.</Alert>}
+      {saved && <Alert severity="success" onClose={() => setSaved(false)}>{t('manageEvents.paymentSettings.savedMsg')}</Alert>}
 
       <TextField
-        label="UPI ID" size="small" fullWidth value={upiId}
+        label={t('manageEvents.paymentSettings.upiLabel')} size="small" fullWidth value={upiId}
         onChange={e => setUpiId(e.target.value)}
-        placeholder="name@bankname"
-        helperText="The UPI ID residents pay into for this event's registration fees."
+        placeholder={t('manageEvents.paymentSettings.upiPlaceholder')}
+        helperText={t('manageEvents.paymentSettings.upiHelper')}
       />
       {cfg?.member_name && (
         <Typography variant="caption" color="text.secondary">
-          Collector on record: {cfg.member_name}
+          {t('manageEvents.paymentSettings.collectorOnRecord', { name: cfg.member_name })}
         </Typography>
       )}
 
@@ -843,7 +845,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
           disabled={saving || upiId.trim().length < 5}
           startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
         >
-          {saving ? 'Saving…' : 'Save Payment Settings'}
+          {saving ? t('common.saving') : t('manageEvents.paymentSettings.saveButton')}
         </Button>
       </Box>
     </Stack>
@@ -867,6 +869,7 @@ function EventForm({
   initial?: EventItem; onClose: () => void; onSaved: (id?: string) => void;
   onPublish?: () => void; onCancel?: () => void;
 }) {
+  const { t } = useTranslation('admin');
   const [tab,     setTab]     = useState(0);
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -906,12 +909,12 @@ function EventForm({
   const handleSave = async (nextTab?: number) => {
     setError(null);
     if (!form.title.trim() || !form.venue.trim() || !form.start_time || !form.end_time) {
-      setError('Title, venue, and start / end dates are required.');
+      setError(t('manageEvents.form.validationRequired'));
       setTab(0);
       return;
     }
     if (form.cancel_freeze_at && new Date(form.cancel_freeze_at) >= new Date(form.start_time)) {
-      setError('Ticket cancellation freeze time must be before the event start time.');
+      setError(t('manageEvents.form.validationFreeze'));
       setTab(0);
       return;
     }
@@ -958,22 +961,22 @@ function EventForm({
   const isDraft     = initial ? initial.status === 'draft'     : hasId;
   const isPublished = initial ? initial.status === 'published' : false;
 
-  const STEP_LABELS = ['1. Event Details', '2. Location', '3. Ticket Types', '4. Payment Settings'];
+  const STEP_LABELS = [t('manageEvents.form.step1'), t('manageEvents.form.step2'), t('manageEvents.form.step3'), t('manageEvents.form.step4')];
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 700, pb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {initial ? `Edit — ${initial.title}` : 'Create New Event'}
-          {initial && (
+          {initial ? t('manageEvents.form.editTitle', { title: initial.title }) : t('manageEvents.form.createTitle')}
+          {initial && STATUS_STYLE[initial.status] && (
             <Chip
-              label={STATUS_STYLE[initial.status]?.label ?? initial.status}
-              color={STATUS_STYLE[initial.status]?.color ?? 'default'}
+              label={t(STATUS_STYLE[initial.status].labelKey)}
+              color={STATUS_STYLE[initial.status].color}
               size="small" sx={{ fontWeight: 700, fontSize: 11 }}
             />
           )}
           {!initial && hasId && (
-            <Chip label="Draft saved" size="small" color="default" sx={{ fontSize: 11 }} />
+            <Chip label={t('manageEvents.form.draftSaved')} size="small" color="default" sx={{ fontSize: 11 }} />
           )}
         </Box>
       </DialogTitle>
@@ -984,7 +987,7 @@ function EventForm({
             <Tab key={label} label={label}
               disabled={i > 0 && !hasId}
               icon={i > 0 && !hasId
-                ? <Typography fontSize={10} color="text.disabled">Save step 1 first</Typography>
+                ? <Typography fontSize={10} color="text.disabled">{t('manageEvents.form.saveStepFirstShort')}</Typography>
                 : undefined}
               iconPosition="end"
               sx={{ fontSize: 13 }}
@@ -999,34 +1002,34 @@ function EventForm({
         {/* ── Step 1: Event Details (no ticket fields here) ─────────────────── */}
         {tab === 0 && (
           <Stack spacing={2.5} sx={{ pt: 1 }}>
-            <TextField label="Title *" size="small" fullWidth value={form.title}
+            <TextField label={t('manageEvents.form.titleLabel')} size="small" fullWidth value={form.title}
               onChange={e => patch({ title: e.target.value })} />
-            <TextField label="Description" size="small" fullWidth multiline rows={3}
+            <TextField label={t('manageEvents.form.descriptionLabel')} size="small" fullWidth multiline rows={3}
               value={form.description} onChange={e => patch({ description: e.target.value })} />
-            <TextField label="Venue / Location Name *" size="small" fullWidth value={form.venue}
+            <TextField label={t('manageEvents.form.venueLabel')} size="small" fullWidth value={form.venue}
               onChange={e => patch({ venue: e.target.value })}
-              placeholder="e.g. Society Clubhouse, Rooftop Garden Block A" />
+              placeholder={t('manageEvents.form.venuePlaceholder')} />
             <Stack direction="row" spacing={2}>
-              <TextField label="Start Date & Time *" type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
+              <TextField label={t('manageEvents.form.startLabel')} type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
                 InputLabelProps={{ shrink: true }} value={form.start_time}
                 onChange={e => patch({ start_time: e.target.value })} />
-              <TextField label="End Date & Time *" type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
+              <TextField label={t('manageEvents.form.endLabel')} type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
                 InputLabelProps={{ shrink: true }} value={form.end_time}
                 onChange={e => patch({ end_time: e.target.value })} />
             </Stack>
             <TextField
-              label="Ticket Cancellation Freeze Time (optional)"
+              label={t('manageEvents.form.freezeLabel')}
               type="datetime-local" size="small" fullWidth
               InputLabelProps={{ shrink: true }} value={form.cancel_freeze_at}
               onChange={e => { freezeTouchedRef.current = true; patch({ cancel_freeze_at: e.target.value }); }}
-              helperText="Defaults to 1 day before the start time; clear it to let residents cancel a confirmed ticket any time before the event starts. Must be before the start time."
+              helperText={t('manageEvents.form.freezeHelper')}
             />
             <Stack direction="row" spacing={2}>
-              <TextField label="Capacity (blank = unlimited)" type="number" size="small" fullWidth sx={{ flex: 1 }}
+              <TextField label={t('manageEvents.form.capacityLabel')} type="number" size="small" fullWidth sx={{ flex: 1 }}
                 value={form.capacity} onChange={e => patch({ capacity: e.target.value })} />
-              <TextField label="Category" select size="small" fullWidth sx={{ flex: 2 }} value={form.category_id}
+              <TextField label={t('manageEvents.form.categoryLabel')} select size="small" fullWidth sx={{ flex: 2 }} value={form.category_id}
                 onChange={e => patch({ category_id: e.target.value })}>
-                <MenuItem value=""><em>None</em></MenuItem>
+                <MenuItem value=""><em>{t('common.none')}</em></MenuItem>
                 {categories.map(c => (
                   <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
                 ))}
@@ -1058,29 +1061,29 @@ function EventForm({
             <Box>
               <Typography fontSize={12} fontWeight={700} color="text.secondary"
                 textTransform="uppercase" letterSpacing={0.5} mb={1.5}>
-                Event Pricing
+                {t('manageEvents.form.pricingTitle')}
               </Typography>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={4}>
-                  <TextField label="Ticket pricing" select size="small" fullWidth
+                  <TextField label={t('manageEvents.form.pricingSelectLabel')} select size="small" fullWidth
                     value={form.is_free ? 'true' : 'false'}
                     onChange={e => {
                       const f = e.target.value === 'true';
                       patch({ is_free: f });
                       if (f) patch({ ticket_price: '0' });
                     }}>
-                    <MenuItem value="true">Free event</MenuItem>
-                    <MenuItem value="false">Paid event</MenuItem>
+                    <MenuItem value="true">{t('manageEvents.form.freeEvent')}</MenuItem>
+                    <MenuItem value="false">{t('manageEvents.form.paidEvent')}</MenuItem>
                   </TextField>
                 </Grid>
                 {!form.is_free && (
                   <>
                     <Grid item xs={4}>
-                      <TextField label="Default ticket price" type="number" size="small" fullWidth
+                      <TextField label={t('manageEvents.form.defaultPrice')} type="number" size="small" fullWidth
                         value={form.ticket_price} onChange={e => patch({ ticket_price: e.target.value })} />
                     </Grid>
                     <Grid item xs={4}>
-                      <TextField label="Currency" select size="small" fullWidth
+                      <TextField label={t('manageEvents.form.currency')} select size="small" fullWidth
                         value={form.price_currency} onChange={e => patch({ price_currency: e.target.value })}>
                         {['INR','USD','GBP','EUR','SGD','AED'].map(c => (
                           <MenuItem key={c} value={c}>{c}</MenuItem>
@@ -1098,7 +1101,7 @@ function EventForm({
             <Box>
               <Typography fontSize={12} fontWeight={700} color="text.secondary"
                 textTransform="uppercase" letterSpacing={0.5} mb={1.5}>
-                Ticket Types
+                {t('manageEvents.form.ticketTypesTitle')}
               </Typography>
               <TicketTypesTab eventId={savedId} token={token} />
             </Box>
@@ -1115,34 +1118,34 @@ function EventForm({
           {isDraft && onPublish && (
             <Button variant="contained" color="success" size="small"
               startIcon={<PublishIcon />} onClick={onPublish}>
-              Publish Event
+              {t('manageEvents.form.publishEvent')}
             </Button>
           )}
           {isPublished && onCancel && (
             <Button variant="outlined" color="error" size="small"
               startIcon={<CancelIcon />} onClick={onCancel}>
-              Cancel Event
+              {t('manageEvents.form.cancelEvent')}
             </Button>
           )}
         </Stack>
 
         {/* Right side: step navigation */}
         <Stack direction="row" spacing={1}>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t('common.close')}</Button>
           {tab > 0 && (
             <Button variant="outlined" onClick={() => setTab(tab - 1)}>
-              ← Back
+              {t('common.back')}
             </Button>
           )}
           {tab < 3 ? (
             <Button variant="contained" onClick={() => void handleSave(tab + 1)} disabled={saving}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}>
-              {saving ? 'Saving…' : 'Save & Next →'}
+              {saving ? t('common.saving') : t('manageEvents.form.saveNext')}
             </Button>
           ) : (
             <Button variant="contained" onClick={() => void handleSave()} disabled={saving}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}>
-              {saving ? 'Saving…' : (initial ? 'Save Changes' : 'Save Draft')}
+              {saving ? t('common.saving') : (initial ? t('manageEvents.form.saveChanges') : t('manageEvents.form.saveDraft'))}
             </Button>
           )}
         </Stack>
@@ -1161,6 +1164,7 @@ interface ApprovedMember {
 function ManageAccessDialog({
   open, onClose, eventId, token,
 }: { open: boolean; onClose: () => void; eventId: string; token: string }) {
+  const { t } = useTranslation('admin');
   const [members, setMembers] = useState<ApprovedMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [email,   setEmail]   = useState('');
@@ -1197,11 +1201,10 @@ function ManageAccessDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Manage Access</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 700 }}>{t('manageEvents.access.title')}</DialogTitle>
       <DialogContent dividers>
         <Typography fontSize={13} color="text.secondary" mb={2}>
-          Approved members can manage this event — edit, publish, ticket types — the same as
-          you, but only this one event.
+          {t('manageEvents.access.description')}
         </Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {loading ? (
@@ -1209,7 +1212,7 @@ function ManageAccessDialog({
         ) : (
           <Stack spacing={1} sx={{ mb: 2 }}>
             {members.length === 0 && (
-              <Typography fontSize={13} color="text.secondary">No approved members yet.</Typography>
+              <Typography fontSize={13} color="text.secondary">{t('manageEvents.access.emptyMsg')}</Typography>
             )}
             {members.map(m => (
               <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
@@ -1217,7 +1220,7 @@ function ManageAccessDialog({
                   <Typography fontWeight={600} fontSize={13}>{m.user_name}</Typography>
                   <Typography fontSize={11} color="text.secondary">{m.user_email}</Typography>
                 </Box>
-                <Tooltip title="Revoke access">
+                <Tooltip title={t('manageEvents.access.revokeTooltip')}>
                   <IconButton size="small" color="error" onClick={() => void revoke(m.user_id)}>
                     <DeleteIcon sx={{ fontSize: 16 }} />
                   </IconButton>
@@ -1227,12 +1230,12 @@ function ManageAccessDialog({
           </Stack>
         )}
         <Stack direction="row" spacing={1}>
-          <TextField size="small" fullWidth label="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-          <Button variant="contained" disabled={saving || !email.trim()} onClick={() => void grant()}>Grant</Button>
+          <TextField size="small" fullWidth label={t('manageEvents.access.emailLabel')} value={email} onChange={e => setEmail(e.target.value)} />
+          <Button variant="contained" disabled={saving || !email.trim()} onClick={() => void grant()}>{t('manageEvents.access.grantBtn')}</Button>
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{t('common.close')}</Button>
       </DialogActions>
     </Dialog>
   );
@@ -1243,6 +1246,7 @@ function ManageAccessDialog({
 interface Props { token: string | null; id?: string }
 
 export function ManageEvents({ token, id }: Props) {
+  const { t } = useTranslation('admin');
   const [events,     setEvents]     = useState<EventItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -1285,14 +1289,14 @@ export function ManageEvents({ token, id }: Props) {
   useEffect(() => { void load(); }, [load]);
 
   const action = (label: string, fn: () => Promise<void>) => setConfirm({ label, action: fn });
-  const publish  = (e: EventItem) => action(`Publish "${e.title}"? It will become visible to all members.`, async () => { await eventsApiFetch(`/events/${e.id}/publish`, token!, { method: 'PATCH' }); setActionMsg(`"${e.title}" published.`); void load(); });
-  const cancel   = (e: EventItem) => action(`Cancel "${e.title}"? This will close registrations and notify members.`, async () => { await eventsApiFetch(`/events/${e.id}/cancel`, token!, { method: 'PATCH' }); setActionMsg(`"${e.title}" cancelled.`); void load(); });
-  const complete = (e: EventItem) => action(`Mark "${e.title}" as completed?`, async () => { await eventsApiFetch(`/events/${e.id}/complete`, token!, { method: 'PATCH' }); setActionMsg(`"${e.title}" completed.`); void load(); });
+  const publish  = (e: EventItem) => action(t('manageEvents.confirm.publish', { title: e.title }), async () => { await eventsApiFetch(`/events/${e.id}/publish`, token!, { method: 'PATCH' }); setActionMsg(t('manageEvents.toast.published', { title: e.title })); void load(); });
+  const cancel   = (e: EventItem) => action(t('manageEvents.confirm.cancel', { title: e.title }), async () => { await eventsApiFetch(`/events/${e.id}/cancel`, token!, { method: 'PATCH' }); setActionMsg(t('manageEvents.toast.cancelled', { title: e.title })); void load(); });
+  const complete = (e: EventItem) => action(t('manageEvents.confirm.complete', { title: e.title }), async () => { await eventsApiFetch(`/events/${e.id}/complete`, token!, { method: 'PATCH' }); setActionMsg(t('manageEvents.toast.completed', { title: e.title })); void load(); });
   const remove   = (e: EventItem) => action(
     e.status === 'completed'
-      ? `Delete "${e.title}"? This removes the event and its announcements/ticket-types/complimentary-ticket log, plus all registrations, tickets, and payment records for it. This cannot be undone.`
-      : `Delete draft "${e.title}"? This cannot be undone.`,
-    async () => { await eventsApiFetch(`/events/${e.id}`, token!, { method: 'DELETE' }); setActionMsg(`"${e.title}" deleted.`); void load(); });
+      ? t('manageEvents.confirm.deleteCompleted', { title: e.title })
+      : t('manageEvents.confirm.deleteDraft', { title: e.title }),
+    async () => { await eventsApiFetch(`/events/${e.id}`, token!, { method: 'DELETE' }); setActionMsg(t('manageEvents.toast.deleted', { title: e.title })); void load(); });
   const openEdit = (e: EventItem) => { setEditTarget(e); setFormOpen(true); };
   const handleFormClose = () => { setFormOpen(false); setEditTarget(undefined); };
   const handleFormSaved = () => { void load(); };
@@ -1300,7 +1304,7 @@ export function ManageEvents({ token, id }: Props) {
   const handleFormCancel  = () => { if (editTarget) { handleFormClose(); cancel(editTarget);  } };
 
   if (!token) {
-    return <Container maxWidth="md" sx={{ pt: 6 }}><Alert severity="warning">You must be logged in to manage events.</Alert></Container>;
+    return <Container maxWidth="md" sx={{ pt: 6 }}><Alert severity="warning">{t('manageEvents.loginRequired')}</Alert></Container>;
   }
 
   return (
@@ -1309,12 +1313,12 @@ export function ManageEvents({ token, id }: Props) {
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h5" fontWeight={800}>Manage Events</Typography>
-              <Typography fontSize={13} color="text.secondary" mt={0.25}>Create, publish, and manage all society events</Typography>
+              <Typography variant="h5" fontWeight={800}>{t('manageEvents.title')}</Typography>
+              <Typography fontSize={13} color="text.secondary" mt={0.25}>{t('manageEvents.subtitle')}</Typography>
             </Box>
             <Button variant="contained" startIcon={<AddIcon />}
               onClick={() => { setEditTarget(undefined); setFormOpen(true); }}>
-              New Event
+              {t('manageEvents.newEvent')}
             </Button>
           </Box>
         </Container>
@@ -1322,23 +1326,24 @@ export function ManageEvents({ token, id }: Props) {
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {actionMsg && <Alert severity="success" onClose={() => setActionMsg(null)} sx={{ mb: 2 }}>{actionMsg}</Alert>}
-        {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }} action={<Button size="small" onClick={() => void load()}>Retry</Button>}>{error}</Alert>}
+        {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }} action={<Button size="small" onClick={() => void load()}>{t('common.retry')}</Button>}>{error}</Alert>}
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
         ) : events.length === 0 ? (
           <Paper variant="outlined" sx={{ borderRadius: 2, p: 6, textAlign: 'center' }}>
             <Typography fontSize={40}>📅</Typography>
-            <Typography variant="h6" mt={1}>No events yet</Typography>
-            <Typography color="text.secondary" fontSize={14} mb={2}>Create your first event to get started.</Typography>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setEditTarget(undefined); setFormOpen(true); }}>Create Event</Button>
+            <Typography variant="h6" mt={1}>{t('manageEvents.emptyTitle')}</Typography>
+            <Typography color="text.secondary" fontSize={14} mb={2}>{t('manageEvents.emptySubtitle')}</Typography>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setEditTarget(undefined); setFormOpen(true); }}>{t('manageEvents.createEvent')}</Button>
           </Paper>
         ) : (
           <>
           {/* Mobile card layout – xs only */}
           <Box sx={{ display: { xs: 'flex', sm: 'none' }, flexDirection: 'column', gap: 1.5 }}>
             {events.map(ev => {
-              const ss = STATUS_STYLE[ev.status] ?? { label: ev.status, color: 'default' as const };
+              const ss = STATUS_STYLE[ev.status];
+              const statusLabel = ss ? t(ss.labelKey) : ev.status;
               const hasLocation = ev.venue_lat != null && ev.venue_lng != null;
               return (
                 <Paper key={ev.id} variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
@@ -1347,18 +1352,18 @@ export function ManageEvents({ token, id }: Props) {
                       <Typography fontWeight={700} fontSize={15} sx={{ wordBreak: 'break-word' }}>{ev.title}</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                         <GroupIcon sx={{ fontSize: 11, color: 'text.secondary' }} />
-                        <Typography fontSize={12} color="text.secondary">By {ev.organizer_name}</Typography>
+                        <Typography fontSize={12} color="text.secondary">{t('manageEvents.byOrganizer', { name: ev.organizer_name })}</Typography>
                       </Box>
                       {ev.approved_members.length > 0 && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                           <GroupAddIcon sx={{ fontSize: 11, color: 'text.secondary' }} />
                           <Typography fontSize={12} color="text.secondary">
-                            In charge: {ev.approved_members.join(', ')}
+                            {t('manageEvents.inCharge', { names: ev.approved_members.join(', ') })}
                           </Typography>
                         </Box>
                       )}
                     </Box>
-                    <Chip label={ss.label} color={ss.color} size="small" sx={{ fontWeight: 700, fontSize: 11, flexShrink: 0 }} />
+                    <Chip label={statusLabel} color={ss?.color ?? 'default'} size="small" sx={{ fontWeight: 700, fontSize: 11, flexShrink: 0 }} />
                   </Box>
 
                   {ev.category_name && (
@@ -1385,7 +1390,7 @@ export function ManageEvents({ token, id }: Props) {
                           <Box component="a" href={mapsUrl(ev.venue_lat!, ev.venue_lng!)}
                             target="_blank" rel="noopener noreferrer"
                             sx={{ fontSize: 11, color: '#6366f1', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 0.25, '&:hover': { textDecoration: 'underline' } }}>
-                            <DirectionsIcon sx={{ fontSize: 11 }} /> Get Directions
+                            <DirectionsIcon sx={{ fontSize: 11 }} /> {t('manageEvents.getDirections')}
                           </Box>
                         )}
                       </Box>
@@ -1394,7 +1399,7 @@ export function ManageEvents({ token, id }: Props) {
                       <GroupIcon sx={{ fontSize: 13, color: 'text.secondary', flexShrink: 0 }} />
                       <Typography fontSize={13} fontWeight={700}>{ev.confirmed_tickets}</Typography>
                       <Typography fontSize={12} color="text.secondary">
-                        {ev.capacity ? `/ ${ev.capacity} registrations` : '∞ registrations'}
+                        {ev.capacity ? t('manageEvents.registrationsCount', { count: ev.capacity }) : t('manageEvents.registrationsUnlimited')}
                       </Typography>
                     </Box>
                   </Stack>
@@ -1404,7 +1409,7 @@ export function ManageEvents({ token, id }: Props) {
                   <Stack direction="row" spacing={0.5} flexWrap="wrap" alignItems="center">
                     {ev.status === 'draft' && (
                       <>
-                        <Tooltip title="Edit draft">
+                        <Tooltip title={t('manageEvents.editDraftTooltip')}>
                           <IconButton size="small" color="primary" onClick={() => openEdit(ev)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
@@ -1413,9 +1418,9 @@ export function ManageEvents({ token, id }: Props) {
                           startIcon={<PublishIcon sx={{ fontSize: 14 }} />}
                           onClick={() => publish(ev)}
                           sx={{ fontSize: 11, textTransform: 'none', px: 1.25, py: 0.25 }}>
-                          Publish
+                          {t('manageEvents.publishBtn')}
                         </Button>
-                        <Tooltip title="Delete draft">
+                        <Tooltip title={t('manageEvents.deleteDraftTooltip')}>
                           <IconButton size="small" color="error" onClick={() => remove(ev)}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
@@ -1424,12 +1429,12 @@ export function ManageEvents({ token, id }: Props) {
                     )}
                     {ev.status === 'published' && (
                       <>
-                        <Tooltip title="Edit event">
+                        <Tooltip title={t('manageEvents.editEventTooltip')}>
                           <IconButton size="small" color="primary" onClick={() => openEdit(ev)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Mark as completed">
+                        <Tooltip title={t('manageEvents.markCompletedTooltip')}>
                           <IconButton size="small" color="info" onClick={() => complete(ev)}>
                             <CheckCircleIcon fontSize="small" />
                           </IconButton>
@@ -1438,33 +1443,33 @@ export function ManageEvents({ token, id }: Props) {
                           startIcon={<CancelIcon sx={{ fontSize: 14 }} />}
                           onClick={() => cancel(ev)}
                           sx={{ fontSize: 11, textTransform: 'none', px: 1.25, py: 0.25 }}>
-                          Cancel Event
+                          {t('manageEvents.cancelEventBtn')}
                         </Button>
                       </>
                     )}
                     {ev.status === 'cancelled' && (
-                      <Typography fontSize={11} color="text.disabled" sx={{ px: 0.5 }}>No actions</Typography>
+                      <Typography fontSize={11} color="text.disabled" sx={{ px: 0.5 }}>{t('manageEvents.noActions')}</Typography>
                     )}
                     {ev.status === 'completed' && (
-                      <Tooltip title="Delete event (removes registrations, tickets & payments)">
+                      <Tooltip title={t('manageEvents.deleteEventTooltip')}>
                         <IconButton size="small" color="error" onClick={() => remove(ev)}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
                     {ev.status !== 'completed' && ev.status !== 'cancelled' && (
-                      <Tooltip title="Complimentary tickets">
+                      <Tooltip title={t('manageEvents.complimentaryTicketsTooltip')}>
                         <IconButton size="small" onClick={() => { window.location.href = `/manage/complimentary/${ev.id}`; }}>
                           <LocalActivityIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
-                    <Tooltip title="Manage access">
+                    <Tooltip title={t('manageEvents.manageAccessTooltip')}>
                       <IconButton size="small" onClick={() => setAccessTarget(ev)}>
                         <GroupAddIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="View details">
+                    <Tooltip title={t('manageEvents.viewDetailsTooltip')}>
                       <IconButton size="small" onClick={() => { window.location.href = `/manage/details/${ev.id}`; }}>
                         <OpenInNewIcon fontSize="small" />
                       </IconButton>
@@ -1480,14 +1485,15 @@ export function ManageEvents({ token, id }: Props) {
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: 'action.hover' }}>
-                  {['Event', 'Category', 'Date', 'Location', 'Registrations', 'Status', 'Actions'].map(h => (
+                  {[t('manageEvents.table.event'), t('manageEvents.table.category'), t('manageEvents.table.date'), t('manageEvents.table.location'), t('manageEvents.table.registrations'), t('manageEvents.table.status'), t('manageEvents.table.actions')].map(h => (
                     <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary', py: 1.5 }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {events.map(ev => {
-                  const ss = STATUS_STYLE[ev.status] ?? { label: ev.status, color: 'default' as const };
+                  const ss = STATUS_STYLE[ev.status];
+                  const statusLabel = ss ? t(ss.labelKey) : ev.status;
                   const hasLocation = ev.venue_lat != null && ev.venue_lng != null;
                   return (
                     <TableRow key={ev.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
@@ -1498,7 +1504,7 @@ export function ManageEvents({ token, id }: Props) {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25, minWidth: 0 }}>
                           <GroupIcon sx={{ fontSize: 11, color: 'text.secondary', flexShrink: 0 }} />
                           <Tooltip title={ev.organizer_name}>
-                            <Typography fontSize={12} color="text.secondary" noWrap sx={{ minWidth: 0 }}>By {ev.organizer_name}</Typography>
+                            <Typography fontSize={12} color="text.secondary" noWrap sx={{ minWidth: 0 }}>{t('manageEvents.byOrganizer', { name: ev.organizer_name })}</Typography>
                           </Tooltip>
                         </Box>
                         {ev.approved_members.length > 0 && (
@@ -1506,7 +1512,7 @@ export function ManageEvents({ token, id }: Props) {
                             <GroupAddIcon sx={{ fontSize: 11, color: 'text.secondary', flexShrink: 0 }} />
                             <Tooltip title={ev.approved_members.join(', ')}>
                               <Typography fontSize={12} color="text.secondary" noWrap sx={{ minWidth: 0 }}>
-                                In charge: {ev.approved_members.join(', ')}
+                                {t('manageEvents.inCharge', { names: ev.approved_members.join(', ') })}
                               </Typography>
                             </Tooltip>
                           </Box>
@@ -1540,7 +1546,7 @@ export function ManageEvents({ token, id }: Props) {
                                 href={mapsUrl(ev.venue_lat!, ev.venue_lng!)}
                                 target="_blank" rel="noopener noreferrer"
                                 sx={{ fontSize: 11, color: '#6366f1', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 0.25, '&:hover': { textDecoration: 'underline' } }}>
-                                <DirectionsIcon sx={{ fontSize: 11 }} /> Get Directions
+                                <DirectionsIcon sx={{ fontSize: 11 }} /> {t('manageEvents.getDirections')}
                               </Box>
                             )}
                           </Box>
@@ -1553,13 +1559,13 @@ export function ManageEvents({ token, id }: Props) {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Chip label={ss.label} color={ss.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                        <Chip label={statusLabel} color={ss?.color ?? 'default'} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
                       </TableCell>
                       <TableCell sx={{ maxWidth: 140 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
                           {ev.status === 'draft' && (
                             <>
-                              <Tooltip title="Edit draft">
+                              <Tooltip title={t('manageEvents.editDraftTooltip')}>
                                 <IconButton size="small" color="primary" onClick={() => openEdit(ev)}>
                                   <EditIcon fontSize="small" />
                                 </IconButton>
@@ -1568,9 +1574,9 @@ export function ManageEvents({ token, id }: Props) {
                                 startIcon={<PublishIcon sx={{ fontSize: 14 }} />}
                                 onClick={() => publish(ev)}
                                 sx={{ fontSize: 11, textTransform: 'none', px: 1.25, py: 0.25 }}>
-                                Publish
+                                {t('manageEvents.publishBtn')}
                               </Button>
-                              <Tooltip title="Delete draft">
+                              <Tooltip title={t('manageEvents.deleteDraftTooltip')}>
                                 <IconButton size="small" color="error" onClick={() => remove(ev)}>
                                   <DeleteIcon fontSize="small" />
                                 </IconButton>
@@ -1579,12 +1585,12 @@ export function ManageEvents({ token, id }: Props) {
                           )}
                           {ev.status === 'published' && (
                             <>
-                              <Tooltip title="Edit event">
+                              <Tooltip title={t('manageEvents.editEventTooltip')}>
                                 <IconButton size="small" color="primary" onClick={() => openEdit(ev)}>
                                   <EditIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Mark as completed">
+                              <Tooltip title={t('manageEvents.markCompletedTooltip')}>
                                 <IconButton size="small" color="info" onClick={() => complete(ev)}>
                                   <CheckCircleIcon fontSize="small" />
                                 </IconButton>
@@ -1593,33 +1599,33 @@ export function ManageEvents({ token, id }: Props) {
                                 startIcon={<CancelIcon sx={{ fontSize: 14 }} />}
                                 onClick={() => cancel(ev)}
                                 sx={{ fontSize: 11, textTransform: 'none', px: 1.25, py: 0.25 }}>
-                                Cancel Event
+                                {t('manageEvents.cancelEventBtn')}
                               </Button>
                             </>
                           )}
                           {ev.status === 'cancelled' && (
-                            <Typography fontSize={11} color="text.disabled" sx={{ px: 0.5 }}>No actions</Typography>
+                            <Typography fontSize={11} color="text.disabled" sx={{ px: 0.5 }}>{t('manageEvents.noActions')}</Typography>
                           )}
                           {ev.status === 'completed' && (
-                            <Tooltip title="Delete event (removes registrations, tickets & payments)">
+                            <Tooltip title={t('manageEvents.deleteEventTooltip')}>
                               <IconButton size="small" color="error" onClick={() => remove(ev)}>
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
                           {ev.status !== 'completed' && ev.status !== 'cancelled' && (
-                            <Tooltip title="Complimentary tickets">
+                            <Tooltip title={t('manageEvents.complimentaryTicketsTooltip')}>
                               <IconButton size="small" onClick={() => { window.location.href = `/manage/complimentary/${ev.id}`; }}>
                                 <LocalActivityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
-                          <Tooltip title="Manage access">
+                          <Tooltip title={t('manageEvents.manageAccessTooltip')}>
                             <IconButton size="small" onClick={() => setAccessTarget(ev)}>
                               <GroupAddIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="View details">
+                          <Tooltip title={t('manageEvents.viewDetailsTooltip')}>
                             <IconButton size="small" onClick={() => { window.location.href = `/manage/details/${ev.id}`; }}>
                               <OpenInNewIcon fontSize="small" />
                             </IconButton>
@@ -1662,17 +1668,18 @@ export function ManageEvents({ token, id }: Props) {
 }
 
 function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => Promise<void>; onCancel: () => void }) {
+  const { t } = useTranslation('admin');
   const [busy, setBusy] = useState(false);
   return (
     <Dialog open onClose={onCancel} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Confirm</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 700 }}>{t('manageEvents.confirmDialog.title')}</DialogTitle>
       <DialogContent><Typography sx={{ whiteSpace: 'pre-line' }}>{message}</Typography></DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onCancel} disabled={busy}>Cancel</Button>
+        <Button onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
         <Button variant="contained" color="error" disabled={busy}
           startIcon={busy ? <CircularProgress size={14} /> : null}
           onClick={async () => { setBusy(true); await onConfirm(); }}>
-          Confirm
+          {t('common.confirm')}
         </Button>
       </DialogActions>
     </Dialog>

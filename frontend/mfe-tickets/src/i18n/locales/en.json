@@ -1,0 +1,67 @@
+{
+  "common": {
+    "free": "Free"
+  },
+  "status": {
+    "attended": "Attended",
+    "refunded": "Refunded",
+    "refundPending": "Refund Pending",
+    "cancelled": "Cancelled",
+    "eventEnded": "Event Ended",
+    "inProgress": "In Progress",
+    "confirmed": "Confirmed"
+  },
+  "ticketCount_one": "{{count}} ticket",
+  "ticketCount_other": "{{count}} tickets",
+  "qrDialog": {
+    "close": "Close",
+    "ticketUsed": "Ticket Used",
+    "scannedOn": "Scanned on {{date}}",
+    "showQrHint": "Show this QR code at the gate for entry",
+    "qrUnavailable": "QR code not available.",
+    "ticketsLabel": "Tickets",
+    "paidLabel": "Paid",
+    "ticketIdLabel": "Ticket ID",
+    "paidReconciledOn": "Paid & reconciled on {{date}}"
+  },
+  "card": {
+    "paidOn": "Paid {{date}}",
+    "refunded": "Refunded",
+    "refundedOn": "Refunded {{date}}",
+    "refundPendingReview": "Refund pending committee review",
+    "cancelledNoRefund": "Cancelled — no refund on file",
+    "ticketIdPrefix": "Ticket ID: {{id}}",
+    "cancelButton": "Cancel",
+    "cancelRefundButton": "Cancel & Refund",
+    "viewEntry": "View Entry",
+    "showTicket": "Show Ticket"
+  },
+  "cancelDialog": {
+    "title": "Cancel Ticket",
+    "confirmText": "Cancel your ticket for \"{{title}}\"?",
+    "refundNotice": "A refund request will be sent to the committee.",
+    "upiLabel": "UPI ID to send the refund to (optional)",
+    "upiPlaceholder": "e.g. yourname@okhdfcbank",
+    "upiHelper": "Leave blank to let the committee use the UPI ID from your original payment, if any.",
+    "keepTicket": "Keep Ticket",
+    "confirmCancelRefund": "Cancel Ticket & Refund It",
+    "confirmCancel": "Cancel Ticket"
+  },
+  "notices": {
+    "cancelledWithRefund": "Ticket cancelled. A refund request has been sent to the committee for approval.",
+    "cancelledPlain": "Ticket cancelled."
+  },
+  "page": {
+    "title": "My Tickets",
+    "subtitle": "Your confirmed event tickets and QR codes for gate entry.",
+    "viewAllRegistrations": "View All Registrations",
+    "loginPrompt": "Please log in to view your tickets.",
+    "goToLogin": "Go to Login",
+    "emptyTitle": "No tickets yet",
+    "emptyDesc": "Register for an event and complete payment to get your ticket here.",
+    "browseEvents": "Browse Events",
+    "activeTickets": "Active Tickets ({{count}})",
+    "pastEvents": "Past Events ({{count}})",
+    "cancelledSection": "Cancelled ({{count}})"
+  }
+}

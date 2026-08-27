@@ -2,6 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { Alert, Box, Button, Typography } from '@mui/material';
+import { I18nextProvider } from 'react-i18next';
+import i18n from './i18n';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocietyProvider, useSociety } from './contexts/SocietyContext';
 import { UserServiceProvider } from './contexts/UserServiceContext';
@@ -478,8 +480,10 @@ function ThemedApp() {
 
 export default function App() {
   return (
-    <ThemeModeProvider>
-      <ThemedApp />
-    </ThemeModeProvider>
+    <I18nextProvider i18n={i18n}>
+      <ThemeModeProvider>
+        <ThemedApp />
+      </ThemeModeProvider>
+    </I18nextProvider>
   );
 }

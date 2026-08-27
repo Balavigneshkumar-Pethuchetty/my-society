@@ -1,8 +1,10 @@
+import './i18n';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Container, Divider, Paper,
   Stack, Tab, Tabs, TextField, Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
@@ -26,14 +28,15 @@ import {
 // ── Tap-to-call — opens the phone's own dialer via a `tel:` link. There is no
 // in-app calling/VoIP in this system; this is the realistic "call a resident"
 // affordance for a browser-based gate app.
-function CallButton({ phone, label = 'Call Resident' }: { phone: string | null | undefined; label?: string }) {
+function CallButton({ phone, label }: { phone: string | null | undefined; label?: string }) {
+  const { t } = useTranslation('visitors');
   if (!phone) return null;
   return (
     <Button
       size="small" variant="outlined" color="error" startIcon={<PhoneIcon />}
       component="a" href={`tel:${phone}`}
     >
-      {label}
+      {label ?? t('security.callButton.defaultLabel')}
     </Button>
   );
 }
@@ -56,6 +59,7 @@ function remainingFor(pass: VisitorPass): { direction: 'entry' | 'exit'; remaini
 }
 
 function ScanTab({ token, onActivity }: { token: string; onActivity: () => void }) {
+  const { t } = useTranslation('visitors');
   const [qrInput, setQrInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -140,9 +144,9 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
     } catch (e) {
       scannerRef.current = null;
       setCameraOn(false);
-      setCameraError(`Could not access camera: ${(e as Error).message ?? e}`);
+      setCameraError(t('security.scan.cameraError', { message: (e as Error).message ?? e }));
     }
-  }, [runScan, stopCamera]);
+  }, [runScan, stopCamera, t]);
 
   useEffect(() => () => { void stopCamera(); }, [stopCamera]);
 
@@ -163,7 +167,7 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
   return (
     <Box sx={{ maxWidth: 480, mx: 'auto', mt: 2 }}>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Scan a visitor pass QR to record entry, then scan again on the way out to record exit. For a group pass, scan again anytime to admit or exit the rest.
+        {t('security.scan.description')}
       </Typography>
 
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
@@ -173,7 +177,7 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
           startIcon={cameraOn ? <StopCircleIcon /> : <CameraAltIcon />}
           onClick={() => (cameraOn ? void stopCamera() : void startCamera())}
         >
-          {cameraOn ? 'Stop Camera' : 'Scan with Camera'}
+          {cameraOn ? t('security.scan.stopCamera') : t('security.scan.startCamera')}
         </Button>
       </Box>
 
@@ -181,17 +185,17 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
 
       <Box id={QR_READER_ID} sx={{ display: cameraOn ? 'block' : 'none', mb: 2, borderRadius: 2, overflow: 'hidden', '& video': { width: '100%', borderRadius: 2 } }} />
 
-      <Divider sx={{ my: 2 }}><Typography variant="caption" color="text.secondary">OR</Typography></Divider>
+      <Divider sx={{ my: 2 }}><Typography variant="caption" color="text.secondary">{t('security.scan.or')}</Typography></Divider>
 
       <Box sx={{ display: 'flex', gap: 1 }}>
         <TextField
-          fullWidth size="small" label="Pass QR Token" value={qrInput}
+          fullWidth size="small" label={t('security.scan.tokenLabel')} value={qrInput}
           onChange={(e) => setQrInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleManual()}
-          placeholder="Scan or paste QR token…"
+          placeholder={t('security.scan.tokenPlaceholder')}
         />
         <Button variant="contained" onClick={handleManual} disabled={loading || !qrInput.trim()} sx={{ minWidth: 96 }}>
-          {loading ? <CircularProgress size={18} color="inherit" /> : 'Scan'}
+          {loading ? <CircularProgress size={18} color="inherit" /> : t('security.scan.scanButton')}
         </Button>
       </Box>
 
@@ -199,25 +203,25 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
 
       {pendingPreview && pendingInfo && (
         <Paper variant="outlined" sx={{ mt: 2.5, p: 2.5, borderRadius: 2 }}>
-          <Typography fontWeight={700} fontSize={16} mb={0.5}>{pendingPreview.visitor_name}'s group</Typography>
+          <Typography fontWeight={700} fontSize={16} mb={0.5}>{t('security.scan.groupTitle', { name: pendingPreview.visitor_name })}</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>
             {pendingInfo.direction === 'entry'
-              ? `${pendingPreview.entered_count}/${pendingPreview.visitor_count} entered so far — ${pendingInfo.remaining} more expected.`
-              : `${pendingPreview.exited_count}/${pendingPreview.entered_count} exited so far — ${pendingInfo.remaining} still inside.`}
+              ? t('security.scan.entryProgress', { entered: pendingPreview.entered_count, count: pendingPreview.visitor_count, remaining: pendingInfo.remaining })
+              : t('security.scan.exitProgress', { exited: pendingPreview.exited_count, entered: pendingPreview.entered_count, remaining: pendingInfo.remaining })}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
             <TextField
-              size="small" type="number" label={pendingInfo.direction === 'entry' ? 'Admitting now' : 'Exiting now'}
+              size="small" type="number" label={pendingInfo.direction === 'entry' ? t('security.scan.admittingNow') : t('security.scan.exitingNow')}
               inputProps={{ min: 1 }} value={pendingCount} onChange={(e) => setPendingCount(e.target.value)}
               sx={{ maxWidth: 160 }}
             />
             <Button variant="contained" disabled={loading} onClick={confirmPending}>
-              {loading ? <CircularProgress size={18} color="inherit" /> : `Confirm ${pendingInfo.direction === 'entry' ? 'Entry' : 'Exit'}`}
+              {loading ? <CircularProgress size={18} color="inherit" /> : (pendingInfo.direction === 'entry' ? t('security.scan.confirmEntry') : t('security.scan.confirmExit'))}
             </Button>
-            <Button disabled={loading} onClick={() => { setPendingToken(null); setPendingPreview(null); }}>Cancel</Button>
+            <Button disabled={loading} onClick={() => { setPendingToken(null); setPendingPreview(null); }}>{t('common.cancel')}</Button>
           </Stack>
           <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            You can admit/exit more than what's technically remaining — it will never be blocked, only noted.
+            {t('security.scan.overrideHint')}
           </Typography>
         </Paper>
       )}
@@ -227,26 +231,26 @@ function ScanTab({ token, onActivity }: { token: string; onActivity: () => void 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
             <CheckCircleIcon color={statusIconColor(result.status)} />
             <Typography fontWeight={700} fontSize={16}>{result.visitor_name}</Typography>
-            <Chip label={statusLabel(result.status)} size="small" color={statusColor(result.status)} sx={{ ml: 'auto' }} />
+            <Chip label={t(`common.status.${result.status}`, statusLabel(result.status))} size="small" color={statusColor(result.status)} sx={{ ml: 'auto' }} />
           </Box>
-          {result.already_final && <Alert severity="warning" sx={{ mb: 1.5 }}>This pass has already exited.</Alert>}
+          {result.already_final && <Alert severity="warning" sx={{ mb: 1.5 }}>{t('security.scan.alreadyExited')}</Alert>}
           {result.visitor_count > 1 && (
             <Typography variant="body2" sx={{ mb: 0.5 }}>
               {result.direction === 'entry'
-                ? `${result.admitted_count} admitted just now — ${result.entered_count}/${result.visitor_count} entered.`
-                : `${result.admitted_count} exited just now — ${result.exited_count}/${result.entered_count} exited.`}
+                ? t('security.scan.entryAdmittedNow', { admitted: result.admitted_count, entered: result.entered_count, count: result.visitor_count })
+                : t('security.scan.exitAdmittedNow', { admitted: result.admitted_count, exited: result.exited_count, entered: result.entered_count })}
             </Typography>
           )}
           {result.over_expected_count && (
             <Alert severity="info" sx={{ mb: 1.5 }}>
-              More people have entered ({result.entered_count}) than the {result.visitor_count} originally expected.
+              {t('security.scan.overExpected', { entered: result.entered_count, count: result.visitor_count })}
             </Alert>
           )}
-          {result.entry_time && <Typography variant="body2">Entry: {fmtDateTime(result.entry_time)}</Typography>}
-          {result.exit_time && <Typography variant="body2">Exit: {fmtDateTime(result.exit_time)}</Typography>}
+          {result.entry_time && <Typography variant="body2">{t('security.scan.entryTime', { time: fmtDateTime(result.entry_time) })}</Typography>}
+          {result.exit_time && <Typography variant="body2">{t('security.scan.exitTime', { time: fmtDateTime(result.exit_time) })}</Typography>}
           {result.resident_phone && (
             <Box sx={{ mt: 1.5 }}>
-              <CallButton phone={result.resident_phone} label={`Call ${result.resident_name ?? 'Resident'}`} />
+              <CallButton phone={result.resident_phone} label={t('security.callButton.callName', { name: result.resident_name ?? t('security.callButton.defaultLabel') })} />
             </Box>
           )}
           <Box sx={{ mt: 1.5 }}>
@@ -276,6 +280,7 @@ const EMPTY_ANON_FORM: AnonymousFormState = {
 };
 
 function AnonymousTab({ token, onActivity }: { token: string; onActivity: () => void }) {
+  const { t } = useTranslation('visitors');
   const [form, setForm] = useState<AnonymousFormState>(EMPTY_ANON_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +290,7 @@ function AnonymousTab({ token, onActivity }: { token: string; onActivity: () => 
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function handleSubmit() {
-    if (!form.purpose.trim()) { setError('Purpose is required.'); return; }
+    if (!form.purpose.trim()) { setError(t('security.anonymous.purposeRequired')); return; }
     setSaving(true);
     setError(null);
     try {
@@ -315,28 +320,27 @@ function AnonymousTab({ token, onActivity }: { token: string; onActivity: () => 
   return (
     <Box sx={{ maxWidth: 480, mx: 'auto', mt: 2 }}>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Log a walk-in visitor with no pre-registered QR pass — ambulance, delivery, emergency worker, etc.
-        Only Purpose is required; add the rest only if there's time.
+        {t('security.anonymous.description')}
       </Typography>
       <Stack spacing={2}>
         {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-        <TextField label="Purpose" required size="small" value={form.purpose} onChange={set('purpose')} />
-        <TextField label="Visitor Name (optional)" size="small" value={form.visitor_name} onChange={set('visitor_name')} />
-        <TextField label="Contact Number (optional)" size="small" value={form.contact} onChange={set('contact')} />
-        <TextField label="Email (optional)" size="small" value={form.email} onChange={set('email')} />
-        <TextField label="Aadhaar Number (optional)" size="small" value={form.aadhaar} onChange={set('aadhaar')} />
-        <TextField label="Address (optional)" size="small" multiline minRows={2} value={form.address} onChange={set('address')} />
-        <TextField label="Vehicle Number (optional)" size="small" placeholder="e.g. TN 09 AB 1234" value={form.vehicle_number} onChange={set('vehicle_number')} />
-        <TextField label="Notes (optional)" size="small" multiline minRows={2} value={form.notes} onChange={set('notes')} />
+        <TextField label={t('security.anonymous.purposeLabel')} required size="small" value={form.purpose} onChange={set('purpose')} />
+        <TextField label={t('security.anonymous.nameLabel')} size="small" value={form.visitor_name} onChange={set('visitor_name')} />
+        <TextField label={t('security.anonymous.contactLabel')} size="small" value={form.contact} onChange={set('contact')} />
+        <TextField label={t('security.anonymous.emailLabel')} size="small" value={form.email} onChange={set('email')} />
+        <TextField label={t('security.anonymous.aadhaarLabel')} size="small" value={form.aadhaar} onChange={set('aadhaar')} />
+        <TextField label={t('security.anonymous.addressLabel')} size="small" multiline minRows={2} value={form.address} onChange={set('address')} />
+        <TextField label={t('security.anonymous.vehicleLabel')} size="small" placeholder={t('security.anonymous.vehiclePlaceholder')} value={form.vehicle_number} onChange={set('vehicle_number')} />
+        <TextField label={t('security.anonymous.notesLabel')} size="small" multiline minRows={2} value={form.notes} onChange={set('notes')} />
         <Button variant="contained" startIcon={<PersonAddAlt1Icon />} disabled={saving} onClick={() => void handleSubmit()}>
-          {saving ? <CircularProgress size={18} color="inherit" /> : 'Log Visitor'}
+          {saving ? <CircularProgress size={18} color="inherit" /> : t('security.anonymous.submit')}
         </Button>
       </Stack>
 
       {created && (
         <Paper variant="outlined" sx={{ mt: 3, p: 2.5, borderRadius: 2 }}>
           <Typography fontWeight={700} mb={1}>{created.visitor_name || created.purpose}</Typography>
-          <Typography variant="body2" color="text.secondary" mb={1.5}>Logged at {fmtDateTime(created.entry_time)}</Typography>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>{t('security.anonymous.loggedAt', { time: fmtDateTime(created.entry_time) })}</Typography>
           <PhotoUploader token={token} anonymousId={created.id} onUploaded={() => onActivity()} />
         </Paper>
       )}
@@ -347,6 +351,7 @@ function AnonymousTab({ token, onActivity }: { token: string; onActivity: () => 
 // ── Today's activity tab (exit + phone-code confirm) ──────────────────────────
 
 function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) {
+  const { t } = useTranslation('visitors');
   const [passes, setPasses] = useState<VisitorPass[]>([]);
   const [anonymous, setAnonymous] = useState<AnonymousVisitor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,7 +380,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
         method: 'POST',
         body: JSON.stringify({ code }),
       });
-      setNotice(res.verified ? 'Phone verified successfully.' : 'Incorrect code.');
+      setNotice(res.verified ? t('security.today.phoneVerified') : t('security.today.incorrectCode'));
       load();
     } catch (e) {
       setError((e as Error).message);
@@ -393,7 +398,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
         method: 'PATCH',
         body: JSON.stringify({ vehicle_number: value || null }),
       });
-      setNotice('Vehicle number updated.');
+      setNotice(t('security.today.vehicleUpdated'));
       load();
     } catch (e) {
       setError((e as Error).message);
@@ -411,7 +416,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
         method: 'PATCH',
         body: JSON.stringify({ vehicle_number: value || null }),
       });
-      setNotice('Vehicle number updated.');
+      setNotice(t('security.today.vehicleUpdated'));
       load();
     } catch (e) {
       setError((e as Error).message);
@@ -439,9 +444,9 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
       {notice && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice(null)}>{notice}</Alert>}
 
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Visitor Passes ({passes.length})</Typography>
+      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>{t('security.today.passesTitle', { count: passes.length })}</Typography>
       <Stack spacing={1.5} sx={{ mb: 3 }}>
-        {passes.length === 0 && <Typography variant="body2" color="text.secondary">No passes expected or active today.</Typography>}
+        {passes.length === 0 && <Typography variant="body2" color="text.secondary">{t('security.today.noPasses')}</Typography>}
         {passes.map((p) => (
           <Paper key={p.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
@@ -450,20 +455,20 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
                   {p.visitor_name}{p.visitor_count > 1 ? ` +${p.visitor_count - 1}` : ''}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {p.purpose} · visiting {p.resident_name}{p.resident_flat ? ` (${p.resident_flat})` : ''}
-                  {p.visitor_count > 1 ? ` · ${p.entered_count}/${p.visitor_count} entered` : ''}
+                  {p.purpose} · {t('security.today.visiting', { name: p.resident_name })}{p.resident_flat ? ` (${p.resident_flat})` : ''}
+                  {p.visitor_count > 1 ? ` · ${p.entered_count}/${p.visitor_count} ${t('common.status.entered')}` : ''}
                 </Typography>
               </Box>
-              <Chip label={statusLabel(p.status)} size="small" color={statusColor(p.status)} />
+              <Chip label={t(`common.status.${p.status}`, statusLabel(p.status))} size="small" color={statusColor(p.status)} />
             </Box>
             {p.resident_phone && (
               <Box sx={{ mt: 1 }}>
-                <CallButton phone={p.resident_phone} label={`Call ${p.resident_name}`} />
+                <CallButton phone={p.resident_phone} label={t('security.callButton.callName', { name: p.resident_name })} />
               </Box>
             )}
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} alignItems="center">
               <TextField
-                size="small" label="Vehicle number" placeholder="e.g. TN 09 AB 1234"
+                size="small" label={t('security.today.vehicleLabel')} placeholder={t('security.today.vehiclePlaceholder')}
                 sx={{ maxWidth: 220 }}
                 value={vehicleInputs[p.id] ?? p.vehicle_number ?? ''}
                 onChange={(e) => setVehicleInputs((s) => ({ ...s, [p.id]: e.target.value }))}
@@ -473,13 +478,13 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
                 disabled={busyId === p.id || (vehicleInputs[p.id] ?? p.vehicle_number ?? '') === (p.vehicle_number ?? '')}
                 onClick={() => void saveVehicle(p.id, p.vehicle_number)}
               >
-                Save
+                {t('security.today.save')}
               </Button>
             </Stack>
             {p.phone_verification && p.phone_verification.verification_status === 'pending' && (
               <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} alignItems="center">
                 <TextField
-                  size="small" label="Phone code" sx={{ maxWidth: 160 }}
+                  size="small" label={t('security.today.phoneCodeLabel')} sx={{ maxWidth: 160 }}
                   value={codeInputs[p.id] ?? ''}
                   onChange={(e) => setCodeInputs((s) => ({ ...s, [p.id]: e.target.value }))}
                 />
@@ -487,7 +492,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
                   size="small" variant="outlined" startIcon={<VerifiedUserIcon />}
                   disabled={busyId === p.id} onClick={() => void confirmCode(p.id)}
                 >
-                  Verify
+                  {t('security.today.verify')}
                 </Button>
               </Stack>
             )}
@@ -495,9 +500,9 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
         ))}
       </Stack>
 
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Anonymous / Emergency Visitors ({anonymous.length})</Typography>
+      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>{t('security.today.anonymousTitle', { count: anonymous.length })}</Typography>
       <Stack spacing={1.5}>
-        {anonymous.length === 0 && <Typography variant="body2" color="text.secondary">None logged today.</Typography>}
+        {anonymous.length === 0 && <Typography variant="body2" color="text.secondary">{t('security.today.noAnonymous')}</Typography>}
         {anonymous.map((a) => (
           <Paper key={a.id} variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
@@ -505,29 +510,29 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
                 <Typography fontWeight={700}>{a.visitor_name || a.purpose}</Typography>
                 <Typography variant="body2" color="text.secondary">
                   {a.visitor_name ? `${a.purpose} · ` : ''}{fmtDateTime(a.entry_time)}
-                  {a.linked_resident_name ? ` · visiting ${a.linked_resident_name}` : ''}
+                  {a.linked_resident_name ? ` · ${t('security.today.visiting', { name: a.linked_resident_name })}` : ''}
                   {a.contact ? ` · ${a.contact}` : ''}
                 </Typography>
               </Box>
               <Stack direction="row" spacing={1} alignItems="flex-start">
                 {a.linked_resident_phone && (
-                  <CallButton phone={a.linked_resident_phone} label={`Call ${a.linked_resident_name}`} />
+                  <CallButton phone={a.linked_resident_phone} label={t('security.callButton.callName', { name: a.linked_resident_name })} />
                 )}
                 {a.exit_time ? (
-                  <Chip label="exited" size="small" color="info" />
+                  <Chip label={t('security.today.exitedChip')} size="small" color="info" />
                 ) : (
                   <Button
                     size="small" startIcon={<LogoutIcon />} disabled={busyId === a.id}
                     onClick={() => void exitAnonymous(a.id)}
                   >
-                    Mark Exit
+                    {t('security.today.markExit')}
                   </Button>
                 )}
               </Stack>
             </Box>
             <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} alignItems="center">
               <TextField
-                size="small" label="Vehicle number" placeholder="e.g. TN 09 AB 1234"
+                size="small" label={t('security.today.vehicleLabel')} placeholder={t('security.today.vehiclePlaceholder')}
                 sx={{ maxWidth: 220 }}
                 value={vehicleInputs[a.id] ?? a.vehicle_number ?? ''}
                 onChange={(e) => setVehicleInputs((s) => ({ ...s, [a.id]: e.target.value }))}
@@ -537,7 +542,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
                 disabled={busyId === a.id || (vehicleInputs[a.id] ?? a.vehicle_number ?? '') === (a.vehicle_number ?? '')}
                 onClick={() => void saveAnonymousVehicle(a.id, a.vehicle_number)}
               >
-                Save
+                {t('security.today.save')}
               </Button>
             </Stack>
           </Paper>
@@ -552,6 +557,7 @@ function TodayTab({ token, refreshKey }: { token: string; refreshKey: number }) 
 // ── Resident directory tab (emergency call — any resident, not just those with an active pass) ──
 
 function DirectoryTab({ token }: { token: string }) {
+  const { t } = useTranslation('visitors');
   const [residents, setResidents] = useState<ResidentDirectoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -574,10 +580,10 @@ function DirectoryTab({ token }: { token: string }) {
   return (
     <Box sx={{ maxWidth: 560, mx: 'auto', mt: 2 }}>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Everyone with a flat on record — residents, admins, committee members — not just ones with an active visitor pass right now. For emergencies (fire, medical, etc.) where you need to reach someone directly.
+        {t('security.directory.description')}
       </Typography>
       <TextField
-        fullWidth size="small" placeholder="Search by name, flat, or phone…"
+        fullWidth size="small" placeholder={t('security.directory.searchPlaceholder')}
         value={search} onChange={(e) => setSearch(e.target.value)}
         InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} /> }}
         sx={{ mb: 2 }}
@@ -588,7 +594,7 @@ function DirectoryTab({ token }: { token: string }) {
         <Stack spacing={1.5}>
           {filtered.length === 0 && (
             <Typography variant="body2" color="text.secondary" textAlign="center" py={4}>
-              {residents.length === 0 ? 'No residents found.' : `No residents match "${search}".`}
+              {residents.length === 0 ? t('security.directory.noResidents') : t('security.directory.noMatch', { search })}
             </Typography>
           )}
           {filtered.map((r) => (
@@ -596,10 +602,10 @@ function DirectoryTab({ token }: { token: string }) {
               <Box sx={{ minWidth: 0 }}>
                 <Typography fontWeight={700} noWrap>{r.name}</Typography>
                 <Typography variant="body2" color="text.secondary" noWrap>
-                  {r.unit_label ?? 'No flat on record'}{r.phone ? ` · ${r.phone}` : ''}
+                  {r.unit_label ?? t('security.directory.noFlat')}{r.phone ? ` · ${r.phone}` : ''}
                 </Typography>
               </Box>
-              <CallButton phone={r.phone} label="Call" />
+              <CallButton phone={r.phone} label={t('security.directory.call')} />
             </Paper>
           ))}
         </Stack>
@@ -613,6 +619,7 @@ export interface VisitorSecurityAppProps {
 }
 
 export function VisitorSecurityApp({ token }: VisitorSecurityAppProps) {
+  const { t } = useTranslation('visitors');
   const [tab, setTab] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const bump = () => setRefreshKey((k) => k + 1);
@@ -620,7 +627,7 @@ export function VisitorSecurityApp({ token }: VisitorSecurityAppProps) {
   if (!token) {
     return (
       <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-        <Alert severity="warning">You must be logged in to use the visitor gate.</Alert>
+        <Alert severity="warning">{t('security.main.loginRequired')}</Alert>
       </Container>
     );
   }
@@ -631,10 +638,10 @@ export function VisitorSecurityApp({ token }: VisitorSecurityAppProps) {
         <Container maxWidth="md">
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
             <QrCodeScannerIcon sx={{ fontSize: 28 }} />
-            <Typography variant="h5" fontWeight={800}>Visitor Gate</Typography>
+            <Typography variant="h5" fontWeight={800}>{t('security.main.title')}</Typography>
           </Box>
           <Typography sx={{ fontSize: 15, color: '#a7f3d0' }}>
-            Scan visitor passes, log walk-ins, capture photos, and verify identity.
+            {t('security.main.subtitle')}
           </Typography>
         </Container>
       </Box>
@@ -642,10 +649,10 @@ export function VisitorSecurityApp({ token }: VisitorSecurityAppProps) {
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Paper variant="outlined" sx={{ borderRadius: 2 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }} variant="scrollable">
-            <Tab icon={<QrCodeScannerIcon fontSize="small" />} iconPosition="start" label="Scan Pass" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
-            <Tab icon={<PersonAddAlt1Icon fontSize="small" />} iconPosition="start" label="Anonymous Entry" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
-            <Tab icon={<TodayIcon fontSize="small" />} iconPosition="start" label="Today's Activity" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
-            <Tab icon={<ContactPhoneIcon fontSize="small" />} iconPosition="start" label="Resident Directory" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
+            <Tab icon={<QrCodeScannerIcon fontSize="small" />} iconPosition="start" label={t('security.main.tabs.scan')} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
+            <Tab icon={<PersonAddAlt1Icon fontSize="small" />} iconPosition="start" label={t('security.main.tabs.anonymous')} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
+            <Tab icon={<TodayIcon fontSize="small" />} iconPosition="start" label={t('security.main.tabs.today')} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
+            <Tab icon={<ContactPhoneIcon fontSize="small" />} iconPosition="start" label={t('security.main.tabs.directory')} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
           <Box sx={{ p: { xs: 2, sm: 3 } }}>
             {tab === 0 && <ScanTab token={token} onActivity={bump} />}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Chip, CircularProgress, Container,
   Dialog, DialogActions, DialogContent, DialogTitle,
@@ -44,8 +45,8 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtAmount(amount: number) {
-  if (amount === 0) return 'Free';
+function fmtAmount(amount: number, t: (k: string) => string) {
+  if (amount === 0) return t('paymentApprovals.free');
   return `₹${Number(amount).toLocaleString('en-IN')}`;
 }
 
@@ -53,13 +54,13 @@ function screenshotUrl(path: string) {
   return `/api/registrations/uploads/${path}`;
 }
 
-function statusChip(reg: Registration) {
+function statusChip(reg: Registration, t: (k: string) => string) {
   const ps = reg.payment?.status;
-  if (reg.status === 'cancelled')  return <Chip label="Dropped by Resident" color="default" size="small" icon={<CancelIcon />} />;
-  if (ps === 'pending_review')     return <Chip label="Pending Review" color="warning" size="small" icon={<HourglassTopIcon />} />;
-  if (ps === 'approved')           return <Chip label="Approved" color="success" size="small" icon={<CheckCircleIcon />} />;
-  if (ps === 'rejected')           return <Chip label="Rejected" color="error" size="small" icon={<ErrorOutlineIcon />} />;
-  if (ps === 'pending_screenshot') return <Chip label="No Screenshot" color="default" size="small" icon={<PaymentIcon />} />;
+  if (reg.status === 'cancelled')  return <Chip label={t('paymentApprovals.status.dropped')} color="default" size="small" icon={<CancelIcon />} />;
+  if (ps === 'pending_review')     return <Chip label={t('paymentApprovals.status.pendingReview')} color="warning" size="small" icon={<HourglassTopIcon />} />;
+  if (ps === 'approved')           return <Chip label={t('paymentApprovals.status.approved')} color="success" size="small" icon={<CheckCircleIcon />} />;
+  if (ps === 'rejected')           return <Chip label={t('paymentApprovals.status.rejected')} color="error" size="small" icon={<ErrorOutlineIcon />} />;
+  if (ps === 'pending_screenshot') return <Chip label={t('paymentApprovals.status.noScreenshot')} color="default" size="small" icon={<PaymentIcon />} />;
   return <Chip label={ps ?? '—'} size="small" />;
 }
 
@@ -73,13 +74,14 @@ function ReviewDialog({
   onClose: () => void;
   onDone: (updated: Registration) => void;
 }) {
+  const { t } = useTranslation('admin');
   const [notes, setNotes]     = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
   async function submit(action: 'approve' | 'reject') {
     if (action === 'reject' && !notes.trim()) {
-      setError('Please provide a reason for rejection.'); return;
+      setError(t('paymentApprovals.dialog.rejectReasonRequired')); return;
     }
     setLoading(true); setError(null);
     try {
@@ -94,7 +96,7 @@ function ReviewDialog({
       }
       onDone(await res.json());
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Action failed');
+      setError(e instanceof Error ? e.message : t('paymentApprovals.dialog.actionFailed'));
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ function ReviewDialog({
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        Review Payment
+        {t('paymentApprovals.dialog.title')}
         <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
@@ -111,28 +113,28 @@ function ReviewDialog({
 
         <Stack spacing={1.5} mb={2}>
           <Box>
-            <Typography variant="caption" color="text.secondary">Event</Typography>
+            <Typography variant="caption" color="text.secondary">{t('paymentApprovals.dialog.eventLabel')}</Typography>
             <Typography fontWeight={600}>{reg.event_title}</Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
             <Box>
-              <Typography variant="caption" color="text.secondary">Resident</Typography>
+              <Typography variant="caption" color="text.secondary">{t('paymentApprovals.dialog.residentLabel')}</Typography>
               <Typography fontWeight={600}>{reg.user_name ?? '—'}</Typography>
               <Typography variant="caption" color="text.secondary">{reg.user_email ?? ''}</Typography>
             </Box>
             <Box>
-              <Typography variant="caption" color="text.secondary">Amount</Typography>
-              <Typography fontWeight={600}>{fmtAmount(reg.total_amount)}</Typography>
+              <Typography variant="caption" color="text.secondary">{t('paymentApprovals.dialog.amountLabel')}</Typography>
+              <Typography fontWeight={600}>{fmtAmount(reg.total_amount, t)}</Typography>
             </Box>
             <Box>
-              <Typography variant="caption" color="text.secondary">Tickets</Typography>
+              <Typography variant="caption" color="text.secondary">{t('paymentApprovals.dialog.ticketsLabel')}</Typography>
               <Typography fontWeight={600}>{reg.ticket_count}</Typography>
             </Box>
           </Box>
 
           {reg.payment?.utr_number && (
             <Box>
-              <Typography variant="caption" color="text.secondary">UTR / Ref No.</Typography>
+              <Typography variant="caption" color="text.secondary">{t('paymentApprovals.dialog.utrRefLabel')}</Typography>
               <Typography fontWeight={600} fontFamily="monospace">{reg.payment.utr_number}</Typography>
             </Box>
           )}
@@ -140,8 +142,8 @@ function ReviewDialog({
           {reg.payment?.screenshot_path && (
             <Box>
               <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                Payment Screenshot
-                <Tooltip title="Open in new tab">
+                {t('paymentApprovals.dialog.screenshotLabel')}
+                <Tooltip title={t('paymentApprovals.dialog.openInNewTab')}>
                   <IconButton size="small" sx={{ ml: 0.5 }}
                     onClick={() => window.open(screenshotUrl(reg.payment!.screenshot_path!), '_blank')}>
                     <OpenInNewIcon sx={{ fontSize: 14 }} />
@@ -151,7 +153,7 @@ function ReviewDialog({
               <Box
                 component="img"
                 src={screenshotUrl(reg.payment.screenshot_path)}
-                alt="Payment screenshot"
+                alt={t('paymentApprovals.dialog.screenshotLabel')}
                 sx={{ maxWidth: '100%', maxHeight: 280, borderRadius: 1, border: '1px solid', borderColor: 'divider', objectFit: 'contain' }}
               />
             </Box>
@@ -161,26 +163,26 @@ function ReviewDialog({
         <Divider sx={{ mb: 2 }} />
 
         <TextField
-          label="Notes (required for rejection)"
+          label={t('paymentApprovals.dialog.notesLabel')}
           value={notes}
           onChange={e => setNotes(e.target.value)}
           fullWidth multiline rows={2}
-          placeholder="e.g. Screenshot unclear — please re-upload"
+          placeholder={t('paymentApprovals.dialog.notesPlaceholder')}
         />
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Button onClick={onClose} disabled={loading}>Cancel</Button>
+        <Button onClick={onClose} disabled={loading}>{t('common.cancel')}</Button>
         <Button
           variant="outlined" color="error" startIcon={<ThumbDownIcon />}
           disabled={loading} onClick={() => submit('reject')}
         >
-          Reject
+          {t('paymentApprovals.dialog.rejectBtn')}
         </Button>
         <Button
           variant="contained" color="success" startIcon={<ThumbUpIcon />}
           disabled={loading} onClick={() => submit('approve')}
         >
-          {loading ? <CircularProgress size={18} color="inherit" /> : 'Approve'}
+          {loading ? <CircularProgress size={18} color="inherit" /> : t('paymentApprovals.dialog.approveBtn')}
         </Button>
       </DialogActions>
     </Dialog>
@@ -195,37 +197,38 @@ function RegRow({
   reg: Registration;
   onReview: (r: Registration) => void;
 }) {
+  const { t } = useTranslation('admin');
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ flex: 1, minWidth: 200 }}>
           <Typography fontWeight={700} sx={{ fontSize: 14 }}>{reg.event_title}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {reg.user_name ?? 'Unknown'} · {reg.user_email ?? '—'}
+            {reg.user_name ?? t('paymentApprovals.unknownResident')} · {reg.user_email ?? '—'}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, mt: 0.5, flexWrap: 'wrap' }}>
-            <Typography variant="caption">{reg.ticket_count} ticket{reg.ticket_count > 1 ? 's' : ''}</Typography>
-            <Typography variant="caption" fontWeight={600}>{fmtAmount(reg.total_amount)}</Typography>
+            <Typography variant="caption">{t('paymentApprovals.ticketsCount', { count: reg.ticket_count })}</Typography>
+            <Typography variant="caption" fontWeight={600}>{fmtAmount(reg.total_amount, t)}</Typography>
             {reg.payment?.utr_number && (
-              <Typography variant="caption" fontFamily="monospace">UTR: {reg.payment.utr_number}</Typography>
+              <Typography variant="caption" fontFamily="monospace">{t('paymentApprovals.utrLabel', { utr: reg.payment.utr_number })}</Typography>
             )}
           </Box>
           <Typography variant="caption" color="text.secondary">
-            Registered: {fmtDate(reg.registered_at)}
+            {t('paymentApprovals.registeredLabel', { date: fmtDate(reg.registered_at) })}
           </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
-          {statusChip(reg)}
+          {statusChip(reg, t)}
           {reg.status !== 'cancelled' && (reg.payment?.status === 'pending_review' || reg.payment?.status === 'pending_screenshot') && (
             <Button size="small" variant="contained" onClick={() => onReview(reg)}>
-              Review
+              {t('paymentApprovals.reviewBtn')}
             </Button>
           )}
           {reg.payment?.screenshot_path && reg.payment.status !== 'pending_review' && (
             <Button size="small" variant="text" startIcon={<OpenInNewIcon />}
               onClick={() => window.open(screenshotUrl(reg.payment!.screenshot_path!), '_blank')}>
-              Screenshot
+              {t('paymentApprovals.screenshotBtn')}
             </Button>
           )}
         </Box>
@@ -243,6 +246,7 @@ function RegRow({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function PaymentApprovals({ token, role }: { token?: string | null; role?: string }) {
+  const { t } = useTranslation('admin');
   const [tab, setTab]             = useState(0);
   const [regs, setRegs]           = useState<Registration[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -275,11 +279,11 @@ export function PaymentApprovals({ token, role }: { token?: string | null; role?
   const dropped   = regs.filter(r => r.status === 'cancelled');
 
   const tabs = [
-    { label: `Pending Review (${pending.length})`,  data: pending },
-    { label: `No Upload (${noUpload.length})`,       data: noUpload },
-    { label: `Approved (${approved.length})`,        data: approved },
-    { label: `Rejected (${rejected.length})`,        data: rejected },
-    { label: `Dropped (${dropped.length})`,          data: dropped },
+    { label: t('paymentApprovals.tabs.pendingReview', { count: pending.length }),  data: pending },
+    { label: t('paymentApprovals.tabs.noUpload', { count: noUpload.length }),       data: noUpload },
+    { label: t('paymentApprovals.tabs.approved', { count: approved.length }),        data: approved },
+    { label: t('paymentApprovals.tabs.rejected', { count: rejected.length }),        data: rejected },
+    { label: t('paymentApprovals.tabs.dropped', { count: dropped.length }),          data: dropped },
   ];
 
   useEffect(() => {
@@ -298,7 +302,7 @@ export function PaymentApprovals({ token, role }: { token?: string | null; role?
   if (!token) {
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary">Not authenticated.</Typography>
+        <Typography color="text.secondary">{t('paymentApprovals.notAuthenticated')}</Typography>
       </Box>
     );
   }
@@ -309,9 +313,9 @@ export function PaymentApprovals({ token, role }: { token?: string | null; role?
     <Box sx={{ display: 'flex' }}>
       <AdminSidebar active="Payment Approvals" mobileOpen={sidebarOpen} onMobileClose={() => setSidebarOpen(false)} role={role} />
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h5" fontWeight={800} mb={0.5}>Payment Approvals</Typography>
+      <Typography variant="h5" fontWeight={800} mb={0.5}>{t('paymentApprovals.title')}</Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
-        Review manual payment screenshots and approve or reject registrations.
+        {t('paymentApprovals.subtitle')}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -326,7 +330,7 @@ export function PaymentApprovals({ token, role }: { token?: string | null; role?
         <Stack spacing={1.5}>
           {tabs[tab].data.length === 0 && (
             <Typography color="text.secondary" textAlign="center" py={4}>
-              No registrations in this category.
+              {t('paymentApprovals.noRegistrations')}
             </Typography>
           )}
           {tabs[tab].data.map(r => (

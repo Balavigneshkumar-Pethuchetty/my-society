@@ -1,0 +1,67 @@
+{
+  "common": {
+    "free": "मुफ़्त"
+  },
+  "status": {
+    "attended": "उपस्थित",
+    "refunded": "रिफंड किया गया",
+    "refundPending": "रिफंड लंबित",
+    "cancelled": "रद्द",
+    "eventEnded": "इवेंट समाप्त",
+    "inProgress": "जारी है",
+    "confirmed": "पुष्ट"
+  },
+  "ticketCount_one": "{{count}} टिकट",
+  "ticketCount_other": "{{count}} टिकट",
+  "qrDialog": {
+    "close": "बंद करें",
+    "ticketUsed": "टिकट उपयोग हो चुका",
+    "scannedOn": "{{date}} को स्कैन किया गया",
+    "showQrHint": "प्रवेश के लिए गेट पर यह QR कोड दिखाएं",
+    "qrUnavailable": "QR कोड उपलब्ध नहीं है।",
+    "ticketsLabel": "टिकट",
+    "paidLabel": "भुगतान",
+    "ticketIdLabel": "टिकट ID",
+    "paidReconciledOn": "{{date}} को भुगतान और सुलह पूर्ण"
+  },
+  "card": {
+    "paidOn": "{{date}} को भुगतान किया गया",
+    "refunded": "रिफंड किया गया",
+    "refundedOn": "{{date}} को रिफंड किया गया",
+    "refundPendingReview": "रिफंड कमेटी की समीक्षा के लिए लंबित है",
+    "cancelledNoRefund": "रद्द — कोई रिफंड दर्ज नहीं",
+    "ticketIdPrefix": "टिकट ID: {{id}}",
+    "cancelButton": "रद्द करें",
+    "cancelRefundButton": "रद्द करें और रिफंड लें",
+    "viewEntry": "एंट्री देखें",
+    "showTicket": "टिकट दिखाएं"
+  },
+  "cancelDialog": {
+    "title": "टिकट रद्द करें",
+    "confirmText": "\"{{title}}\" के लिए अपना टिकट रद्द करें?",
+    "refundNotice": "एक रिफंड अनुरोध कमेटी को भेजा जाएगा।",
+    "upiLabel": "रिफंड भेजने के लिए UPI ID (वैकल्पिक)",
+    "upiPlaceholder": "जैसे yourname@okhdfcbank",
+    "upiHelper": "खाली छोड़ें ताकि कमेटी आपके मूल भुगतान की UPI ID का उपयोग कर सके, यदि कोई हो।",
+    "keepTicket": "टिकट रखें",
+    "confirmCancelRefund": "टिकट रद्द करें और रिफंड लें",
+    "confirmCancel": "टिकट रद्द करें"
+  },
+  "notices": {
+    "cancelledWithRefund": "टिकट रद्द कर दिया गया। स्वीकृति के लिए रिफंड अनुरोध कमेटी को भेज दिया गया है।",
+    "cancelledPlain": "टिकट रद्द कर दिया गया।"
+  },
+  "page": {
+    "title": "मेरे टिकट",
+    "subtitle": "आपके पुष्ट इवेंट टिकट और गेट प्रवेश के लिए QR कोड।",
+    "viewAllRegistrations": "सभी रजिस्ट्रेशन देखें",
+    "loginPrompt": "अपने टिकट देखने के लिए कृपया लॉग इन करें।",
+    "goToLogin": "लॉगिन पर जाएं",
+    "emptyTitle": "अभी तक कोई टिकट नहीं",
+    "emptyDesc": "यहां अपना टिकट पाने के लिए किसी इवेंट के लिए रजिस्टर करें और भुगतान पूरा करें।",
+    "browseEvents": "इवेंट्स देखें",
+    "activeTickets": "सक्रिय टिकट ({{count}})",
+    "pastEvents": "पिछले इवेंट्स ({{count}})",
+    "cancelledSection": "रद्द ({{count}})"
+  }
+}

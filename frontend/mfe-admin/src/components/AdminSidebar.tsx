@@ -1,22 +1,25 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Divider, Drawer, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
-const SIDEBAR: { label: string; path: string; section?: string; adminOnly?: boolean }[] = [
-  { label: 'Dashboard',            path: '/admin',                      adminOnly: true },
-  { label: 'Users',                path: '/admin/users',                adminOnly: true },
-  { label: 'Leave Requests',       path: '/admin/leave-requests',       adminOnly: true },
-  { label: 'Building',             path: '/admin/building',             adminOnly: true },
-  { label: 'Units',                path: '/admin/units',                adminOnly: true },
-  { label: 'Events',               path: '/admin/events',               adminOnly: true },
-  { label: 'Sponsors',             path: '/admin/sponsors',             adminOnly: true },
-  { label: 'Categories',           path: '/admin/categories',           adminOnly: true },
-  { label: 'Payment Approvals',    path: '/admin/payments',            section: 'Payments' },
-  { label: 'Payment Requests',     path: '/admin/reconciliation' },
-  { label: 'Refund Tasks',         path: '/admin/pay-refunds' },
-  { label: 'Sponsorship Refunds',  path: '/admin/refunds',             section: 'Sponsors', adminOnly: true },
-  { label: 'Reports',              path: '/admin/reports',              adminOnly: true },
-  { label: 'Settings',             path: '/admin/settings',             adminOnly: true },
+// `active` (passed by each page) is still the English label — it's used purely
+// as a stable key to match against `labelKey` below, not displayed directly.
+const SIDEBAR: { active: string; labelKey: string; path: string; sectionKey?: string; adminOnly?: boolean }[] = [
+  { active: 'Dashboard',           labelKey: 'sidebar.dashboard',           path: '/admin',                adminOnly: true },
+  { active: 'Users',               labelKey: 'sidebar.users',               path: '/admin/users',          adminOnly: true },
+  { active: 'Leave Requests',      labelKey: 'sidebar.leaveRequests',       path: '/admin/leave-requests', adminOnly: true },
+  { active: 'Building',            labelKey: 'sidebar.building',            path: '/admin/building',       adminOnly: true },
+  { active: 'Units',               labelKey: 'sidebar.units',               path: '/admin/units',          adminOnly: true },
+  { active: 'Events',              labelKey: 'sidebar.events',              path: '/admin/events',         adminOnly: true },
+  { active: 'Sponsors',            labelKey: 'sidebar.sponsors',            path: '/admin/sponsors',       adminOnly: true },
+  { active: 'Categories',          labelKey: 'sidebar.categories',          path: '/admin/categories',     adminOnly: true },
+  { active: 'Payment Approvals',   labelKey: 'sidebar.paymentApprovals',    path: '/admin/payments',       sectionKey: 'sidebar.paymentsSection' },
+  { active: 'Payment Requests',    labelKey: 'sidebar.paymentRequests',     path: '/admin/reconciliation' },
+  { active: 'Refund Tasks',        labelKey: 'sidebar.refundTasks',         path: '/admin/pay-refunds' },
+  { active: 'Sponsorship Refunds', labelKey: 'sidebar.sponsorshipRefunds',  path: '/admin/refunds',        sectionKey: 'sidebar.sponsorsSection', adminOnly: true },
+  { active: 'Reports',             labelKey: 'sidebar.reports',             path: '/admin/reports',        adminOnly: true },
+  { active: 'Settings',            labelKey: 'sidebar.settings',            path: '/admin/settings',       adminOnly: true },
 ];
 
 function navigate(path: string) {
@@ -25,16 +28,17 @@ function navigate(path: string) {
 }
 
 function SidebarContent({ active, onNavigate, role }: { active: string; onNavigate?: () => void; role?: string }) {
+  const { t } = useTranslation('admin');
   const isCommittee = role === 'committee_member';
   const visible = SIDEBAR.filter(item => !(isCommittee && item.adminOnly));
   return (
     <Box sx={{ pt: 1 }}>
-      {visible.map(({ label, path, section }) => (
-        <React.Fragment key={label}>
-          {section && (
+      {visible.map(({ active: itemActive, labelKey, path, sectionKey }) => (
+        <React.Fragment key={itemActive}>
+          {sectionKey && (
             <Box sx={{ px: 2.5, pt: 1.5, pb: 0.5 }}>
               <Typography fontSize={10} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={1}>
-                {section}
+                {t(sectionKey)}
               </Typography>
               <Divider sx={{ mt: 0.5 }} />
             </Box>
@@ -43,15 +47,15 @@ function SidebarContent({ active, onNavigate, role }: { active: string; onNaviga
             onClick={() => { navigate(path); onNavigate?.(); }}
             sx={{
               px: 2.5, py: 1.25, fontSize: 14, cursor: 'pointer',
-              color: label === active ? '#6366f1' : 'text.secondary',
-              fontWeight: label === active ? 700 : 400,
-              bgcolor: label === active ? 'action.selected' : 'transparent',
-              borderRight: label === active ? '3px solid #6366f1' : '3px solid transparent',
+              color: itemActive === active ? '#6366f1' : 'text.secondary',
+              fontWeight: itemActive === active ? 700 : 400,
+              bgcolor: itemActive === active ? 'action.selected' : 'transparent',
+              borderRight: itemActive === active ? '3px solid #6366f1' : '3px solid transparent',
               transition: 'all .15s',
-              '&:hover': { bgcolor: label === active ? 'action.selected' : 'action.hover', color: label === active ? '#6366f1' : 'text.primary' },
+              '&:hover': { bgcolor: itemActive === active ? 'action.selected' : 'action.hover', color: itemActive === active ? '#6366f1' : 'text.primary' },
             }}
           >
-            {label}
+            {t(labelKey)}
           </Box>
         </React.Fragment>
       ))}
@@ -67,6 +71,7 @@ interface AdminSidebarProps {
 }
 
 export function AdminSidebar({ active, mobileOpen, onMobileClose, role }: AdminSidebarProps) {
+  const { t } = useTranslation('admin');
   return (
     <>
       {/* Mobile: slide-in drawer */}
@@ -79,8 +84,8 @@ export function AdminSidebar({ active, mobileOpen, onMobileClose, role }: AdminS
         sx={{ display: { xs: 'block', md: 'none' } }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography fontWeight={700} fontSize={14} color="text.secondary">Admin Menu</Typography>
-          <IconButton size="small" onClick={onMobileClose} aria-label="Close menu">
+          <Typography fontWeight={700} fontSize={14} color="text.secondary">{t('sidebar.adminMenu')}</Typography>
+          <IconButton size="small" onClick={onMobileClose} aria-label={t('sidebar.closeMenu')}>
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>

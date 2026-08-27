@@ -1,0 +1,67 @@
+{
+  "common": {
+    "free": "ಉಚಿತ"
+  },
+  "status": {
+    "attended": "ಹಾಜರಾಗಿದ್ದಾರೆ",
+    "refunded": "ಮರುಪಾವತಿಸಲಾಗಿದೆ",
+    "refundPending": "ಮರುಪಾವತಿ ಬಾಕಿ ಇದೆ",
+    "cancelled": "ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ",
+    "eventEnded": "ಈವೆಂಟ್ ಮುಗಿದಿದೆ",
+    "inProgress": "ನಡೆಯುತ್ತಿದೆ",
+    "confirmed": "ಖಚಿತಪಡಿಸಲಾಗಿದೆ"
+  },
+  "ticketCount_one": "{{count}} ಟಿಕೆಟ್",
+  "ticketCount_other": "{{count}} ಟಿಕೆಟ್‌ಗಳು",
+  "qrDialog": {
+    "close": "ಮುಚ್ಚಿ",
+    "ticketUsed": "ಟಿಕೆಟ್ ಬಳಸಲಾಗಿದೆ",
+    "scannedOn": "{{date}} ರಂದು ಸ್ಕ್ಯಾನ್ ಮಾಡಲಾಗಿದೆ",
+    "showQrHint": "ಪ್ರವೇಶಕ್ಕಾಗಿ ಗೇಟ್‌ನಲ್ಲಿ ಈ QR ಕೋಡ್ ತೋರಿಸಿ",
+    "qrUnavailable": "QR ಕೋಡ್ ಲಭ್ಯವಿಲ್ಲ.",
+    "ticketsLabel": "ಟಿಕೆಟ್‌ಗಳು",
+    "paidLabel": "ಪಾವತಿಸಲಾಗಿದೆ",
+    "ticketIdLabel": "ಟಿಕೆಟ್ ID",
+    "paidReconciledOn": "{{date}} ರಂದು ಪಾವತಿಸಿ ಸರಿಹೊಂದಿಸಲಾಗಿದೆ"
+  },
+  "card": {
+    "paidOn": "{{date}} ರಂದು ಪಾವತಿಸಲಾಗಿದೆ",
+    "refunded": "ಮರುಪಾವತಿಸಲಾಗಿದೆ",
+    "refundedOn": "{{date}} ರಂದು ಮರುಪಾವತಿಸಲಾಗಿದೆ",
+    "refundPendingReview": "ಮರುಪಾವತಿ ಕಮಿಟಿ ಪರಿಶೀಲನೆಗಾಗಿ ಬಾಕಿ ಇದೆ",
+    "cancelledNoRefund": "ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ — ಯಾವುದೇ ಮರುಪಾವತಿ ದಾಖಲೆ ಇಲ್ಲ",
+    "ticketIdPrefix": "ಟಿಕೆಟ್ ID: {{id}}",
+    "cancelButton": "ರದ್ದುಗೊಳಿಸಿ",
+    "cancelRefundButton": "ರದ್ದುಗೊಳಿಸಿ ಮತ್ತು ಮರುಪಾವತಿ ಪಡೆಯಿರಿ",
+    "viewEntry": "ಎಂಟ್ರಿ ನೋಡಿ",
+    "showTicket": "ಟಿಕೆಟ್ ತೋರಿಸಿ"
+  },
+  "cancelDialog": {
+    "title": "ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಿ",
+    "confirmText": "\"{{title}}\" ಗಾಗಿ ನಿಮ್ಮ ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಬೇಕೇ?",
+    "refundNotice": "ಮರುಪಾವತಿ ವಿನಂತಿಯನ್ನು ಕಮಿಟಿಗೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ.",
+    "upiLabel": "ಮರುಪಾವತಿ ಕಳುಹಿಸಬೇಕಾದ UPI ID (ಐಚ್ಛಿಕ)",
+    "upiPlaceholder": "ಉದಾ. yourname@okhdfcbank",
+    "upiHelper": "ಖಾಲಿ ಬಿಡಿ — ಕಮಿಟಿ ನಿಮ್ಮ ಮೂಲ ಪಾವತಿಯ UPI ID ಅನ್ನು (ಇದ್ದರೆ) ಬಳಸುತ್ತದೆ.",
+    "keepTicket": "ಟಿಕೆಟ್ ಇರಿಸಿಕೊಳ್ಳಿ",
+    "confirmCancelRefund": "ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಿ ಮತ್ತು ಮರುಪಾವತಿ ಪಡೆಯಿರಿ",
+    "confirmCancel": "ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಿ"
+  },
+  "notices": {
+    "cancelledWithRefund": "ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ. ಅನುಮೋದನೆಗಾಗಿ ಮರುಪಾವತಿ ವಿನಂತಿಯನ್ನು ಕಮಿಟಿಗೆ ಕಳುಹಿಸಲಾಗಿದೆ.",
+    "cancelledPlain": "ಟಿಕೆಟ್ ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ."
+  },
+  "page": {
+    "title": "ನನ್ನ ಟಿಕೆಟ್‌ಗಳು",
+    "subtitle": "ನಿಮ್ಮ ಖಚಿತಪಡಿಸಿದ ಈವೆಂಟ್ ಟಿಕೆಟ್‌ಗಳು ಮತ್ತು ಗೇಟ್ ಪ್ರವೇಶಕ್ಕಾಗಿ QR ಕೋಡ್‌ಗಳು.",
+    "viewAllRegistrations": "ಎಲ್ಲಾ ನೋಂದಣಿಗಳನ್ನು ವೀಕ್ಷಿಸಿ",
+    "loginPrompt": "ನಿಮ್ಮ ಟಿಕೆಟ್‌ಗಳನ್ನು ವೀಕ್ಷಿಸಲು ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಆಗಿ.",
+    "goToLogin": "ಲಾಗಿನ್‌ಗೆ ಹೋಗಿ",
+    "emptyTitle": "ಇನ್ನೂ ಯಾವುದೇ ಟಿಕೆಟ್‌ಗಳಿಲ್ಲ",
+    "emptyDesc": "ಇಲ್ಲಿ ನಿಮ್ಮ ಟಿಕೆಟ್ ಪಡೆಯಲು ಈವೆಂಟ್‌ಗೆ ನೋಂದಾಯಿಸಿ ಮತ್ತು ಪಾವತಿ ಪೂರ್ಣಗೊಳಿಸಿ.",
+    "browseEvents": "ಈವೆಂಟ್‌ಗಳನ್ನು ವೀಕ್ಷಿಸಿ",
+    "activeTickets": "ಸಕ್ರಿಯ ಟಿಕೆಟ್‌ಗಳು ({{count}})",
+    "pastEvents": "ಹಿಂದಿನ ಈವೆಂಟ್‌ಗಳು ({{count}})",
+    "cancelledSection": "ರದ್ದುಗೊಳಿಸಿದವು ({{count}})"
+  }
+}

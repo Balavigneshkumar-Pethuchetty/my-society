@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogContentText, DialogTitle, IconButton,
@@ -264,6 +265,7 @@ interface BuildingStructureProps {
 }
 
 export function BuildingStructure({ token = null }: BuildingStructureProps) {
+  const { t } = useTranslation('admin');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [step, setStep] = useState<0 | 1>(0);
 
@@ -446,7 +448,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
     try {
       const rows = await parseFileToRows(file);
       const result = await importRows(token, rows);
-      setImportMsg(`Import completed. Added ${result.added} new nodes.`);
+      setImportMsg(t('buildingStructure.step1.importCompleted', { count: result.added }));
       await loadNodes();
     } catch (err) {
       setImportError((err as Error).message);
@@ -485,7 +487,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
     // Step 1: every node add/delete is already persisted immediately.
     // Calling setHierarchy here would CASCADE-delete all structure_nodes.
     // Just acknowledge that the structure is saved.
-    setSaveMsg('Building structure saved successfully.');
+    setSaveMsg(t('buildingStructure.step1.savedMsg'));
   };
 
   // ── Render: step 0 ────────────────────────────────────────────────────────
@@ -513,23 +515,23 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
             </IconButton>
             <Box sx={{ textAlign: 'center', flex: 1 }}>
               <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 22, md: 28 } }}>
-                Define Building Structure
+                {t('buildingStructure.step0.title')}
               </Typography>
               <Typography color="text.secondary" fontSize={14} mt={0.5}>
-                Customize the way your building is organized
+                {t('buildingStructure.step0.subtitle')}
               </Typography>
             </Box>
           </Box>
 
           <Paper variant="outlined" sx={{ maxWidth: 540, mx: 'auto', p: { xs: 2.5, md: 4 } }}>
             {/* Hierarchy levels section */}
-            <Typography fontWeight={700} fontSize={20} mb={0.5}>Hierarchy Levels</Typography>
+            <Typography fontWeight={700} fontSize={20} mb={0.5}>{t('buildingStructure.step0.hierarchyLevelsTitle')}</Typography>
             <Typography color="text.secondary" fontSize={13} mb={3}>
-              Name each level in your hierarchy
+              {t('buildingStructure.step0.hierarchyLevelsSubtitle')}
             </Typography>
 
             {/* Number of levels */}
-            <Typography fontWeight={600} fontSize={13} mb={1.5}>Number of Levels</Typography>
+            <Typography fontWeight={600} fontSize={13} mb={1.5}>{t('buildingStructure.step0.numberOfLevels')}</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
               <Button
                 variant="outlined" onClick={() => setNumLevels(n => Math.max(1, n - 1))}
@@ -550,11 +552,11 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
             {levelNames.map((name, i) => (
               <Box key={i} mb={2}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                  <Typography fontWeight={600} fontSize={13}>Level {i + 1} Name</Typography>
+                  <Typography fontWeight={600} fontSize={13}>{t('buildingStructure.step0.levelNameLabel', { num: i + 1 })}</Typography>
                   {i + 1 === numLevels && (
                     <Box sx={{ fontSize: 11, px: 0.75, py: 0.2, borderRadius: 1,
                       bgcolor: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
-                      Leaf Node
+                      {t('buildingStructure.step0.leafNodeChip')}
                     </Box>
                   )}
                 </Box>
@@ -574,7 +576,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
             {/* Actions */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4, gap: 2 }}>
               <Button variant="outlined" disabled sx={{ color: 'text.secondary', borderColor: 'divider', px: 3 }}>
-                ← Back
+                {t('common.back')}
               </Button>
               <Button
                 variant="contained" onClick={handleNextStep}
@@ -582,7 +584,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                 startIcon={hierSaving ? <CircularProgress size={16} color="inherit" /> : null}
                 sx={{ bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, px: 3, fontWeight: 700 }}
               >
-                Next: Add Structure →
+                {t('buildingStructure.step0.nextBtn')}
               </Button>
             </Box>
           </Paper>
@@ -606,10 +608,10 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
           </IconButton>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
             <Typography variant="h5" fontWeight={800} sx={{ fontSize: { xs: 22, md: 28 } }}>
-              Structure Builder
+              {t('buildingStructure.step1.title')}
             </Typography>
             <Typography color="text.secondary" fontSize={14} mt={0.5}>
-              Build your building structure by adding nodes
+              {t('buildingStructure.step1.subtitle')}
             </Typography>
           </Box>
         </Box>
@@ -621,9 +623,9 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
           <Paper variant="outlined" sx={{ flex: '0 0 340px', minWidth: 0, overflow: 'hidden',
             width: { xs: '100%', lg: 340 } }}>
             <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Typography fontWeight={700} fontSize={18}>Structure Tree</Typography>
+              <Typography fontWeight={700} fontSize={18}>{t('buildingStructure.step1.treeTitle')}</Typography>
               <Typography color="text.secondary" fontSize={12} mt={0.25}>
-                Click a node to select it, then add children
+                {t('buildingStructure.step1.treeSubtitle')}
               </Typography>
             </Box>
 
@@ -633,7 +635,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
               <Box sx={{ p: 4, textAlign: 'center' }}>
                 <BusinessIcon sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
                 <Typography color="text.secondary" fontSize={13}>
-                  No nodes yet. Add a {rootLevelName} to get started.
+                  {t('buildingStructure.step1.noNodesMsg', { level: rootLevelName })}
                 </Typography>
               </Box>
             ) : (
@@ -654,21 +656,21 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
 
             {/* Add Node panel */}
             <Paper variant="outlined" sx={{ p: 2.5 }}>
-              <Typography fontWeight={700} fontSize={18} mb={0.25}>Add Node</Typography>
+              <Typography fontWeight={700} fontSize={18} mb={0.25}>{t('buildingStructure.step1.addNodeTitle')}</Typography>
               <Typography color="text.secondary" fontSize={12} mb={2}>
                 {selectedNode
-                  ? `Adding to: ${selectedNode.name}`
-                  : 'Adding to root level'}
+                  ? t('buildingStructure.step1.addingTo', { name: selectedNode.name })
+                  : t('buildingStructure.step1.addingToRoot')}
               </Typography>
 
               {isAtDeepest ? (
                 <Typography color="text.secondary" fontSize={13}>
-                  This is the deepest level ({addingToLevelName}). Select a parent node or click elsewhere to deselect.
+                  {t('buildingStructure.step1.deepestLevelMsg', { level: addingToLevelName })}
                 </Typography>
               ) : (
                 <>
                   <TextField
-                    fullWidth size="small" placeholder={`Enter ${addingToLevelName} name`}
+                    fullWidth size="small" placeholder={t('buildingStructure.step1.enterNamePlaceholder', { level: addingToLevelName })}
                     value={newNodeName}
                     onChange={e => setNewNodeName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleAddNode(); }}
@@ -677,7 +679,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                     InputProps={{
                       startAdornment: (
                         <Typography fontSize={12} color="text.secondary" sx={{ mr: 1, whiteSpace: 'nowrap' }}>
-                          Adding: {addingToLevelName}
+                          {t('buildingStructure.step1.addingLabel', { level: addingToLevelName })}
                         </Typography>
                       ),
                     }}
@@ -688,7 +690,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                     disabled={addBusy || !newNodeName.trim()}
                     startIcon={addBusy ? <CircularProgress size={14} color="inherit" /> : <AddIcon />}
                     sx={{ bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, textTransform: 'none', fontWeight: 700 }}>
-                    Add {addingToLevelName}
+                    {t('buildingStructure.step1.addBtn', { level: addingToLevelName })}
                   </Button>
                 </>
               )}
@@ -696,9 +698,9 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
 
             {/* Import / Export panel */}
             <Paper variant="outlined" sx={{ p: 2.5 }}>
-              <Typography fontWeight={700} fontSize={18} mb={0.25}>Import Structure</Typography>
+              <Typography fontWeight={700} fontSize={18} mb={0.25}>{t('buildingStructure.step1.importTitle')}</Typography>
               <Typography color="text.secondary" fontSize={12} mb={2}>
-                Download a sample first, fill it, then import CSV or Excel.
+                {t('buildingStructure.step1.importSubtitle')}
               </Typography>
 
               <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
@@ -706,13 +708,13 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                   fullWidth variant="outlined" startIcon={<DownloadIcon />}
                   onClick={handleSampleCSV}
                   sx={{ textTransform: 'none', borderColor: 'divider', color: 'text.secondary', fontSize: 13 }}>
-                  Sample CSV
+                  {t('buildingStructure.step1.sampleCsv')}
                 </Button>
                 <Button
                   fullWidth variant="outlined" startIcon={<DownloadIcon />}
                   onClick={handleSampleExcel}
                   sx={{ textTransform: 'none', borderColor: 'divider', color: 'text.secondary', fontSize: 13 }}>
-                  Sample Excel
+                  {t('buildingStructure.step1.sampleExcel')}
                 </Button>
               </Box>
 
@@ -725,7 +727,7 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                 disabled={importBusy}
                 onClick={() => fileRef.current?.click()}
                 sx={{ bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, textTransform: 'none', fontWeight: 700, mb: 1 }}>
-                Import CSV / Excel
+                {t('buildingStructure.step1.importBtn')}
               </Button>
 
               {importMsg && (
@@ -735,19 +737,19 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
                 <Alert severity="error" sx={{ mb: 1 }}>{importError}</Alert>
               )}
 
-              <Typography color="text.secondary" fontSize={12} mb={1}>Download current structure</Typography>
+              <Typography color="text.secondary" fontSize={12} mb={1}>{t('buildingStructure.step1.downloadCurrentStructure')}</Typography>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
                 <Button
                   fullWidth variant="outlined" startIcon={<DownloadIcon />}
                   onClick={handleExportCSV} disabled={nodes.length === 0}
                   sx={{ textTransform: 'none', borderColor: 'divider', color: 'text.secondary', fontSize: 13 }}>
-                  Export CSV
+                  {t('buildingStructure.step1.exportCsv')}
                 </Button>
                 <Button
                   fullWidth variant="outlined" startIcon={<DownloadIcon />}
                   onClick={handleExportExcel} disabled={nodes.length === 0}
                   sx={{ textTransform: 'none', borderColor: 'divider', color: 'text.secondary', fontSize: 13 }}>
-                  Export Excel
+                  {t('buildingStructure.step1.exportExcel')}
                 </Button>
               </Box>
             </Paper>
@@ -755,16 +757,16 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
             {/* Actions panel (only when a node is selected) */}
             {selectedNode && (
               <Paper variant="outlined" sx={{ p: 2.5 }}>
-                <Typography fontWeight={700} fontSize={18} mb={2}>Actions</Typography>
+                <Typography fontWeight={700} fontSize={18} mb={2}>{t('buildingStructure.step1.actionsTitle')}</Typography>
                 <Button
                   fullWidth variant="contained" color="error"
                   startIcon={<DeleteIcon />}
                   onClick={() => setDeleteTarget(selectedNode)}
                   sx={{ textTransform: 'none', fontWeight: 700, mb: 1 }}>
-                  Delete {selectedNode.name}
+                  {t('buildingStructure.step1.deleteBtn', { name: selectedNode.name })}
                 </Button>
                 <Typography color="text.secondary" fontSize={12}>
-                  This will also delete all child nodes
+                  {t('buildingStructure.step1.deleteHint')}
                 </Typography>
               </Paper>
             )}
@@ -783,32 +785,31 @@ export function BuildingStructure({ token = null }: BuildingStructureProps) {
             variant="outlined"
             onClick={() => { setStep(0); setSelectedId(null); }}
             sx={{ borderColor: 'divider', color: 'text.secondary', px: 3 }}>
-            ← Back
+            {t('common.back')}
           </Button>
           <Button
             variant="contained" onClick={handleSaveAndContinue}
             sx={{ bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, px: 4, fontWeight: 700 }}>
-            Save Structure
+            {t('buildingStructure.step1.saveBtn')}
           </Button>
         </Box>
       </Box>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: '#dc2626' }}>Delete Node</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: '#dc2626' }}>{t('buildingStructure.dialog.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Delete <strong>{deleteTarget?.name}</strong> ({deleteTarget?.level_name})?
-            This will also remove all child nodes. This action cannot be undone.
+            {t('buildingStructure.dialog.body', { name: deleteTarget?.name ?? '', level: deleteTarget?.level_name ?? '' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteTarget(null)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={() => setDeleteTarget(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
           <Button
             onClick={handleDeleteConfirm} variant="contained" color="error" size="small"
             disabled={deleteBusy}
             startIcon={deleteBusy ? <CircularProgress size={12} color="inherit" /> : <DeleteIcon />}>
-            Delete
+            {t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>

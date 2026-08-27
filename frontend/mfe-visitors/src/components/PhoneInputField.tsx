@@ -11,10 +11,12 @@
  *   UK     (+44)  →  +44-7911-123456
  *   UAE    (+971) →  +971-50-123-4567
  */
+import '../i18n';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, InputAdornment, List, ListItemButton, Popover, TextField, Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import SearchIcon from '@mui/icons-material/Search';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import type { SxProps, Theme } from '@mui/material/styles';
@@ -102,7 +104,7 @@ interface Props {
 export function PhoneInputField({
   value,
   onChange,
-  label = 'Phone number',
+  label,
   size = 'small',
   required,
   helperText,
@@ -112,6 +114,8 @@ export function PhoneInputField({
   sx,
   endAdornment,
 }: Props) {
+  const { t } = useTranslation('visitors');
+  const resolvedLabel = label ?? t('phoneInput.defaultLabel');
   const defaultCountry = COUNTRIES[0]; // India
 
   const [country,    setCountry]    = useState<Country>(defaultCountry);
@@ -206,7 +210,7 @@ export function PhoneInputField({
           ),
           endAdornment: <ArrowDropDownIcon fontSize="small" sx={{ color: 'text.secondary' }} />,
         }}
-        inputProps={{ 'aria-label': 'Country code', readOnly: true }}
+        inputProps={{ 'aria-label': t('phoneInput.countryCodeAria'), readOnly: true }}
       />
 
       <Popover
@@ -221,7 +225,7 @@ export function PhoneInputField({
             inputRef={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search country or code"
+            placeholder={t('phoneInput.searchPlaceholder')}
             size="small"
             fullWidth
             autoFocus
@@ -237,7 +241,7 @@ export function PhoneInputField({
         <List sx={{ maxHeight: 320, overflowY: 'auto', pt: 0 }}>
           {filteredCountries.length === 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
-              No countries match "{search}"
+              {t('phoneInput.noCountriesMatch', { search })}
             </Typography>
           )}
           {filteredCountries.map((c) => (
@@ -261,7 +265,7 @@ export function PhoneInputField({
           (and the whole dialog) wider than its container on narrow
           viewports, producing a page-wide horizontal scrollbar. */}
       <TextField
-        label={label}
+        label={resolvedLabel}
         value={localInput}
         onChange={(e) => handleNumberChange(e.target.value)}
         placeholder={placeholder}
@@ -270,7 +274,7 @@ export function PhoneInputField({
         size={size}
         required={required}
         autoFocus={autoFocus}
-        helperText={helperText ?? `Stored as ${country.dial}${localInput.replace(/\D/g, '') || 'XXXXXXXXXX'}`}
+        helperText={helperText ?? t('phoneInput.storedAs', { number: `${country.dial}${localInput.replace(/\D/g, '') || 'XXXXXXXXXX'}` })}
         error={error}
         disabled={disabled}
         inputProps={{ inputMode: 'tel' }}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert, Avatar, Box, Button, Chip, CircularProgress, Container,
   Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
@@ -114,6 +115,7 @@ interface PendingCardProps {
 }
 
 function PendingUserCard({ u, busy, roleValue, onRoleChange, onApprove, onReject, initials }: PendingCardProps) {
+  const { t } = useTranslation('admin');
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderLeft: '4px solid', borderLeftColor: 'warning.main' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
@@ -133,7 +135,7 @@ function PendingUserCard({ u, busy, roleValue, onRoleChange, onApprove, onReject
         onChange={e => onRoleChange(e.target.value)}
         sx={{ fontSize: 13, mb: 1.5 }}
       >
-        <MenuItem value="" disabled><em>— select role —</em></MenuItem>
+        <MenuItem value="" disabled><em>{t('userApproval.selectRolePlaceholder')}</em></MenuItem>
         {ASSIGNABLE_ROLES.map(r => <MenuItem key={r} value={r} sx={{ fontSize: 13 }}>{r}</MenuItem>)}
       </Select>
       <Box sx={{ display: 'flex', gap: 1 }}>
@@ -141,12 +143,12 @@ function PendingUserCard({ u, busy, roleValue, onRoleChange, onApprove, onReject
           onClick={onApprove}
           startIcon={busy ? <CircularProgress size={12} color="inherit" /> : <CheckCircleIcon />}
           sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, fontSize: 12, textTransform: 'none' }}>
-          Approve
+          {t('userApproval.approve')}
         </Button>
         <Button fullWidth size="small" variant="outlined" color="error" disabled={busy}
           onClick={onReject} startIcon={<CancelIcon />}
           sx={{ fontSize: 12, textTransform: 'none' }}>
-          Reject
+          {t('userApproval.reject')}
         </Button>
       </Box>
     </Paper>
@@ -165,6 +167,7 @@ interface ActiveCardProps {
 }
 
 function ActiveUserCard({ u, busy, pendingRole, onRoleChange, onSaveRole, onRevoke, onRemove, initials }: ActiveCardProps) {
+  const { t } = useTranslation('admin');
   const hasRoleChange = pendingRole !== undefined && pendingRole !== u.role;
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, '&:hover': { bgcolor: 'action.hover' } }}>
@@ -176,7 +179,7 @@ function ActiveUserCard({ u, busy, pendingRole, onRoleChange, onSaveRole, onRevo
           <Typography fontWeight={700} fontSize={15}>{u.name}</Typography>
           <Typography fontSize={12} color="text.secondary" noWrap>{u.email}</Typography>
           <Typography fontSize={11} color="text.secondary" mt={0.25}>
-            Since {new Date(u.created_at).toLocaleDateString()}
+            {t('userApproval.since', { date: new Date(u.created_at).toLocaleDateString() })}
           </Typography>
         </Box>
       </Box>
@@ -189,7 +192,7 @@ function ActiveUserCard({ u, busy, pendingRole, onRoleChange, onSaveRole, onRevo
           <Button size="small" variant="contained" disabled={busy} onClick={onSaveRole}
             startIcon={busy ? <CircularProgress size={12} color="inherit" /> : <SaveIcon />}
             sx={{ bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, fontSize: 11, textTransform: 'none', flexShrink: 0 }}>
-            Save
+            {t('common.save')}
           </Button>
         )}
       </Box>
@@ -198,12 +201,12 @@ function ActiveUserCard({ u, busy, pendingRole, onRoleChange, onSaveRole, onRevo
           onClick={onRevoke} startIcon={<BlockIcon />}
           sx={{ fontSize: 11, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309',
             '&:hover': { bgcolor: '#fef3c7', borderColor: '#d97706' } }}>
-          Revoke
+          {t('userApproval.revoke')}
         </Button>
         <Button fullWidth size="small" variant="outlined" color="error" disabled={busy}
           onClick={onRemove} startIcon={<DeleteForeverIcon />}
           sx={{ fontSize: 11, textTransform: 'none' }}>
-          Remove
+          {t('userApproval.remove')}
         </Button>
       </Box>
     </Paper>
@@ -218,6 +221,7 @@ interface UserApprovalProps {
 }
 
 export function UserApproval({ token, onLogin }: UserApprovalProps) {
+  const { t } = useTranslation('admin');
   const [tab,           setTab]           = useState(0);
   const [pending,       setPending]       = useState<DbUser[]>([]);
   const [activeUsers,   setActiveUsers]   = useState<DbUser[]>([]);
@@ -266,7 +270,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
 
   const handleApprove = async (user: DbUser) => {
     const role = roleMap[user.id];
-    if (!role) { setError('Select a role before approving.'); return; }
+    if (!role) { setError(t('userApproval.selectRoleError')); return; }
     if (!token) return;
     setActionId(user.id); setError(null);
     try { await approveUser(token, user.id, role); await load(); }
@@ -358,9 +362,9 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
     return (
       <Container maxWidth="sm" sx={{ pt: 8, textAlign: 'center' }}>
         <Alert severity="warning" action={onLogin
-          ? <Button color="inherit" size="small" onClick={onLogin}>Sign in</Button>
+          ? <Button color="inherit" size="small" onClick={onLogin}>{t('userApproval.signIn')}</Button>
           : undefined}>
-          Not authenticated. Sign in with Keycloak to view this page.
+          {t('userApproval.notAuthenticated')}
         </Alert>
       </Container>
     );
@@ -371,13 +375,13 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
   const PendingSearchBar = (
     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
       <TextField
-        size="small" placeholder="Search name or email…" value={pendingSearch}
+        size="small" placeholder={t('userApproval.searchPlaceholder')} value={pendingSearch}
         onChange={e => { setPendingSearch(e.target.value); setPendingPage(0); }}
         InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: 'text.secondary' }} /></InputAdornment> }}
         sx={{ minWidth: 200, flex: 1, maxWidth: 360, bgcolor: 'background.paper' }}
       />
       {pendingSearch && (
-        <Typography fontSize={13} color="text.secondary">{filteredPending.length} of {pending.length}</Typography>
+        <Typography fontSize={13} color="text.secondary">{t('userApproval.resultsCount', { filtered: filteredPending.length, total: pending.length })}</Typography>
       )}
     </Box>
   );
@@ -385,7 +389,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
   const ActiveSearchBar = (
     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
       <TextField
-        size="small" placeholder="Search name or email…" value={activeSearch}
+        size="small" placeholder={t('userApproval.searchPlaceholder')} value={activeSearch}
         onChange={e => { setActiveSearch(e.target.value); setActivePage(0); }}
         InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: 'text.secondary' }} /></InputAdornment> }}
         sx={{ minWidth: 200, flex: 1, maxWidth: 300, bgcolor: 'background.paper' }}
@@ -393,11 +397,11 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
       <Select size="small" displayEmpty value={activeRoleFilter}
         onChange={e => { setActiveRoleFilter(e.target.value); setActivePage(0); }}
         sx={{ minWidth: 140, fontSize: 13, bgcolor: 'background.paper' }}>
-        <MenuItem value="" sx={{ fontSize: 13 }}><em>All roles</em></MenuItem>
+        <MenuItem value="" sx={{ fontSize: 13 }}><em>{t('userApproval.allRoles')}</em></MenuItem>
         {ALL_ROLES.map(r => <MenuItem key={r} value={r} sx={{ fontSize: 13 }}>{r}</MenuItem>)}
       </Select>
       {(activeSearch || activeRoleFilter) && (
-        <Typography fontSize={13} color="text.secondary">{filteredActive.length} of {activeUsers.length}</Typography>
+        <Typography fontSize={13} color="text.secondary">{t('userApproval.resultsCount', { filtered: filteredActive.length, total: activeUsers.length })}</Typography>
       )}
     </Box>
   );
@@ -411,15 +415,15 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
           <IconButton onClick={() => setSidebarOpen(true)}
-            sx={{ display: { md: 'none' }, color: 'text.secondary' }} aria-label="Open admin menu">
+            sx={{ display: { md: 'none' }, color: 'text.secondary' }} aria-label={t('userApproval.openMenuAria')}>
             <MenuIcon />
           </IconButton>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: 20, md: 24 } }}>User Management</Typography>
-            <Typography color="text.secondary" fontSize={14}>Approve, reject, revoke or remove society members.</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: 20, md: 24 } }}>{t('userApproval.title')}</Typography>
+            <Typography color="text.secondary" fontSize={14}>{t('userApproval.subtitle')}</Typography>
           </Box>
           {pending.length > 0 && (
-            <Chip label={`${pending.length} pending`}
+            <Chip label={t('userApproval.pendingChip', { count: pending.length })}
               sx={{ bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, border: '1px solid #fde68a' }} />
           )}
         </Box>
@@ -431,11 +435,11 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
           gap: { xs: 1.5, md: 2 }, mb: 3,
         }}>
           {[
-            { label: 'Pending',  value: stats?.total_pending  ?? pending.length, color: '#f59e0b', icon: <HourglassTopIcon fontSize="small" /> },
-            { label: 'Approved', value: stats?.total_approved ?? 0,              color: '#10b981', icon: <CheckCircleIcon fontSize="small" /> },
-            { label: 'Rejected', value: stats?.total_rejected ?? 0,              color: '#ef4444', icon: <CancelIcon fontSize="small" /> },
-            { label: 'Revoked',  value: stats?.total_revoked  ?? 0,              color: '#f59e0b', icon: <BlockIcon fontSize="small" /> },
-            { label: 'Removed',  value: stats?.total_removed  ?? 0,              color: '#ec4899', icon: <DeleteForeverIcon fontSize="small" /> },
+            { label: t('userApproval.stats.pending'),  value: stats?.total_pending  ?? pending.length, color: '#f59e0b', icon: <HourglassTopIcon fontSize="small" /> },
+            { label: t('userApproval.stats.approved'), value: stats?.total_approved ?? 0,              color: '#10b981', icon: <CheckCircleIcon fontSize="small" /> },
+            { label: t('userApproval.stats.rejected'), value: stats?.total_rejected ?? 0,              color: '#ef4444', icon: <CancelIcon fontSize="small" /> },
+            { label: t('userApproval.stats.revoked'),  value: stats?.total_revoked  ?? 0,              color: '#f59e0b', icon: <BlockIcon fontSize="small" /> },
+            { label: t('userApproval.stats.removed'),  value: stats?.total_removed  ?? 0,              color: '#ec4899', icon: <DeleteForeverIcon fontSize="small" /> },
           ].map(({ label, value, color, icon }) => (
             <Paper key={label} variant="outlined" sx={{ p: { xs: 1.5, md: 2 }, borderLeft: `4px solid ${color}` }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, color }}>
@@ -454,8 +458,8 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
           <Tabs value={tab} onChange={(_, v) => setTab(v)}
             sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'action.hover', px: 1 }}
             variant="scrollable" scrollButtons="auto">
-            <Tab label={`Pending (${pending.length})`} sx={{ fontSize: 13, textTransform: 'none', fontWeight: 600 }} />
-            <Tab label={`Active (${activeUsers.length})`} sx={{ fontSize: 13, textTransform: 'none', fontWeight: 600 }} />
+            <Tab label={t('userApproval.tabs.pending', { count: pending.length })} sx={{ fontSize: 13, textTransform: 'none', fontWeight: 600 }} />
+            <Tab label={t('userApproval.tabs.active', { count: activeUsers.length })} sx={{ fontSize: 13, textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
 
           {loading ? (
@@ -471,8 +475,8 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                 <Box sx={{ p: 4, textAlign: 'center' }}>
                   {pending.length === 0
                     ? <><Typography fontSize={40} lineHeight={1} mb={1}>🎉</Typography>
-                        <Typography color="text.secondary">No pending registrations — all caught up!</Typography></>
-                    : <Typography color="text.secondary">No results match your search.</Typography>}
+                        <Typography color="text.secondary">{t('userApproval.noPendingTitle')}</Typography></>
+                    : <Typography color="text.secondary">{t('userApproval.noResultsSearch')}</Typography>}
                 </Box>
               ) : (
                 <>
@@ -498,12 +502,12 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                           {(['name', 'email', 'created_at'] as PendingSortKey[]).map((k, i) => (
                             <TableCell key={k} sx={{ fontWeight: 600, fontSize: 12 }}>
                               <TableSortLabel active={pendingSort === k} direction={pendingSort === k ? pendingSortDir : 'asc'} onClick={() => togglePendingSort(k)}>
-                                {['Name', 'Email', 'Registered'][i]}
+                                {[t('userApproval.table.name'), t('userApproval.table.email'), t('userApproval.table.registered')][i]}
                               </TableSortLabel>
                             </TableCell>
                           ))}
-                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 200 }}>Assign Role</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 220 }}>Actions</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 200 }}>{t('userApproval.table.assignRole')}</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 220 }}>{t('userApproval.table.actions')}</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -523,7 +527,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                 <Select size="small" displayEmpty value={roleMap[u.id] ?? ''}
                                   onChange={e => setRoleMap(prev => ({ ...prev, [u.id]: e.target.value }))}
                                   sx={{ fontSize: 13, minWidth: 160 }} disabled={busy}>
-                                  <MenuItem value="" disabled><em>— select role —</em></MenuItem>
+                                  <MenuItem value="" disabled><em>{t('userApproval.selectRolePlaceholder')}</em></MenuItem>
                                   {ASSIGNABLE_ROLES.map(r => <MenuItem key={r} value={r} sx={{ fontSize: 13 }}>{r}</MenuItem>)}
                                 </Select>
                               </TableCell>
@@ -533,12 +537,12 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                     onClick={() => handleApprove(u)}
                                     startIcon={busy ? <CircularProgress size={12} color="inherit" /> : <CheckCircleIcon />}
                                     sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, fontSize: 12, textTransform: 'none' }}>
-                                    Approve
+                                    {t('userApproval.approve')}
                                   </Button>
                                   <Button size="small" variant="outlined" color="error" disabled={busy}
                                     onClick={() => setRejectTarget(u)} startIcon={<CancelIcon />}
                                     sx={{ fontSize: 12, textTransform: 'none' }}>
-                                    Reject
+                                    {t('userApproval.reject')}
                                   </Button>
                                 </Box>
                               </TableCell>
@@ -567,7 +571,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
               {filteredActive.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: 'center' }}>
                   <Typography color="text.secondary">
-                    {activeUsers.length === 0 ? 'No active users found.' : 'No results match your filter.'}
+                    {activeUsers.length === 0 ? t('userApproval.noActiveUsers') : t('userApproval.noResultsFilter')}
                   </Typography>
                 </Box>
               ) : (
@@ -595,11 +599,11 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                           {(['name', 'email', 'role', 'created_at'] as ActiveSortKey[]).map((k, i) => (
                             <TableCell key={k} sx={{ fontWeight: 600, fontSize: 12, ...(k === 'role' ? { width: 230 } : {}) }}>
                               <TableSortLabel active={activeSort === k} direction={activeSort === k ? activeSortDir : 'asc'} onClick={() => toggleActiveSort(k)}>
-                                {['Name', 'Email', 'Role', 'Registered'][i]}
+                                {[t('userApproval.table.name'), t('userApproval.table.email'), t('userApproval.table.role'), t('userApproval.table.registered')][i]}
                               </TableSortLabel>
                             </TableCell>
                           ))}
-                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 200 }}>Actions</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 200 }}>{t('userApproval.table.actions')}</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -622,14 +626,14 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                     {ALL_ROLES.map(r => <MenuItem key={r} value={r} sx={{ fontSize: 13 }}>{r}</MenuItem>)}
                                   </Select>
                                   {roleChangeMap[u.id] && roleChangeMap[u.id] !== u.role && (
-                                    <Tooltip title="Save role change">
+                                    <Tooltip title={t('userApproval.saveRoleTooltip')}>
                                       <span>
                                         <Button size="small" variant="contained" disabled={busy}
                                           onClick={() => handleRoleChange(u)}
                                           startIcon={busy ? <CircularProgress size={12} color="inherit" /> : <SaveIcon />}
                                           sx={{ fontSize: 11, textTransform: 'none', bgcolor: '#6366f1',
                                             '&:hover': { bgcolor: '#4f46e5' }, minWidth: 0, px: 1.5 }}>
-                                          Save
+                                          {t('common.save')}
                                         </Button>
                                       </span>
                                     </Tooltip>
@@ -639,22 +643,22 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                               <TableCell><Typography fontSize={13} color="text.secondary">{new Date(u.created_at).toLocaleString()}</Typography></TableCell>
                               <TableCell>
                                 <Box sx={{ display: 'flex', gap: 1 }}>
-                                  <Tooltip title="Revoke access — moves user back to pending">
+                                  <Tooltip title={t('userApproval.revokeTooltip')}>
                                     <span>
                                       <Button size="small" variant="outlined" disabled={busy}
                                         onClick={() => setRevokeTarget(u)} startIcon={<BlockIcon />}
                                         sx={{ fontSize: 11, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309',
                                           '&:hover': { bgcolor: '#fef3c7', borderColor: '#d97706' } }}>
-                                        Revoke
+                                        {t('userApproval.revoke')}
                                       </Button>
                                     </span>
                                   </Tooltip>
-                                  <Tooltip title="Permanently delete user">
+                                  <Tooltip title={t('userApproval.removeTooltip')}>
                                     <span>
                                       <Button size="small" variant="outlined" color="error" disabled={busy}
                                         onClick={() => setRemoveTarget(u)} startIcon={<DeleteForeverIcon />}
                                         sx={{ fontSize: 11, textTransform: 'none' }}>
-                                        Remove
+                                        {t('userApproval.remove')}
                                       </Button>
                                     </span>
                                   </Tooltip>
@@ -686,7 +690,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
             <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider',
               display: 'flex', alignItems: 'center', gap: 1 }}>
               <PeopleIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-              <Typography fontSize={13} fontWeight={600} color="primary.main">Admin Activity Breakdown</Typography>
+              <Typography fontSize={13} fontWeight={600} color="primary.main">{t('userApproval.adminBreakdownTitle')}</Typography>
             </Box>
 
             {/* Mobile: compact cards */}
@@ -695,7 +699,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                 <Paper key={i} variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
                   <Typography fontWeight={700} fontSize={14} mb={1}>{a.admin_name}</Typography>
                   <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    {[['Approved', a.approved, '#16a34a'], ['Rejected', a.rejected, '#dc2626'], ['Revoked', a.revoked, '#d97706'], ['Removed', a.removed, '#db2777']].map(([l, v, c]) => (
+                    {[[t('userApproval.stats.approved'), a.approved, '#16a34a'], [t('userApproval.stats.rejected'), a.rejected, '#dc2626'], [t('userApproval.stats.revoked'), a.revoked, '#d97706'], [t('userApproval.stats.removed'), a.removed, '#db2777']].map(([l, v, c]) => (
                       <Box key={l as string} sx={{ textAlign: 'center', minWidth: 52 }}>
                         <Typography fontSize={18} fontWeight={700} sx={{ color: c as string }}>{v as number}</Typography>
                         <Typography fontSize={10} color="text.secondary">{l}</Typography>
@@ -711,11 +715,11 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
               <Table size="small" sx={{ minWidth: 400 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>Admin</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#16a34a' }}>Approved</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#dc2626' }}>Rejected</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#d97706' }}>Revoked</TableCell>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#db2777' }}>Removed</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{t('userApproval.activityTable.admin')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#16a34a' }}>{t('userApproval.stats.approved')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#dc2626' }}>{t('userApproval.stats.rejected')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#d97706' }}>{t('userApproval.stats.revoked')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#db2777' }}>{t('userApproval.stats.removed')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -739,7 +743,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
           <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
             <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography fontSize={13} fontWeight={600} color="text.secondary">
-                Recent Activity — all admins (persistent)
+                {t('userApproval.recentActivityTitle')}
               </Typography>
             </Box>
 
@@ -758,7 +762,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                       {a.role && <Chip size="small" label={a.role} sx={{ bgcolor: '#ede9fe', color: '#4c1d95', fontWeight: 600 }} />}
-                      <Typography fontSize={11} color="text.secondary">by {a.admin_name}</Typography>
+                      <Typography fontSize={11} color="text.secondary">{t('userApproval.byAdmin', { name: a.admin_name })}</Typography>
                       <Typography fontSize={11} color="text.secondary" sx={{ ml: 'auto' }}>
                         {new Date(a.performed_at).toLocaleDateString()}
                       </Typography>
@@ -773,7 +777,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
               <Table size="small" sx={{ minWidth: 560 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
-                    {['User', 'Email', 'Action', 'Role', 'By Admin', 'Time'].map(h => (
+                    {[t('userApproval.activityTable.user'), t('userApproval.activityTable.email'), t('userApproval.activityTable.action'), t('userApproval.activityTable.role'), t('userApproval.activityTable.byAdmin'), t('userApproval.activityTable.time')].map(h => (
                       <TableCell key={h} sx={{ fontWeight: 600, fontSize: 12 }}>{h}</TableCell>
                     ))}
                   </TableRow>
@@ -813,47 +817,44 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
       {/* ── Dialogs ── */}
 
       <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: '#991b1b' }}>Reject Registration</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: '#991b1b' }}>{t('userApproval.dialogs.rejectTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Remove <strong>{rejectTarget?.name}</strong> ({rejectTarget?.email}) from the pending queue?
-            They will need to re-register.
+            {t('userApproval.dialogs.rejectBody', { name: rejectTarget?.name ?? '', email: rejectTarget?.email ?? '' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setRejectTarget(null)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleRejectConfirm} variant="contained" color="error" size="small">Confirm Reject</Button>
+          <Button onClick={() => setRejectTarget(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button onClick={handleRejectConfirm} variant="contained" color="error" size="small">{t('userApproval.dialogs.confirmReject')}</Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={!!revokeTarget} onClose={() => setRevokeTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: '#b45309' }}>Revoke Access</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: '#b45309' }}>{t('userApproval.dialogs.revokeTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Revoking access for <strong>{revokeTarget?.name}</strong> ({revokeTarget?.email}) will
-            deactivate their account and remove their Keycloak roles. They can be re-approved later.
+            {t('userApproval.dialogs.revokeBody', { name: revokeTarget?.name ?? '', email: revokeTarget?.email ?? '' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setRevokeTarget(null)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={() => setRevokeTarget(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
           <Button onClick={handleRevokeConfirm} variant="contained" size="small"
             sx={{ bgcolor: '#d97706', '&:hover': { bgcolor: '#b45309' } }}>
-            Confirm Revoke
+            {t('userApproval.dialogs.confirmRevoke')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={!!removeTarget} onClose={() => setRemoveTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: '#991b1b' }}>Remove User</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, color: '#991b1b' }}>{t('userApproval.dialogs.removeTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Permanently remove <strong>{removeTarget?.name}</strong> ({removeTarget?.email}) from the
-            system and Keycloak? <strong>This cannot be undone.</strong>
+            {t('userApproval.dialogs.removeBody', { name: removeTarget?.name ?? '', email: removeTarget?.email ?? '' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setRemoveTarget(null)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleRemoveConfirm} variant="contained" color="error" size="small">Confirm Remove</Button>
+          <Button onClick={() => setRemoveTarget(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button onClick={handleRemoveConfirm} variant="contained" color="error" size="small">{t('userApproval.dialogs.confirmRemove')}</Button>
         </DialogActions>
       </Dialog>
     </Box>

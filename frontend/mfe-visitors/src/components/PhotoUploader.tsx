@@ -1,5 +1,7 @@
+import '../i18n';
 import React, { useRef, useState } from 'react';
 import { Alert, Button, CircularProgress, Stack } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import { apiBase } from '../api';
 
@@ -11,6 +13,7 @@ interface PhotoUploaderProps {
 }
 
 export function PhotoUploader({ token, passId, anonymousId, onUploaded }: PhotoUploaderProps) {
+  const { t } = useTranslation('visitors');
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function PhotoUploader({ token, passId, anonymousId, onUploaded }: PhotoU
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
-        {uploading ? 'Uploading…' : 'Capture Photo'}
+        {uploading ? t('photoUploader.uploading') : t('photoUploader.capture')}
       </Button>
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
     </Stack>

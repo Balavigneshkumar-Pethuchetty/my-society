@@ -1,0 +1,56 @@
+{
+  "page": {
+    "title": "My Registrations",
+    "subtitle": "Track payment status and upload screenshots for pending registrations.",
+    "myTickets": "My Tickets"
+  },
+  "login": {
+    "prompt": "Please log in to view your registrations.",
+    "cta": "Go to Login"
+  },
+  "empty": {
+    "title": "No registrations yet",
+    "subtitle": "Register for an event to see your registration status here.",
+    "cta": "Browse Events"
+  },
+  "sections": {
+    "pending": "Awaiting Payment Upload ({{count}})",
+    "reviewing": "Under Review ({{count}})",
+    "rejected": "Payment Rejected — Action Required ({{count}})",
+    "confirmed": "Confirmed ({{count}})"
+  },
+  "status": {
+    "confirmed": "Confirmed",
+    "attended": "Attended",
+    "cancelled": "Cancelled",
+    "paymentPending": "Payment Pending",
+    "underReview": "Under Review",
+    "paymentRejected": "Payment Rejected"
+  },
+  "amount": {
+    "free": "Free"
+  },
+  "card": {
+    "ticketCount_one": "{{count}} ticket",
+    "ticketCount_other": "{{count}} tickets",
+    "viewTicket": "View Ticket",
+    "uploadPayment": "Upload Payment",
+    "reupload": "Re-upload",
+    "drop": "Drop",
+    "rejectedPrefix": "Rejected: {{notes}}"
+  },
+  "dialog": {
+    "title": "Drop Registration",
+    "confirmText": "Drop your registration for \"{{title}}\"?",
+    "refundNote": "A refund request will be sent to the committee if a payment is on file for it.",
+    "upiLabel": "UPI ID to send the refund to (optional)",
+    "upiPlaceholder": "e.g. yourname@okhdfcbank",
+    "upiHelper": "Leave blank to let the committee use the UPI ID from your original payment, if any.",
+    "keep": "Keep Registration",
+    "dropIt": "Drop It"
+  },
+  "notices": {
+    "droppedWithRefund": "Registration dropped. A refund request has been sent to the committee for approval.",
+    "dropped": "Registration dropped."
+  }
+}

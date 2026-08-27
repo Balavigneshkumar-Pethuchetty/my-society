@@ -1,0 +1,260 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "download": "Download",
+    "share": "Share",
+    "photosCount": "Photos ({{count}})",
+    "dash": "—",
+    "status": {
+      "pending": "pending",
+      "partially_entered": "partially entered",
+      "entered": "entered",
+      "partially_exited": "partially exited",
+      "exited": "exited",
+      "cancelled": "cancelled",
+      "expired": "expired"
+    }
+  },
+  "phoneInput": {
+    "defaultLabel": "Phone number",
+    "countryCodeAria": "Country code",
+    "searchPlaceholder": "Search country or code",
+    "noCountriesMatch": "No countries match \"{{search}}\"",
+    "storedAs": "Stored as {{number}}"
+  },
+  "photoUploader": {
+    "capture": "Capture Photo",
+    "uploading": "Uploading…"
+  },
+  "resident": {
+    "purposeOptions": [
+      "Delivery",
+      "Guest Visit",
+      "Cab / Driver",
+      "Domestic Help",
+      "Maintenance / Repair Work",
+      "Interview",
+      "Function / Event",
+      "Courier",
+      "Vendor"
+    ],
+    "validation": {
+      "requiredFields": "Visitor name, purpose, and validity period are required.",
+      "validToAfterFrom": "\"Valid To\" must be after \"Valid From\".",
+      "minVisitors": "Number of visitors must be at least 1.",
+      "invalidPhone": "Please enter a complete contact number.",
+      "invalidEmail": "Please enter a valid email address.",
+      "nameAndPurposeRequired": "Visitor name and purpose cannot be empty.",
+      "cantReduceBelowEntered": "Number of visitors can't be less than the {{count}} already entered."
+    },
+    "createDialog": {
+      "title": "Create Visitor Pass",
+      "categoryQuestion": "Who is this pass for?",
+      "categoryFamily": "Family Member",
+      "categoryOther": "Guest / Other",
+      "categoryHint": "Just changes the look of the pass — family gets a warm welcome theme, others get a standard access-pass theme.",
+      "nameLabel": "Visitor Name",
+      "nameHelper": "Group lead / primary contact if this pass covers more than one person",
+      "purposeLabel": "Purpose of Visit",
+      "validFromLabel": "Valid From",
+      "validToLabel": "Valid To",
+      "countLabel": "Number of Visitors",
+      "countHelper": "More than 1 for a family/group visiting on the same pass — security can let them in together or in batches.",
+      "additionalNamesLabel": "Additional Visitor Names (optional)",
+      "additionalNamesPlaceholder": "e.g. Ravi, Sita, Meena…",
+      "contactLabel": "Contact Number (optional)",
+      "emailLabel": "Email (optional)",
+      "aadhaarLabel": "Aadhaar Number (optional)",
+      "addressLabel": "Address (optional)",
+      "vehicleLabel": "Vehicle Number (optional)",
+      "vehicleHelper": "If the guest is coming by car/bike — security can also add or correct this at the gate",
+      "submit": "Create Pass"
+    },
+    "detailDialog": {
+      "downloadAlt": "Visitor pass",
+      "createdBy": "Created by: {{name}}",
+      "status": "Status:",
+      "categoryFamily": "Family",
+      "categoryGuest": "Guest",
+      "valid": "Valid: {{from}} → {{to}}",
+      "group": "Group: {{entered}}/{{count}} entered",
+      "groupExited": ", {{count}} exited",
+      "also": "Also with: {{names}}",
+      "vehicle": "Vehicle: {{number}}",
+      "entered": "Entered: {{time}}",
+      "exited": "Exited: {{time}}",
+      "phoneVerification": "Phone verification: {{status}}",
+      "extendValidity": "Extend Validity",
+      "verifyPhone": "Verify Phone",
+      "newValidToLabel": "New Valid To",
+      "confirmExtension": "Confirm Extension",
+      "saveChanges": "Save Changes",
+      "editCountHelper": "Raise this to let more people in — {{count}} already entered",
+      "deleteTitle": "Delete Visitor Pass",
+      "deleteBody": "Delete the pass for \"{{name}}\"? This cannot be undone, and security will be notified.",
+      "keepPass": "Keep Pass",
+      "deletePass": "Delete Pass",
+      "validityExtended": "Validity extended.",
+      "updated": "Visitor pass updated — security has been notified.",
+      "verificationSent": "Verification code sent{{via}}.",
+      "verificationSentVia": " via {{via}}",
+      "verificationFailed": "Could not send verification code."
+    },
+    "card": {
+      "byResident": "by {{name}}",
+      "arrived": "Arrived {{time}}",
+      "left": "· Left {{time}}"
+    },
+    "anonymousCard": {
+      "walkInFallback": "Walk-in visitor (no QR pass)"
+    },
+    "anonymousDialog": {
+      "titleFallback": "Walk-in Visitor",
+      "purpose": "Purpose: {{purpose}}",
+      "loggedAtGate": "Logged at gate: {{time}}",
+      "loggedBy": " by {{name}}",
+      "left": "Left: {{time}}",
+      "leftBy": " ({{name}})",
+      "contact": "Contact: {{contact}}",
+      "vehicle": "Vehicle: {{number}}",
+      "address": "Address: {{address}}",
+      "notes": "Notes: {{notes}}"
+    },
+    "main": {
+      "loginPrompt": "Please log in to manage visitor passes.",
+      "goToLogin": "Go to Login",
+      "title": "Visitor Passes",
+      "subtitle": "Create QR passes for your guests and track entry — includes passes anyone in your household created.",
+      "newPass": "New Pass",
+      "empty": "No visitor passes yet. Create one for your next guest.",
+      "active": "Active ({{count}})",
+      "walkIns": "Walk-in Visitors ({{count}})",
+      "walkInsHint": "Logged directly by security at the gate — no QR pass was created for these (e.g. deliveries, couriers, emergencies).",
+      "history": "History ({{count}})"
+    }
+  },
+  "security": {
+    "callButton": {
+      "defaultLabel": "Call Resident",
+      "callName": "Call {{name}}"
+    },
+    "scan": {
+      "description": "Scan a visitor pass QR to record entry, then scan again on the way out to record exit. For a group pass, scan again anytime to admit or exit the rest.",
+      "stopCamera": "Stop Camera",
+      "startCamera": "Scan with Camera",
+      "or": "OR",
+      "tokenLabel": "Pass QR Token",
+      "tokenPlaceholder": "Scan or paste QR token…",
+      "scanButton": "Scan",
+      "cameraError": "Could not access camera: {{message}}",
+      "groupTitle": "{{name}}'s group",
+      "entryProgress": "{{entered}}/{{count}} entered so far — {{remaining}} more expected.",
+      "exitProgress": "{{exited}}/{{entered}} exited so far — {{remaining}} still inside.",
+      "admittingNow": "Admitting now",
+      "exitingNow": "Exiting now",
+      "confirmEntry": "Confirm Entry",
+      "confirmExit": "Confirm Exit",
+      "overrideHint": "You can admit/exit more than what's technically remaining — it will never be blocked, only noted.",
+      "alreadyExited": "This pass has already exited.",
+      "entryAdmittedNow": "{{admitted}} admitted just now — {{entered}}/{{count}} entered.",
+      "exitAdmittedNow": "{{admitted}} exited just now — {{exited}}/{{entered}} exited.",
+      "overExpected": "More people have entered ({{entered}}) than the {{count}} originally expected.",
+      "entryTime": "Entry: {{time}}",
+      "exitTime": "Exit: {{time}}"
+    },
+    "anonymous": {
+      "description": "Log a walk-in visitor with no pre-registered QR pass — ambulance, delivery, emergency worker, etc. Only Purpose is required; add the rest only if there's time.",
+      "purposeRequired": "Purpose is required.",
+      "purposeLabel": "Purpose",
+      "nameLabel": "Visitor Name (optional)",
+      "contactLabel": "Contact Number (optional)",
+      "emailLabel": "Email (optional)",
+      "aadhaarLabel": "Aadhaar Number (optional)",
+      "addressLabel": "Address (optional)",
+      "vehicleLabel": "Vehicle Number (optional)",
+      "vehiclePlaceholder": "e.g. TN 09 AB 1234",
+      "notesLabel": "Notes (optional)",
+      "submit": "Log Visitor",
+      "loggedAt": "Logged at {{time}}"
+    },
+    "today": {
+      "passesTitle": "Visitor Passes ({{count}})",
+      "noPasses": "No passes expected or active today.",
+      "visiting": "visiting {{name}}",
+      "vehicleLabel": "Vehicle number",
+      "vehiclePlaceholder": "e.g. TN 09 AB 1234",
+      "save": "Save",
+      "phoneCodeLabel": "Phone code",
+      "verify": "Verify",
+      "anonymousTitle": "Anonymous / Emergency Visitors ({{count}})",
+      "noAnonymous": "None logged today.",
+      "exitedChip": "exited",
+      "markExit": "Mark Exit",
+      "phoneVerified": "Phone verified successfully.",
+      "incorrectCode": "Incorrect code.",
+      "vehicleUpdated": "Vehicle number updated."
+    },
+    "directory": {
+      "description": "Everyone with a flat on record — residents, admins, committee members — not just ones with an active visitor pass right now. For emergencies (fire, medical, etc.) where you need to reach someone directly.",
+      "searchPlaceholder": "Search by name, flat, or phone…",
+      "noResidents": "No residents found.",
+      "noMatch": "No residents match \"{{search}}\".",
+      "noFlat": "No flat on record",
+      "call": "Call"
+    },
+    "main": {
+      "loginRequired": "You must be logged in to use the visitor gate.",
+      "title": "Visitor Gate",
+      "subtitle": "Scan visitor passes, log walk-ins, capture photos, and verify identity.",
+      "tabs": {
+        "scan": "Scan Pass",
+        "anonymous": "Anonymous Entry",
+        "today": "Today's Activity",
+        "directory": "Resident Directory"
+      }
+    }
+  },
+  "admin": {
+    "title": "Visitor Ledger",
+    "subtitle": "All visitor passes and anonymous entries, with photos and Aadhaar/identity status.",
+    "filtersTitle": "Filters",
+    "fromLabel": "From",
+    "toLabel": "To",
+    "purposeLabel": "Purpose contains",
+    "statusLabel": "Status",
+    "statusAll": "All",
+    "statusOptions": {
+      "pending": "Pending",
+      "partially_entered": "Partially entered",
+      "entered": "Entered",
+      "partially_exited": "Partially exited",
+      "exited": "Exited",
+      "cancelled": "Cancelled",
+      "expired": "Expired"
+    },
+    "clear": "Clear",
+    "exportExcel": "Export Excel",
+    "exportPdf": "Export PDF",
+    "table": {
+      "visitor": "Visitor",
+      "purpose": "Purpose",
+      "resident": "Resident",
+      "status": "Status",
+      "visitors": "Visitors",
+      "entry": "Entry",
+      "exit": "Exit",
+      "photo": "Photo",
+      "aadhaar": "Aadhaar",
+      "outSuffix": "({{count}} out)"
+    },
+    "empty": "No visitor records match these filters.",
+    "walkIn": "Walk-in",
+    "registeredPass": "Registered pass",
+    "aadhaarTooltip": "Aadhaar provided (verification not implemented)",
+    "loginRequired": "You must be logged in to view the visitor ledger.",
+    "aadhaarNotice": "Aadhaar verification is a future integration — the Aadhaar column only shows whether a number was captured on the pass, not whether it has been verified against any government API."
+  }
+}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Box, Card, CardContent, Chip, Grid, Typography } from '@mui/material';
 
 export type ServiceAction = {
@@ -25,6 +26,7 @@ export type ServiceTile = {
 // pre-login Landing page and the post-login Home dashboard so the two
 // never drift out of sync when a new service goes live.
 export function ServicesGrid({ services }: { services: ServiceTile[] }) {
+  const { t } = useTranslation('shell');
   return (
     <Grid container spacing={3}>
       {services.map((s) => (
@@ -44,7 +46,7 @@ export function ServicesGrid({ services }: { services: ServiceTile[] }) {
             }}
           >
             <Chip
-              label={s.status === 'live' ? 'Live' : 'Coming Soon'}
+              label={s.status === 'live' ? t('common.live') : t('common.comingSoonChip')}
               size="small"
               sx={{
                 position: 'absolute', top: 14, right: 14,

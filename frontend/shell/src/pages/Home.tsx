@@ -1,5 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Box, Button, Container, Typography,
@@ -24,90 +26,90 @@ import { ROADMAP } from '../data/roadmap';
 import { ServicesGrid, ServiceTile } from '../components/ServicesGrid';
 
 type Slot = { icon: React.ReactNode; title: string; desc: string; path: string; cta: string; color: string };
+// `id` maps to home.slots.<id>.{title,desc,cta} in the i18n locale files.
+type SlotBase = { id: string; icon: React.ReactNode; path: string; color: string };
+
+function translateSlot(t: TFunction, base: SlotBase): Slot {
+  return {
+    icon: base.icon,
+    path: base.path,
+    color: base.color,
+    title: t(`home.slots.${base.id}.title`),
+    desc: t(`home.slots.${base.id}.desc`),
+    cta: t(`home.slots.${base.id}.cta`),
+  };
+}
 
 // Base card info for the two live services — role-specific quick actions
 // get attached to these (as `actions`) inside Home() and rendered inline in
 // the card by ServicesGrid, instead of in a separate section below the grid.
-const EVENTS_SERVICE_BASE = {
-  icon: <EventIcon sx={{ fontSize: 30 }} />,
-  color: '#6366f1',
-  title: 'Events & Ticketing',
-  desc: 'Browse, book and attend community events with digital QR-code tickets for gate entry.',
-};
+const EVENTS_SERVICE_BASE_ID = 'eventsTicketing';
+const EVENTS_SERVICE_ICON = <EventIcon sx={{ fontSize: 30 }} />;
+const EVENTS_SERVICE_COLOR = '#6366f1';
 
-const VISITOR_SERVICE_BASE = {
-  icon: <HowToRegIcon sx={{ fontSize: 30 }} />,
-  color: '#ec4899',
-  title: 'Visitor Management',
-  desc: 'Residents create QR visitor passes for guests; security scans them at the gate or logs walk-ins directly.',
-};
+const VISITOR_SERVICE_BASE_ID = 'visitorManagement';
+const VISITOR_SERVICE_ICON = <HowToRegIcon sx={{ fontSize: 30 }} />;
+const VISITOR_SERVICE_COLOR = '#ec4899';
 
 // Event Management & Ticketing slots — kept in their own section, separate
 // from Visitor Management, per role.
-const RESIDENT_EVENT_SLOTS: Slot[] = [
-  { icon: <EventIcon sx={{ fontSize: 28 }} />,             title: 'Events',         desc: 'Browse upcoming festivals, sports days, wellness sessions and more.',        path: '/events',   cta: 'Browse Events',     color: '#6366f1' },
-  { icon: <ConfirmationNumberIcon sx={{ fontSize: 28 }} />, title: 'My Tickets',    desc: 'View your registrations and show the QR code at the gate.',                  path: '/tickets',  cta: 'View Tickets',      color: '#10b981' },
-  { icon: <PaymentsIcon sx={{ fontSize: 28 }} />,           title: 'Payments',      desc: 'Check payment history and manage refunds.',                                  path: '/payments', cta: 'Payment History',   color: '#f59e0b' },
+const RESIDENT_EVENT_SLOTS: SlotBase[] = [
+  { id: 'events',       icon: <EventIcon sx={{ fontSize: 28 }} />,              path: '/events',   color: '#6366f1' },
+  { id: 'myTickets',    icon: <ConfirmationNumberIcon sx={{ fontSize: 28 }} />, path: '/tickets',  color: '#10b981' },
+  { id: 'payments',     icon: <PaymentsIcon sx={{ fontSize: 28 }} />,           path: '/payments', color: '#f59e0b' },
 ];
 
-const COMMITTEE_EVENT_EXTRA: Slot[] = [
-  { icon: <EditCalendarIcon sx={{ fontSize: 28 }} />,       title: 'Manage Events', desc: 'Create, publish and manage events. Post announcements to registered users.', path: '/manage',   cta: 'Go to Event Manager', color: '#0ea5e9' },
+const COMMITTEE_EVENT_EXTRA: SlotBase[] = [
+  { id: 'manageEvents', icon: <EditCalendarIcon sx={{ fontSize: 28 }} />,       path: '/manage',   color: '#0ea5e9' },
 ];
 
-const ADMIN_EVENT_EXTRA: Slot[] = [
-  { icon: <AdminPanelSettingsIcon sx={{ fontSize: 28 }} />, title: 'Admin Panel',   desc: 'User roles, revenue reports, categories and society settings.',              path: '/admin',    cta: 'Open Admin Panel',  color: '#7c3aed' },
+const ADMIN_EVENT_EXTRA: SlotBase[] = [
+  { id: 'adminPanel',   icon: <AdminPanelSettingsIcon sx={{ fontSize: 28 }} />, path: '/admin',    color: '#7c3aed' },
 ];
 
-const GUARD_EVENT_SLOTS: Slot[] = [
-  { icon: <QrCodeScannerIcon sx={{ fontSize: 28 }} />,  title: 'QR Scanner',       desc: 'Scan resident tickets at the entry gate to mark attendance.',                                path: '/scanner',  cta: 'Open Scanner',         color: '#10b981' },
-  { icon: <FactCheckIcon sx={{ fontSize: 28 }} />,      title: 'Entry Log',        desc: "Today's attendance log — who has checked in and when.",                                      path: '/entry-log', cta: 'View Entry Log',      color: '#6366f1' },
-  { icon: <EventIcon sx={{ fontSize: 28 }} />,          title: 'Events',           desc: 'Browse upcoming events (view only).',                                                        path: '/events',   cta: 'Browse Events',         color: '#94a3b8' },
+const GUARD_EVENT_SLOTS: SlotBase[] = [
+  { id: 'qrScanner',      icon: <QrCodeScannerIcon sx={{ fontSize: 28 }} />, path: '/scanner',   color: '#10b981' },
+  { id: 'entryLog',       icon: <FactCheckIcon sx={{ fontSize: 28 }} />,     path: '/entry-log', color: '#6366f1' },
+  { id: 'eventsViewOnly', icon: <EventIcon sx={{ fontSize: 28 }} />,         path: '/events',    color: '#94a3b8' },
 ];
 
-const SPONSOR_EVENT_SLOTS: Slot[] = [
-  { icon: <MonetizationOnIcon sx={{ fontSize: 28 }} />, title: 'My Sponsorships', desc: 'View events you are sponsoring, track contribution status, and raise refund requests.', path: '/sponsor',  cta: 'View Sponsorships',     color: '#7c3aed' },
-  { icon: <EventIcon sx={{ fontSize: 28 }} />,          title: 'Browse Events',   desc: 'Explore upcoming community events to discover sponsorship opportunities.',                path: '/events',   cta: 'Browse Events',         color: '#6366f1' },
+const SPONSOR_EVENT_SLOTS: SlotBase[] = [
+  { id: 'mySponsorships', icon: <MonetizationOnIcon sx={{ fontSize: 28 }} />, path: '/sponsor', color: '#7c3aed' },
+  { id: 'browseEvents',   icon: <EventIcon sx={{ fontSize: 28 }} />,          path: '/events',  color: '#6366f1' },
 ];
 
 // Visitor Management slots — its own section, never mixed into the events
 // menus/options above.
-const RESIDENT_VISITOR_SLOTS: Slot[] = [
-  { icon: <BadgeIcon sx={{ fontSize: 28 }} />,              title: 'Visitor Passes', desc: 'Create QR visitor passes for guests and track entry/exit.',                 path: '/visitors', cta: 'Manage Visitors',   color: '#ec4899' },
+const RESIDENT_VISITOR_SLOTS: SlotBase[] = [
+  { id: 'visitorPasses', icon: <BadgeIcon sx={{ fontSize: 28 }} />,       path: '/visitors',        color: '#ec4899' },
 ];
 
-const COMMITTEE_VISITOR_EXTRA: Slot[] = [
-  { icon: <ListAltIcon sx={{ fontSize: 28 }} />,            title: 'Visitor Ledger', desc: 'Review visitor logs, photos, and export reports.',                          path: '/visitors/ledger', cta: 'Open Ledger',  color: '#0891b2' },
+const COMMITTEE_VISITOR_EXTRA: SlotBase[] = [
+  { id: 'visitorLedger', icon: <ListAltIcon sx={{ fontSize: 28 }} />,     path: '/visitors/ledger', color: '#0891b2' },
 ];
 
-const GUARD_VISITOR_SLOTS: Slot[] = [
-  { icon: <MeetingRoomIcon sx={{ fontSize: 28 }} />,    title: 'Visitor Gate',     desc: 'Scan visitor passes, log walk-ins, capture photos, and verify identity.',                     path: '/visitors/gate', cta: 'Open Visitor Gate', color: '#ec4899' },
+const GUARD_VISITOR_SLOTS: SlotBase[] = [
+  { id: 'visitorGate',   icon: <MeetingRoomIcon sx={{ fontSize: 28 }} />, path: '/visitors/gate',   color: '#ec4899' },
 ];
 
-function useMfeSlots(role: string): { events: Slot[]; visitor: Slot[] } {
-  if (role === 'security_guard') return { events: GUARD_EVENT_SLOTS, visitor: GUARD_VISITOR_SLOTS };
-  if (role === 'sponsor')        return { events: SPONSOR_EVENT_SLOTS, visitor: [] };
+function useMfeSlots(role: string, t: TFunction): { events: Slot[]; visitor: Slot[] } {
+  const tr = (slots: SlotBase[]) => slots.map((s) => translateSlot(t, s));
+  if (role === 'security_guard') return { events: tr(GUARD_EVENT_SLOTS), visitor: tr(GUARD_VISITOR_SLOTS) };
+  if (role === 'sponsor')        return { events: tr(SPONSOR_EVENT_SLOTS), visitor: [] };
   if (role === 'admin') {
     return {
-      events: [...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA, ...ADMIN_EVENT_EXTRA],
-      visitor: [...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA],
+      events: tr([...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA, ...ADMIN_EVENT_EXTRA]),
+      visitor: tr([...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA]),
     };
   }
   if (role === 'committee_member') {
     return {
-      events: [...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA],
-      visitor: [...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA],
+      events: tr([...RESIDENT_EVENT_SLOTS, ...COMMITTEE_EVENT_EXTRA]),
+      visitor: tr([...RESIDENT_VISITOR_SLOTS, ...COMMITTEE_VISITOR_EXTRA]),
     };
   }
-  return { events: RESIDENT_EVENT_SLOTS, visitor: RESIDENT_VISITOR_SLOTS };
+  return { events: tr(RESIDENT_EVENT_SLOTS), visitor: tr(RESIDENT_VISITOR_SLOTS) };
 }
-
-const ROLE_WELCOME: Record<string, string> = {
-  admin:            'You have full admin access across your society\'s services — starting with events, and growing.',
-  committee_member: 'Create and manage events, and register for them just like any resident.',
-  resident:         'Your society, in one place — events and tickets today, with more services on the way.',
-  security_guard:   'Use the QR scanner below to verify resident tickets at the gate.',
-  sponsor:          'Track your sponsorships, monitor event funding, and manage refund requests.',
-};
 
 const DEBUG_ROWS = (
   user: ReturnType<typeof useAuth>['user'],
@@ -127,26 +129,39 @@ const DEBUG_ROWS = (
 ] as const;
 
 export function Home() {
+  const { t }               = useTranslation('shell');
   const { user }           = useAuth();
   const { name, city }     = useSociety();
   const { dbUser }         = useUserService();
   const firstName          = user?.name.split(' ')[0] ?? 'there';
   const role               = user?.primaryRole ?? 'resident';
-  const roleHint           = ROLE_WELCOME[role];
-  const { events: eventSlots, visitor: visitorSlots } = useMfeSlots(role);
+  const roleHint           = t(`home.roleWelcome.${role}`);
+  const { events: eventSlots, visitor: visitorSlots } = useMfeSlots(role, t);
   const apt                = dbUser?.apartments[0];
 
   // Live service cards carry their own role-specific quick actions inline
   // (rendered by ServicesGrid) instead of separate sections below the grid.
   const liveServices: ServiceTile[] = [
-    { ...EVENTS_SERVICE_BASE, status: 'live', actions: eventSlots },
+    {
+      icon: EVENTS_SERVICE_ICON, color: EVENTS_SERVICE_COLOR,
+      title: t(`services.${EVENTS_SERVICE_BASE_ID}.title`), desc: t(`services.${EVENTS_SERVICE_BASE_ID}.desc`),
+      status: 'live', actions: eventSlots,
+    },
     ...(visitorSlots.length > 0
-      ? [{ ...VISITOR_SERVICE_BASE, status: 'live' as const, actions: visitorSlots }]
+      ? [{
+          icon: VISITOR_SERVICE_ICON, color: VISITOR_SERVICE_COLOR,
+          title: t(`services.${VISITOR_SERVICE_BASE_ID}.title`), desc: t(`services.${VISITOR_SERVICE_BASE_ID}.desc`),
+          status: 'live' as const, actions: visitorSlots,
+        }]
       : []),
   ];
   const servicesOverview: ServiceTile[] = role === 'security_guard'
     ? liveServices
-    : [...liveServices, ...ROADMAP.map((r) => ({ ...r, status: 'soon' as const }))];
+    : [...liveServices, ...ROADMAP.map((r) => ({
+        icon: r.icon, color: r.color,
+        title: t(`services.${r.id}.title`), desc: t(`services.${r.id}.desc`),
+        status: 'soon' as const,
+      }))];
 
   return (
     <Box component="main">
@@ -158,12 +173,12 @@ export function Home() {
             {name} · {city}
           </Typography>
           <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.15, mb: 1.25, fontSize: { xs: 26, md: 36 } }}>
-            Welcome back, {firstName} 👋
+            {t('home.welcomeBack', { name: firstName })}
           </Typography>
           <Typography sx={{ fontSize: 16, color: '#c7d2fe', mb: apt ? 2 : 3.5 }}>{roleHint}</Typography>
           {apt && (
             <Typography sx={{ fontSize: 13, color: '#a5b4fc', mb: 3, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              🏠 Block {apt.block} — Flat {apt.unit_number} ({apt.type})
+              {t('home.unitLine', { block: apt.block, unit: apt.unit_number, type: apt.type })}
             </Typography>
           )}
           <Button
@@ -173,7 +188,7 @@ export function Home() {
             size="large"
             sx={{ fontWeight: 600, px: 3.5, bgcolor: 'primary.main', '&:hover': { bgcolor: '#4f46e5' } }}
           >
-            Browse Events →
+            {t('home.browseEventsCta')}
           </Button>
         </Container>
       </Box>
@@ -184,12 +199,10 @@ export function Home() {
       <Box sx={{ py: 6, px: { xs: 2, sm: 3 } }}>
         <Container maxWidth="lg">
           <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
-            {role === 'security_guard' ? 'Your services' : 'All society services'}
+            {role === 'security_guard' ? t('home.sectionTitleGuard') : t('home.sectionTitleAll')}
           </Typography>
           <Typography fontSize={14} color="text.secondary" sx={{ mb: 3 }}>
-            {role === 'security_guard'
-              ? 'Quick access to your gate operations.'
-              : "Events & Ticketing and Visitor Management are live today — jump straight in from each card below. Here's everything else coming to the platform."}
+            {role === 'security_guard' ? t('home.sectionSubtitleGuard') : t('home.sectionSubtitleAll')}
           </Typography>
           <ServicesGrid services={servicesOverview} />
         </Container>

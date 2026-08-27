@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import './i18n';
 import {
   Alert, Box, Button, Chip, CircularProgress, Container,
   Dialog, DialogActions, DialogContent, DialogTitle,
@@ -42,26 +44,27 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtAmount(amount: number) {
-  if (amount === 0) return 'Free';
+function fmtAmount(amount: number, t: (key: string) => string) {
+  if (amount === 0) return t('amount.free');
   return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 }
 
-function statusInfo(reg: Registration): { label: string; color: 'success' | 'warning' | 'info' | 'error' | 'default'; icon: React.ReactNode } {
+function statusInfo(reg: Registration, t: (key: string) => string): { label: string; color: 'success' | 'warning' | 'info' | 'error' | 'default'; icon: React.ReactNode } {
   const ps = reg.payment?.status;
-  if (reg.status === 'confirmed')     return { label: 'Confirmed',        color: 'success', icon: <CheckCircleIcon /> };
-  if (reg.status === 'attended')      return { label: 'Attended',         color: 'success', icon: <CheckCircleIcon /> };
-  if (reg.status === 'cancelled')     return { label: 'Cancelled',        color: 'error',   icon: <ErrorOutlineIcon /> };
-  if (ps === 'pending_screenshot')    return { label: 'Payment Pending',  color: 'warning', icon: <PaymentIcon /> };
-  if (ps === 'pending_review')        return { label: 'Under Review',     color: 'info',    icon: <HourglassTopIcon /> };
-  if (ps === 'rejected')              return { label: 'Payment Rejected', color: 'error',   icon: <ErrorOutlineIcon /> };
+  if (reg.status === 'confirmed')     return { label: t('status.confirmed'),        color: 'success', icon: <CheckCircleIcon /> };
+  if (reg.status === 'attended')      return { label: t('status.attended'),         color: 'success', icon: <CheckCircleIcon /> };
+  if (reg.status === 'cancelled')     return { label: t('status.cancelled'),        color: 'error',   icon: <ErrorOutlineIcon /> };
+  if (ps === 'pending_screenshot')    return { label: t('status.paymentPending'),   color: 'warning', icon: <PaymentIcon /> };
+  if (ps === 'pending_review')        return { label: t('status.underReview'),      color: 'info',    icon: <HourglassTopIcon /> };
+  if (ps === 'rejected')              return { label: t('status.paymentRejected'),  color: 'error',   icon: <ErrorOutlineIcon /> };
   return { label: reg.status, color: 'default', icon: <ConfirmationNumberIcon /> };
 }
 
 // ── Registration card ─────────────────────────────────────────────────────────
 
 function RegCard({ reg, token, onCancelled }: { reg: Registration; token: string; onCancelled: (message: string) => void }) {
-  const { label, color, icon } = statusInfo(reg);
+  const { t } = useTranslation('booking');
+  const { label, color, icon } = statusInfo(reg, t);
   const colorBar = reg.event_image_color ?? '#6366f1';
   const isConfirmed = reg.status === 'confirmed' || reg.status === 'attended';
   const [cancelling, setCancelling]   = useState(false);
@@ -81,8 +84,8 @@ function RegCard({ reg, token, onCancelled }: { reg: Registration; token: string
       const body: { refund_requested?: boolean } = res.status === 204 ? {} : await res.json();
       setCancelOpen(false);
       onCancelled(body.refund_requested
-        ? 'Registration dropped. A refund request has been sent to the committee for approval.'
-        : 'Registration dropped.');
+        ? t('notices.droppedWithRefund')
+        : t('notices.dropped'));
     } catch {
       setCancelling(false);
     }
@@ -111,33 +114,33 @@ function RegCard({ reg, token, onCancelled }: { reg: Registration; token: string
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            {reg.ticket_count} ticket{reg.ticket_count > 1 ? 's' : ''} · {fmtAmount(reg.total_amount)}
+            {t('card.ticketCount', { count: reg.ticket_count })} · {fmtAmount(reg.total_amount, t)}
           </Typography>
 
           <Stack direction="row" spacing={1}>
             {isConfirmed && (
               <Button size="small" variant="outlined" startIcon={<QrCode2Icon />}
                 onClick={() => { window.location.href = '/tickets'; }}>
-                View Ticket
+                {t('card.viewTicket')}
               </Button>
             )}
             {reg.payment?.status === 'pending_screenshot' && (
               <Button size="small" variant="contained" startIcon={<CloudUploadIcon />}
                 onClick={() => { window.location.href = `/checkout?registration_id=${reg.id}`; }}>
-                Upload Payment
+                {t('card.uploadPayment')}
               </Button>
             )}
             {reg.payment?.status === 'rejected' && (
               <Button size="small" variant="outlined" color="error" startIcon={<CloudUploadIcon />}
                 onClick={() => { window.location.href = `/checkout?registration_id=${reg.id}`; }}>
-                Re-upload
+                {t('card.reupload')}
               </Button>
             )}
             {!isConfirmed && (
               <Button size="small" variant="outlined" color="error"
                 startIcon={<DeleteOutlineIcon />}
                 onClick={() => setCancelOpen(true)}>
-                Drop
+                {t('card.drop')}
               </Button>
             )}
           </Stack>
@@ -145,32 +148,32 @@ function RegCard({ reg, token, onCancelled }: { reg: Registration; token: string
 
         {reg.payment?.status === 'rejected' && reg.payment.review_notes && (
           <Alert severity="error" sx={{ mt: 1.5, py: 0.5, fontSize: 12 }}>
-            Rejected: {reg.payment.review_notes}
+            {t('card.rejectedPrefix', { notes: reg.payment.review_notes })}
           </Alert>
         )}
       </Box>
 
       <Dialog open={cancelOpen} onClose={() => !cancelling && setCancelOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Drop Registration</DialogTitle>
+        <DialogTitle>{t('dialog.title')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: reg.total_amount > 0 ? 2 : 0 }}>
-            Drop your registration for "{reg.event_title}"?
-            {reg.total_amount > 0 && ' A refund request will be sent to the committee if a payment is on file for it.'}
+            {t('dialog.confirmText', { title: reg.event_title })}
+            {reg.total_amount > 0 && ` ${t('dialog.refundNote')}`}
           </Typography>
           {reg.total_amount > 0 && (
             <TextField
-              label="UPI ID to send the refund to (optional)"
-              placeholder="e.g. yourname@okhdfcbank"
+              label={t('dialog.upiLabel')}
+              placeholder={t('dialog.upiPlaceholder')}
               value={refundUpi} onChange={e => setRefundUpi(e.target.value)}
               fullWidth size="small" disabled={cancelling}
-              helperText="Leave blank to let the committee use the UPI ID from your original payment, if any."
+              helperText={t('dialog.upiHelper')}
             />
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>Keep Registration</Button>
+          <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>{t('dialog.keep')}</Button>
           <Button variant="contained" color="error" disabled={cancelling} onClick={handleCancel}>
-            {cancelling ? <CircularProgress size={18} color="inherit" /> : 'Drop It'}
+            {cancelling ? <CircularProgress size={18} color="inherit" /> : t('dialog.dropIt')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -185,6 +188,7 @@ export interface BookingAppProps {
 }
 
 export function BookingApp({ token }: BookingAppProps) {
+  const { t } = useTranslation('booking');
   const [regs, setRegs]       = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -204,8 +208,8 @@ export function BookingApp({ token }: BookingAppProps) {
   if (!token) {
     return (
       <Container maxWidth="sm" sx={{ pt: 8, textAlign: 'center' }}>
-        <Typography variant="h6" color="text.secondary" mb={2}>Please log in to view your registrations.</Typography>
-        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>Go to Login</Button>
+        <Typography variant="h6" color="text.secondary" mb={2}>{t('login.prompt')}</Typography>
+        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>{t('login.cta')}</Button>
       </Container>
     );
   }
@@ -227,14 +231,14 @@ export function BookingApp({ token }: BookingAppProps) {
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>My Registrations</Typography>
+          <Typography variant="h5" fontWeight={800}>{t('page.title')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Track payment status and upload screenshots for pending registrations.
+            {t('page.subtitle')}
           </Typography>
         </Box>
         <Button size="small" variant="outlined" startIcon={<QrCode2Icon />}
           onClick={() => { window.location.href = '/tickets'; }}>
-          My Tickets
+          {t('page.myTickets')}
         </Button>
       </Box>
 
@@ -245,12 +249,12 @@ export function BookingApp({ token }: BookingAppProps) {
       {!loading && regs.length === 0 && (
         <Box textAlign="center" py={8}>
           <ConfirmationNumberIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">No registrations yet</Typography>
+          <Typography variant="h6" color="text.secondary">{t('empty.title')}</Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Register for an event to see your registration status here.
+            {t('empty.subtitle')}
           </Typography>
           <Button variant="contained" onClick={() => { window.location.href = '/events'; }}>
-            Browse Events
+            {t('empty.cta')}
           </Button>
         </Box>
       )}
@@ -260,7 +264,7 @@ export function BookingApp({ token }: BookingAppProps) {
           {pending.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="warning.main" fontWeight={700} mb={1.5}>
-                Awaiting Payment Upload ({pending.length})
+                {t('sections.pending', { count: pending.length })}
               </Typography>
               <Stack spacing={1.5}>{pending.map(r => <RegCard key={r.id} reg={r} token={token!} onCancelled={message => { setNotice(message); load(); }} />)}</Stack>
             </Box>
@@ -268,7 +272,7 @@ export function BookingApp({ token }: BookingAppProps) {
           {reviewing.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="info.main" fontWeight={700} mb={1.5}>
-                Under Review ({reviewing.length})
+                {t('sections.reviewing', { count: reviewing.length })}
               </Typography>
               <Stack spacing={1.5}>{reviewing.map(r => <RegCard key={r.id} reg={r} token={token!} onCancelled={message => { setNotice(message); load(); }} />)}</Stack>
             </Box>
@@ -276,7 +280,7 @@ export function BookingApp({ token }: BookingAppProps) {
           {rejected.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="error.main" fontWeight={700} mb={1.5}>
-                Payment Rejected — Action Required ({rejected.length})
+                {t('sections.rejected', { count: rejected.length })}
               </Typography>
               <Stack spacing={1.5}>{rejected.map(r => <RegCard key={r.id} reg={r} token={token!} onCancelled={message => { setNotice(message); load(); }} />)}</Stack>
             </Box>
@@ -284,7 +288,7 @@ export function BookingApp({ token }: BookingAppProps) {
           {confirmed.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="success.main" fontWeight={700} mb={1.5}>
-                Confirmed ({confirmed.length})
+                {t('sections.confirmed', { count: confirmed.length })}
               </Typography>
               <Stack spacing={1.5}>{confirmed.map(r => <RegCard key={r.id} reg={r} token={token!} onCancelled={message => { setNotice(message); load(); }} />)}</Stack>
             </Box>

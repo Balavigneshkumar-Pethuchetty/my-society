@@ -1,0 +1,67 @@
+{
+  "common": {
+    "free": "സൗജന്യം"
+  },
+  "status": {
+    "attended": "പങ്കെടുത്തു",
+    "refunded": "റീഫണ്ട് ചെയ്തു",
+    "refundPending": "റീഫണ്ട് കാത്തിരിക്കുന്നു",
+    "cancelled": "റദ്ദാക്കി",
+    "eventEnded": "ഇവന്റ് അവസാനിച്ചു",
+    "inProgress": "നടക്കുന്നു",
+    "confirmed": "സ്ഥിരീകരിച്ചു"
+  },
+  "ticketCount_one": "{{count}} ടിക്കറ്റ്",
+  "ticketCount_other": "{{count}} ടിക്കറ്റുകൾ",
+  "qrDialog": {
+    "close": "അടയ്ക്കുക",
+    "ticketUsed": "ടിക്കറ്റ് ഉപയോഗിച്ചു",
+    "scannedOn": "{{date}} ന് സ്കാൻ ചെയ്തു",
+    "showQrHint": "പ്രവേശനത്തിനായി ഗേറ്റിൽ ഈ QR കോഡ് കാണിക്കുക",
+    "qrUnavailable": "QR കോഡ് ലഭ്യമല്ല.",
+    "ticketsLabel": "ടിക്കറ്റുകൾ",
+    "paidLabel": "അടച്ചത്",
+    "ticketIdLabel": "ടിക്കറ്റ് ID",
+    "paidReconciledOn": "{{date}} ന് പണമടച്ച് പൊരുത്തപ്പെടുത്തി"
+  },
+  "card": {
+    "paidOn": "{{date}} ന് അടച്ചു",
+    "refunded": "റീഫണ്ട് ചെയ്തു",
+    "refundedOn": "{{date}} ന് റീഫണ്ട് ചെയ്തു",
+    "refundPendingReview": "റീഫണ്ട് കമ്മിറ്റി അവലോകനത്തിനായി കാത്തിരിക്കുന്നു",
+    "cancelledNoRefund": "റദ്ദാക്കി — റീഫണ്ട് രേഖയില്ല",
+    "ticketIdPrefix": "ടിക്കറ്റ് ID: {{id}}",
+    "cancelButton": "റദ്ദാക്കുക",
+    "cancelRefundButton": "റദ്ദാക്കി റീഫണ്ട് നേടുക",
+    "viewEntry": "എൻട്രി കാണുക",
+    "showTicket": "ടിക്കറ്റ് കാണിക്കുക"
+  },
+  "cancelDialog": {
+    "title": "ടിക്കറ്റ് റദ്ദാക്കുക",
+    "confirmText": "\"{{title}}\" എന്നതിനുള്ള നിങ്ങളുടെ ടിക്കറ്റ് റദ്ദാക്കണോ?",
+    "refundNotice": "ഒരു റീഫണ്ട് അഭ്യർത്ഥന കമ്മിറ്റിക്ക് അയയ്ക്കും.",
+    "upiLabel": "റീഫണ്ട് അയയ്ക്കേണ്ട UPI ID (ഓപ്ഷണൽ)",
+    "upiPlaceholder": "ഉദാ. yourname@okhdfcbank",
+    "upiHelper": "ശൂന്യമായി വിടുക — കമ്മിറ്റി നിങ്ങളുടെ യഥാർത്ഥ പേയ്‌മെന്റിന്റെ UPI ID (ഉണ്ടെങ്കിൽ) ഉപയോഗിക്കും.",
+    "keepTicket": "ടിക്കറ്റ് നിലനിർത്തുക",
+    "confirmCancelRefund": "ടിക്കറ്റ് റദ്ദാക്കി റീഫണ്ട് നേടുക",
+    "confirmCancel": "ടിക്കറ്റ് റദ്ദാക്കുക"
+  },
+  "notices": {
+    "cancelledWithRefund": "ടിക്കറ്റ് റദ്ദാക്കി. അംഗീകാരത്തിനായി റീഫണ്ട് അഭ്യർത്ഥന കമ്മിറ്റിക്ക് അയച്ചു.",
+    "cancelledPlain": "ടിക്കറ്റ് റദ്ദാക്കി."
+  },
+  "page": {
+    "title": "എന്റെ ടിക്കറ്റുകൾ",
+    "subtitle": "നിങ്ങളുടെ സ്ഥിരീകരിച്ച ഇവന്റ് ടിക്കറ്റുകളും ഗേറ്റ് പ്രവേശനത്തിനുള്ള QR കോഡുകളും.",
+    "viewAllRegistrations": "എല്ലാ രജിസ്ട്രേഷനുകളും കാണുക",
+    "loginPrompt": "നിങ്ങളുടെ ടിക്കറ്റുകൾ കാണാൻ ദയവായി ലോഗിൻ ചെയ്യുക.",
+    "goToLogin": "ലോഗിനിലേക്ക് പോകുക",
+    "emptyTitle": "ഇതുവരെ ടിക്കറ്റുകൾ ഇല്ല",
+    "emptyDesc": "ഇവിടെ നിങ്ങളുടെ ടിക്കറ്റ് ലഭിക്കാൻ ഒരു ഇവന്റിന് രജിസ്റ്റർ ചെയ്ത് പേയ്‌മെന്റ് പൂർത്തിയാക്കുക.",
+    "browseEvents": "ഇവന്റുകൾ കാണുക",
+    "activeTickets": "സജീവ ടിക്കറ്റുകൾ ({{count}})",
+    "pastEvents": "കഴിഞ്ഞ ഇവന്റുകൾ ({{count}})",
+    "cancelledSection": "റദ്ദാക്കിയവ ({{count}})"
+  }
+}

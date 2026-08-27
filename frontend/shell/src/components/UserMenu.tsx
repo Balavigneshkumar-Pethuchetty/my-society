@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Avatar, Box, Chip, Divider,
   ListItemIcon, Menu, MenuItem, Tooltip, Typography,
@@ -17,6 +18,7 @@ import { avatarUrl } from '../api/userService';
 import { ROLE_COLORS, ROLE_LABELS } from '../theme';
 
 export function UserMenu() {
+  const { t } = useTranslation('shell');
   const { user, logout }   = useAuth();
   const { dbUser }         = useUserService();
   const navigate           = useNavigate();
@@ -30,7 +32,7 @@ export function UserMenu() {
 
   return (
     <>
-      <Tooltip title="Account">
+      <Tooltip title={t('nav.account')}>
         <Box
           component="button"
           onClick={(e) => setAnchor(e.currentTarget)}
@@ -75,7 +77,7 @@ export function UserMenu() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                 <ApartmentIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
                 <Typography fontSize={11} color="text.secondary" noWrap>
-                  Block {apt.block} — {apt.unit_number}
+                  {t('userMenu.unitLabel', { block: apt.block, unit: apt.unit_number })}
                 </Typography>
               </Box>
             )}
@@ -96,18 +98,18 @@ export function UserMenu() {
 
         <MenuItem dense onClick={() => navigate('/profile')} sx={{ gap: 1.25, py: 1.25 }}>
           <ListItemIcon sx={{ minWidth: 0 }}><AccountCircleIcon fontSize="small" /></ListItemIcon>
-          My Profile
+          {t('userMenu.myProfile')}
         </MenuItem>
 
         <MenuItem dense onClick={() => navigate('/tickets')} sx={{ gap: 1.25, py: 1.25 }}>
           <ListItemIcon sx={{ minWidth: 0 }}><ConfirmationNumberIcon fontSize="small" /></ListItemIcon>
-          My Tickets
+          {t('userMenu.myTickets')}
         </MenuItem>
 
         {(user.primaryRole === 'admin' || user.primaryRole === 'committee_member') && (
           <MenuItem dense onClick={() => navigate(user.primaryRole === 'admin' ? '/admin' : '/manage')} sx={{ gap: 1.25, py: 1.25 }}>
             <ListItemIcon sx={{ minWidth: 0 }}><DashboardIcon fontSize="small" /></ListItemIcon>
-            {user.primaryRole === 'admin' ? 'Admin Dashboard' : 'Manage Events'}
+            {user.primaryRole === 'admin' ? t('userMenu.adminDashboard') : t('userMenu.manageEvents')}
           </MenuItem>
         )}
 
@@ -115,12 +117,12 @@ export function UserMenu() {
 
         <MenuItem dense onClick={() => navigate('/profile#leave-society')} sx={{ gap: 1.25, py: 1.25, color: 'error.main' }}>
           <ListItemIcon sx={{ minWidth: 0, color: 'error.main' }}><ExitToAppIcon fontSize="small" /></ListItemIcon>
-          Leave Society
+          {t('userMenu.leaveSociety')}
         </MenuItem>
 
         <MenuItem dense onClick={logout} sx={{ gap: 1.25, py: 1.25, color: 'error.main' }}>
           <ListItemIcon sx={{ minWidth: 0, color: 'error.main' }}><LogoutIcon fontSize="small" /></ListItemIcon>
-          Sign Out
+          {t('userMenu.signOut')}
         </MenuItem>
       </Menu>
     </>

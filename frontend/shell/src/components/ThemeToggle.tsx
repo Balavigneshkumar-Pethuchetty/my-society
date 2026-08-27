@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -6,24 +7,25 @@ import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
 import CheckIcon from '@mui/icons-material/Check';
 import { ThemeMode, useThemeMode } from '../contexts/ThemeModeContext';
 
-const OPTIONS: { mode: ThemeMode; label: string; icon: React.ReactNode }[] = [
-  { mode: 'light',  label: 'Light',  icon: <LightModeIcon fontSize="small" /> },
-  { mode: 'dark',   label: 'Dark',   icon: <DarkModeIcon fontSize="small" /> },
-  { mode: 'system', label: 'System', icon: <SettingsBrightnessIcon fontSize="small" /> },
-];
-
 export function ThemeToggle() {
+  const { t } = useTranslation('shell');
   const { mode, resolvedMode, setMode } = useThemeMode();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const open = Boolean(anchor);
+
+  const OPTIONS: { mode: ThemeMode; label: string; icon: React.ReactNode }[] = [
+    { mode: 'light',  label: t('theme.light'),  icon: <LightModeIcon fontSize="small" /> },
+    { mode: 'dark',   label: t('theme.dark'),   icon: <DarkModeIcon fontSize="small" /> },
+    { mode: 'system', label: t('theme.system'), icon: <SettingsBrightnessIcon fontSize="small" /> },
+  ];
 
   const CurrentIcon = resolvedMode === 'dark' ? DarkModeIcon : LightModeIcon;
 
   return (
     <>
-      <Tooltip title="Theme">
+      <Tooltip title={t('theme.tooltip')}>
         <IconButton
-          aria-label="Change theme"
+          aria-label={t('theme.changeThemeAria')}
           aria-haspopup="true"
           aria-expanded={open}
           onClick={(e) => setAnchor(e.currentTarget)}

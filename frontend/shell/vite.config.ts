@@ -35,6 +35,12 @@ export default defineConfig(({ command, mode }) => ({
         '@mui/material':   { singleton: true, eager: true, requiredVersion: '^5.16.7' },
         '@emotion/react':  { singleton: true, eager: true, requiredVersion: '^11.13.0' },
         '@emotion/styled': { singleton: true, eager: true, requiredVersion: '^11.13.0' },
+        // Shared as a singleton so a language change made in the shell (or any
+        // MFE) is reflected everywhere instantly — every remote's
+        // useTranslation() reads off the exact same runtime i18next instance.
+        // See src/i18n/index.ts.
+        i18next:           { singleton: true, eager: true, requiredVersion: '^26.3.6' },
+        'react-i18next':   { singleton: true, eager: true, requiredVersion: '^17.0.11' },
       } as any,
     }),
   ],

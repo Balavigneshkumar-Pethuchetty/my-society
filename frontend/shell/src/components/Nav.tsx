@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AppBar, Toolbar, Box, Button, Drawer,
   IconButton, List, ListItemButton, ListItemText,
@@ -14,27 +15,11 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { useAuth } from '../contexts/AuthContext';
 import { useSociety } from '../contexts/SocietyContext';
 import { NAV_BG } from '../theme';
 import { ROADMAP } from '../data/roadmap';
-
-// Other platform services, not yet live — shown muted/disabled in the nav
-// so residents see the platform is more than events, without implying
-// these are clickable today. Kept in sync with the shared ROADMAP data.
-const MORE_SERVICES = ROADMAP.map((r) => r.title);
-
-// Links grouped under the "Events & Ticketing" nav dropdown
-const EVENTS_LINKS = [
-  { label: 'Browse Events',     to: '/events',         end: false },
-  { label: 'My Tickets',        to: '/tickets',        end: false },
-  { label: 'My Registrations',  to: '/registrations',  end: false },
-];
-
-// Links grouped under the separate "Visitor Management" nav dropdown
-const VISITOR_LINKS = [
-  { label: 'Visitor Passes',    to: '/visitors',       end: false },
-];
 
 const navBtnSx = {
   color: 'rgba(203,213,225,0.9)',
@@ -46,6 +31,7 @@ const navBtnSx = {
 };
 
 export function Nav() {
+  const { t } = useTranslation('shell');
   const { shortName, name } = useSociety();
   const { user, login, register } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -59,32 +45,46 @@ export function Nav() {
 
   const isSponsor = role === 'sponsor';
 
+  // Other platform services, not yet live — shown muted/disabled in the nav
+  // so residents see the platform is more than events, without implying
+  // these are clickable today. Kept in sync with the shared ROADMAP data.
+  const MORE_SERVICES = ROADMAP.map((r) => t(`services.${r.id}.title`));
+
+  // Links grouped under the "Events & Ticketing" nav dropdown
+  const EVENTS_LINKS = [
+    { label: t('nav.browseEvents'),    to: '/events',        end: false },
+    { label: t('nav.myTickets'),       to: '/tickets',       end: false },
+    { label: t('nav.myRegistrations'), to: '/registrations', end: false },
+  ];
+
+  // Links grouped under the separate "Visitor Management" nav dropdown
+  const VISITOR_LINKS = [
+    { label: t('nav.visitorPasses'), to: '/visitors', end: false },
+  ];
+
   // Guard/sponsor accounts keep a short flat link row — grouping only
   // matters where the nav is otherwise crowded with event-only links.
   const flatLinks = isGuard
     ? [
-        { label: 'QR Scanner', to: '/scanner', end: false },
-        { label: 'Visitor Gate', to: '/visitors/gate', end: false },
+        { label: t('nav.qrScanner'), to: '/scanner', end: false },
+        { label: t('nav.visitorGate'), to: '/visitors/gate', end: false },
       ]
     : [
-        { label: 'Events',           to: '/events',  end: false },
-        { label: 'My Sponsorships',  to: '/sponsor', end: false },
+        { label: t('nav.events'),          to: '/events',  end: false },
+        { label: t('nav.mySponsorships'),  to: '/sponsor', end: false },
       ];
+
+  const isAdminRole = role === 'admin' || role === 'committee_member';
 
   const eventsMenuLinks = [
     ...EVENTS_LINKS,
-    ...(role === 'committee_member' || role === 'admin'
-      ? [{ label: 'Manage Events', to: '/manage', end: false }]
-      : []),
-    ...(role === 'admin' || role === 'committee_member'
-      ? [{ label: 'Admin Panel', to: '/admin', end: false }]
-      : []),
+    ...(isAdminRole ? [{ label: t('nav.manageEvents'), to: '/manage', end: false }] : []),
   ];
 
   const visitorMenuLinks = [
     ...VISITOR_LINKS,
     ...(role === 'admin' || role === 'committee_member'
-      ? [{ label: 'Visitor Ledger', to: '/visitors/ledger', end: false }]
+      ? [{ label: t('nav.visitorLedger'), to: '/visitors/ledger', end: false }]
       : []),
   ];
 
@@ -130,13 +130,18 @@ export function Nav() {
                 ))
               ) : (
                 <>
-                  <Button component={NavLink} to="/" end sx={navBtnSx}>Home</Button>
+                  <Button component={NavLink} to="/" end sx={navBtnSx}>{t('nav.home')}</Button>
+                  {isAdminRole && (
+                    <Button component={NavLink} to="/admin" sx={navBtnSx}>
+                      {t('nav.adminPanel')}
+                    </Button>
+                  )}
                   <Button
                     onClick={(e) => setEventsMenuAnchor(e.currentTarget)}
                     endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
                     sx={navBtnSx}
                   >
-                    Events &amp; Ticketing
+                    {t('nav.eventsTicketing')}
                   </Button>
                   <Menu
                     anchorEl={eventsMenuAnchor}
@@ -163,7 +168,7 @@ export function Nav() {
                     endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
                     sx={navBtnSx}
                   >
-                    Visitor Management
+                    {t('nav.visitorManagement')}
                   </Button>
                   <Menu
                     anchorEl={visitorMenuAnchor}
@@ -190,7 +195,7 @@ export function Nav() {
                     endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 18 }} />}
                     sx={navBtnSx}
                   >
-                    More services
+                    {t('nav.moreServices')}
                   </Button>
                   <Menu
                     anchorEl={moreMenuAnchor}
@@ -199,12 +204,12 @@ export function Nav() {
                     PaperProps={{ sx: { bgcolor: NAV_BG, mt: 0.5 } }}
                   >
                     <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1, lineHeight: '28px' }}>
-                      Coming soon
+                      {t('common.comingSoon')}
                     </ListSubheader>
                     {MORE_SERVICES.map((title) => (
                       <MenuItem key={title} disabled sx={{ fontSize: 14, display: 'flex', justifyContent: 'space-between', gap: 2 }}>
                         {title}
-                        <Box component="span" sx={soonTagSx}>SOON</Box>
+                        <Box component="span" sx={soonTagSx}>{t('common.soon')}</Box>
                       </MenuItem>
                     ))}
                   </Menu>
@@ -222,12 +227,13 @@ export function Nav() {
               startIcon={<QrCodeScannerIcon />}
               sx={{ ml: 1, bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, fontWeight: 700 }}
             >
-              Scan QR
+              {t('nav.scanQr')}
             </Button>
           )}
 
           <Box sx={{ flex: 1 }} />
 
+          <LanguageSwitcher />
           <ThemeToggle />
 
           {/* Guest: Sign In + Register buttons */}
@@ -244,7 +250,7 @@ export function Nav() {
                   '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.08)' },
                 }}
               >
-                Sign In
+                {t('nav.signIn')}
               </Button>
               <Button
                 variant="contained"
@@ -252,8 +258,8 @@ export function Nav() {
                 onClick={register}
                 sx={{ fontWeight: 700, bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, px: { xs: 2, sm: 3 } }}
               >
-                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Register</Box>
-                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Join</Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t('nav.register')}</Box>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{t('nav.join')}</Box>
               </Button>
             </Box>
           ) : (
@@ -266,7 +272,7 @@ export function Nav() {
           {/* Mobile hamburger — only for authenticated users */}
           {!isGuest && (
             <IconButton
-              aria-label="Open menu"
+              aria-label={t('nav.openMenu')}
               onClick={() => setDrawerOpen(true)}
               sx={{ display: { md: 'none' }, color: 'rgba(203,213,225,0.9)' }}
             >
@@ -320,11 +326,26 @@ export function Nav() {
                     '&:hover':  { bgcolor: 'rgba(255,255,255,0.08)' },
                   }}
                 >
-                  <ListItemText primary="Home" primaryTypographyProps={{ fontWeight: 500 }} />
+                  <ListItemText primary={t('nav.home')} primaryTypographyProps={{ fontWeight: 500 }} />
                 </ListItemButton>
 
+                {isAdminRole && (
+                  <ListItemButton
+                    component={NavLink}
+                    to="/admin"
+                    onClick={() => setDrawerOpen(false)}
+                    sx={{
+                      color: 'rgba(203,213,225,0.9)',
+                      '&.active': { color: '#fff', bgcolor: 'rgba(99,102,241,0.28)' },
+                      '&:hover':  { bgcolor: 'rgba(255,255,255,0.08)' },
+                    }}
+                  >
+                    <ListItemText primary={t('nav.adminPanel')} primaryTypographyProps={{ fontWeight: 500 }} />
+                  </ListItemButton>
+                )}
+
                 <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>
-                  Events &amp; Ticketing
+                  {t('nav.eventsTicketing')}
                 </ListSubheader>
                 {eventsMenuLinks.map((l) => (
                   <ListItemButton
@@ -345,7 +366,7 @@ export function Nav() {
                 ))}
 
                 <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1, mt: 1 }}>
-                  Visitor Management
+                  {t('nav.visitorManagement')}
                 </ListSubheader>
                 {visitorMenuLinks.map((l) => (
                   <ListItemButton
@@ -366,12 +387,12 @@ export function Nav() {
                 ))}
 
                 <ListSubheader sx={{ bgcolor: 'transparent', color: 'rgba(203,213,225,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: 1, mt: 1 }}>
-                  More services
+                  {t('nav.moreServices')}
                 </ListSubheader>
                 {MORE_SERVICES.map((title) => (
                   <ListItemButton key={title} disabled sx={{ pl: 4 }}>
                     <ListItemText primary={title} primaryTypographyProps={{ fontWeight: 500, color: 'rgba(203,213,225,0.5)' }} />
-                    <Box component="span" sx={soonTagSx}>SOON</Box>
+                    <Box component="span" sx={soonTagSx}>{t('common.soon')}</Box>
                   </ListItemButton>
                 ))}
               </>

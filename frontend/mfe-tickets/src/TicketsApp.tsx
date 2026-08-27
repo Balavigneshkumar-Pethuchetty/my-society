@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Alert, Box, Button, Chip, CircularProgress, Container,
   Dialog, DialogActions, DialogContent, DialogTitle, Divider,
@@ -15,6 +17,7 @@ import HourglassTopIcon       from '@mui/icons-material/HourglassTop';
 import LocationOnIcon         from '@mui/icons-material/LocationOn';
 import QrCode2Icon            from '@mui/icons-material/QrCode2';
 import TaskAltIcon            from '@mui/icons-material/TaskAlt';
+import './i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,44 +59,45 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtAmount(amount: number) {
-  if (amount === 0) return 'Free';
+function fmtAmount(amount: number, t: TFunction) {
+  if (amount === 0) return t('common.free');
   return `₹${Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 }
 
 // Falls back to the plain "N ticket(s)" count for registrations made before per-type
 // breakdown was tracked, or for legacy flat-price events with no real ticket types.
-function ticketBreakdownText(ticket: Ticket): string {
+function ticketBreakdownText(ticket: Ticket, t: TFunction): string {
   if (ticket.ticket_items.length === 0) {
-    return `${ticket.ticket_count} ticket${ticket.ticket_count > 1 ? 's' : ''}`;
+    return t('ticketCount', { count: ticket.ticket_count });
   }
   return ticket.ticket_items.map(i => `${i.quantity}× ${i.ticket_type_name}`).join(', ');
 }
 
-function statusChip(ticket: Ticket) {
+function statusChip(ticket: Ticket, t: TFunction) {
   if (ticket.status === 'used')
-    return <Chip label="Attended" color="success" size="small" icon={<TaskAltIcon />} />;
+    return <Chip label={t('status.attended')} color="success" size="small" icon={<TaskAltIcon />} />;
   if (ticket.status === 'cancelled') {
     if (ticket.refund_status === 'refunded')
-      return <Chip label="Refunded" color="success" size="small" icon={<AccountBalanceIcon />} />;
+      return <Chip label={t('status.refunded')} color="success" size="small" icon={<AccountBalanceIcon />} />;
     if (ticket.refund_status === 'refund_requested')
-      return <Chip label="Refund Pending" color="warning" size="small" icon={<HourglassTopIcon />} />;
-    return <Chip label="Cancelled" color="error" size="small" />;
+      return <Chip label={t('status.refundPending')} color="warning" size="small" icon={<HourglassTopIcon />} />;
+    return <Chip label={t('status.cancelled')} color="error" size="small" />;
   }
 
   const now = new Date();
   const start = new Date(ticket.event_start_time);
   const end   = new Date(ticket.event_end_time);
   if (now > end)
-    return <Chip label="Event Ended" color="default" size="small" />;
+    return <Chip label={t('status.eventEnded')} color="default" size="small" />;
   if (now >= start)
-    return <Chip label="In Progress" color="warning" size="small" />;
-  return <Chip label="Confirmed" color="success" size="small" icon={<CheckCircleIcon />} />;
+    return <Chip label={t('status.inProgress')} color="warning" size="small" />;
+  return <Chip label={t('status.confirmed')} color="success" size="small" icon={<CheckCircleIcon />} />;
 }
 
 // ── QR Dialog ─────────────────────────────────────────────────────────────────
 
 function QrDialog({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+  const { t } = useTranslation('tickets');
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -101,28 +105,28 @@ function QrDialog({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) 
           <Typography fontWeight={700} fontSize={16}>{ticket.event_title}</Typography>
           <Typography variant="caption" color="text.secondary">{fmtDate(ticket.event_start_time)}</Typography>
         </Box>
-        <IconButton size="small" onClick={onClose} sx={{ mt: -0.5 }}><CloseIcon /></IconButton>
+        <IconButton size="small" onClick={onClose} sx={{ mt: -0.5 }} aria-label={t('qrDialog.close')}><CloseIcon /></IconButton>
       </DialogTitle>
       <DialogContent sx={{ textAlign: 'center', pb: 3 }}>
         {ticket.status === 'used' ? (
           <Box sx={{ py: 2 }}>
             <TaskAltIcon sx={{ fontSize: 72, color: 'success.main' }} />
-            <Typography variant="h6" fontWeight={700} color="success.main" mt={1}>Ticket Used</Typography>
+            <Typography variant="h6" fontWeight={700} color="success.main" mt={1}>{t('qrDialog.ticketUsed')}</Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
-              Scanned on {ticket.scanned_at ? fmtDate(ticket.scanned_at) : '—'}
+              {t('qrDialog.scannedOn', { date: ticket.scanned_at ? fmtDate(ticket.scanned_at) : '—' })}
             </Typography>
           </Box>
         ) : (
           <>
             <Typography variant="caption" color="text.secondary" display="block" mb={2}>
-              Show this QR code at the gate for entry
+              {t('qrDialog.showQrHint')}
             </Typography>
             {ticket.qr_token ? (
               <Box sx={{ display: 'inline-block', p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                 <QRCodeSVG value={ticket.qr_token} size={200} level="M" includeMargin={false} />
               </Box>
             ) : (
-              <Typography variant="body2" color="text.secondary">QR code not available.</Typography>
+              <Typography variant="body2" color="text.secondary">{t('qrDialog.qrUnavailable')}</Typography>
             )}
           </>
         )}
@@ -132,22 +136,22 @@ function QrDialog({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) 
             {ticket.ticket_items.map((item, i) => (
               <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2">{item.quantity}× {item.ticket_type_name}</Typography>
-                <Typography variant="body2" fontWeight={600}>{fmtAmount(item.quantity * item.unit_price)}</Typography>
+                <Typography variant="body2" fontWeight={600}>{fmtAmount(item.quantity * item.unit_price, t)}</Typography>
               </Box>
             ))}
           </Stack>
         )}
         <Stack direction="row" justifyContent="center" spacing={3}>
           <Box textAlign="center">
-            <Typography variant="caption" color="text.secondary">Tickets</Typography>
+            <Typography variant="caption" color="text.secondary">{t('qrDialog.ticketsLabel')}</Typography>
             <Typography fontWeight={700}>{ticket.ticket_count}</Typography>
           </Box>
           <Box textAlign="center">
-            <Typography variant="caption" color="text.secondary">Paid</Typography>
-            <Typography fontWeight={700}>{fmtAmount(ticket.total_amount)}</Typography>
+            <Typography variant="caption" color="text.secondary">{t('qrDialog.paidLabel')}</Typography>
+            <Typography fontWeight={700}>{fmtAmount(ticket.total_amount, t)}</Typography>
           </Box>
           <Box textAlign="center">
-            <Typography variant="caption" color="text.secondary">Ticket ID</Typography>
+            <Typography variant="caption" color="text.secondary">{t('qrDialog.ticketIdLabel')}</Typography>
             <Typography fontWeight={700} sx={{ fontFamily: 'monospace', fontSize: 11 }}>
               {ticket.id.slice(0, 8).toUpperCase()}
             </Typography>
@@ -155,7 +159,7 @@ function QrDialog({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) 
         </Stack>
         {ticket.paid_at && (
           <Typography variant="caption" color="text.secondary" display="block" textAlign="center" mt={1.5}>
-            Paid & reconciled on {fmtDate(ticket.paid_at)}
+            {t('qrDialog.paidReconciledOn', { date: fmtDate(ticket.paid_at) })}
           </Typography>
         )}
       </DialogContent>
@@ -172,6 +176,7 @@ function TicketCard({
   token: string;
   onCancelled: (message: string) => void;
 }) {
+  const { t } = useTranslation('tickets');
   const [qrOpen, setQrOpen]         = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -194,8 +199,8 @@ function TicketCard({
       const body: { refund_requested: boolean } = await res.json();
       setCancelOpen(false);
       onCancelled(body.refund_requested
-        ? 'Ticket cancelled. A refund request has been sent to the committee for approval.'
-        : 'Ticket cancelled.');
+        ? t('notices.cancelledWithRefund')
+        : t('notices.cancelledPlain'));
     } catch {
       setCancelling(false);
     }
@@ -221,7 +226,7 @@ function TicketCard({
                 <Typography variant="caption" noWrap>{ticket.event_venue}</Typography>
               </Stack>
             </Box>
-            {statusChip(ticket)}
+            {statusChip(ticket, t)}
           </Box>
 
           <Divider sx={{ my: 1.5 }} />
@@ -232,32 +237,34 @@ function TicketCard({
                 <Stack spacing={0.25} mb={0.25}>
                   {ticket.ticket_items.map((item, i) => (
                     <Typography key={i} variant="body2" color="text.secondary">
-                      {item.quantity}× {item.ticket_type_name} ({fmtAmount(item.quantity * item.unit_price)})
+                      {item.quantity}× {item.ticket_type_name} ({fmtAmount(item.quantity * item.unit_price, t)})
                     </Typography>
                   ))}
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  {ticketBreakdownText(ticket)} · {fmtAmount(ticket.total_amount)}
+                  {ticketBreakdownText(ticket, t)} · {fmtAmount(ticket.total_amount, t)}
                 </Typography>
               )}
               {ticket.paid_at && (
                 <Typography variant="caption" color="text.secondary" display="block">
-                  Paid {fmtDate(ticket.paid_at)}
+                  {t('card.paidOn', { date: fmtDate(ticket.paid_at) })}
                 </Typography>
               )}
               {ticket.status === 'cancelled' && ticket.total_amount > 0 && (
                 <Typography variant="caption" display="block"
                   color={ticket.refund_status === 'refunded' ? 'success.main' : 'warning.main'}>
                   {ticket.refund_status === 'refunded'
-                    ? `Refunded${ticket.refunded_at ? ' ' + fmtDate(ticket.refunded_at) : ''}`
+                    ? (ticket.refunded_at
+                        ? t('card.refundedOn', { date: fmtDate(ticket.refunded_at) })
+                        : t('card.refunded'))
                     : ticket.refund_status === 'refund_requested'
-                      ? 'Refund pending committee review'
-                      : 'Cancelled — no refund on file'}
+                      ? t('card.refundPendingReview')
+                      : t('card.cancelledNoRefund')}
                 </Typography>
               )}
               <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace' }}>
-                Ticket ID: {ticket.id.slice(0, 8).toUpperCase()}
+                {t('card.ticketIdPrefix', { id: ticket.id.slice(0, 8).toUpperCase() })}
               </Typography>
             </Box>
             <Stack direction="row" spacing={1}>
@@ -267,7 +274,7 @@ function TicketCard({
                   startIcon={<EventBusyIcon />}
                   onClick={() => setCancelOpen(true)}
                 >
-                  Cancel{ticket.total_amount > 0 ? ' & Refund' : ''}
+                  {ticket.total_amount > 0 ? t('card.cancelRefundButton') : t('card.cancelButton')}
                 </Button>
               )}
               {ticket.status !== 'cancelled' && (
@@ -278,7 +285,7 @@ function TicketCard({
                   color={ticket.status === 'used' ? 'success' : 'primary'}
                   onClick={() => setQrOpen(true)}
                 >
-                  {ticket.status === 'used' ? 'View Entry' : 'Show Ticket'}
+                  {ticket.status === 'used' ? t('card.viewEntry') : t('card.showTicket')}
                 </Button>
               )}
             </Stack>
@@ -289,28 +296,28 @@ function TicketCard({
       {qrOpen && <QrDialog ticket={ticket} onClose={() => setQrOpen(false)} />}
 
       <Dialog open={cancelOpen} onClose={() => !cancelling && setCancelOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Cancel Ticket</DialogTitle>
+        <DialogTitle>{t('cancelDialog.title')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: ticket.total_amount > 0 ? 2 : 0 }}>
-            Cancel your ticket for "{ticket.event_title}"?
-            {ticket.total_amount > 0 && ' A refund request will be sent to the committee.'}
+            {t('cancelDialog.confirmText', { title: ticket.event_title })}
+            {ticket.total_amount > 0 && ` ${t('cancelDialog.refundNotice')}`}
           </Typography>
           {ticket.total_amount > 0 && (
             <TextField
-              label="UPI ID to send the refund to (optional)"
-              placeholder="e.g. yourname@okhdfcbank"
+              label={t('cancelDialog.upiLabel')}
+              placeholder={t('cancelDialog.upiPlaceholder')}
               value={refundUpi} onChange={e => setRefundUpi(e.target.value)}
               fullWidth size="small" disabled={cancelling}
-              helperText="Leave blank to let the committee use the UPI ID from your original payment, if any."
+              helperText={t('cancelDialog.upiHelper')}
             />
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>Keep Ticket</Button>
+          <Button onClick={() => setCancelOpen(false)} disabled={cancelling}>{t('cancelDialog.keepTicket')}</Button>
           <Button variant="contained" color="error" disabled={cancelling} onClick={handleCancel}>
             {cancelling
               ? <CircularProgress size={18} color="inherit" />
-              : ticket.total_amount > 0 ? 'Cancel Ticket & Refund It' : 'Cancel Ticket'}
+              : ticket.total_amount > 0 ? t('cancelDialog.confirmCancelRefund') : t('cancelDialog.confirmCancel')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -325,6 +332,7 @@ export interface TicketsAppProps {
 }
 
 export function TicketsApp({ token }: TicketsAppProps) {
+  const { t } = useTranslation('tickets');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
@@ -344,27 +352,27 @@ export function TicketsApp({ token }: TicketsAppProps) {
   if (!token) {
     return (
       <Container maxWidth="sm" sx={{ pt: 8, textAlign: 'center' }}>
-        <Typography variant="h6" color="text.secondary" mb={2}>Please log in to view your tickets.</Typography>
-        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>Go to Login</Button>
+        <Typography variant="h6" color="text.secondary" mb={2}>{t('page.loginPrompt')}</Typography>
+        <Button variant="contained" onClick={() => { window.location.href = '/'; }}>{t('page.goToLogin')}</Button>
       </Container>
     );
   }
 
-  const active    = tickets.filter(t => t.status === 'active');
-  const used      = tickets.filter(t => t.status === 'used');
-  const cancelled = tickets.filter(t => t.status === 'cancelled');
+  const active    = tickets.filter(tk => tk.status === 'active');
+  const used      = tickets.filter(tk => tk.status === 'used');
+  const cancelled = tickets.filter(tk => tk.status === 'cancelled');
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h5" fontWeight={800}>My Tickets</Typography>
+          <Typography variant="h5" fontWeight={800}>{t('page.title')}</Typography>
           <Typography variant="body2" color="text.secondary">
-            Your confirmed event tickets and QR codes for gate entry.
+            {t('page.subtitle')}
           </Typography>
         </Box>
         <Button size="small" variant="outlined" onClick={() => { window.location.href = '/registrations'; }}>
-          View All Registrations
+          {t('page.viewAllRegistrations')}
         </Button>
       </Box>
 
@@ -380,12 +388,12 @@ export function TicketsApp({ token }: TicketsAppProps) {
       {!loading && tickets.length === 0 && (
         <Box textAlign="center" py={8}>
           <ConfirmationNumberIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">No tickets yet</Typography>
+          <Typography variant="h6" color="text.secondary">{t('page.emptyTitle')}</Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Register for an event and complete payment to get your ticket here.
+            {t('page.emptyDesc')}
           </Typography>
           <Button variant="contained" onClick={() => { window.location.href = '/events'; }}>
-            Browse Events
+            {t('page.browseEvents')}
           </Button>
         </Box>
       )}
@@ -395,12 +403,12 @@ export function TicketsApp({ token }: TicketsAppProps) {
           {active.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="success.main" fontWeight={700} mb={1.5}>
-                Active Tickets ({active.length})
+                {t('page.activeTickets', { count: active.length })}
               </Typography>
               <Stack spacing={1.5}>
-                {active.map(t => (
+                {active.map(tk => (
                   <TicketCard
-                    key={t.id} ticket={t} token={token!}
+                    key={tk.id} ticket={tk} token={token!}
                     onCancelled={message => { setNotice(message); load(); }}
                   />
                 ))}
@@ -411,12 +419,12 @@ export function TicketsApp({ token }: TicketsAppProps) {
           {used.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="text.secondary" fontWeight={700} mb={1.5}>
-                Past Events ({used.length})
+                {t('page.pastEvents', { count: used.length })}
               </Typography>
               <Stack spacing={1.5}>
-                {used.map(t => (
+                {used.map(tk => (
                   <TicketCard
-                    key={t.id} ticket={t} token={token!}
+                    key={tk.id} ticket={tk} token={token!}
                     onCancelled={message => { setNotice(message); load(); }}
                   />
                 ))}
@@ -427,12 +435,12 @@ export function TicketsApp({ token }: TicketsAppProps) {
           {cancelled.length > 0 && (
             <Box>
               <Typography variant="subtitle2" color="text.secondary" fontWeight={700} mb={1.5}>
-                Cancelled ({cancelled.length})
+                {t('page.cancelledSection', { count: cancelled.length })}
               </Typography>
               <Stack spacing={1.5}>
-                {cancelled.map(t => (
+                {cancelled.map(tk => (
                   <TicketCard
-                    key={t.id} ticket={t} token={token!}
+                    key={tk.id} ticket={tk} token={token!}
                     onCancelled={message => { setNotice(message); load(); }}
                   />
                 ))}

@@ -1,8 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Link, Routes, Route } from 'react-router-dom';
+import { I18nextProvider } from 'react-i18next';
 import { ThemeProvider, CssBaseline, Box, Typography } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
+import i18n from './i18n';
 import { ManageRoutes } from './ManageRoutes';
 import { AdminRoutes } from './AdminRoutes';
 import { SponsorApp } from './SponsorApp';
@@ -43,18 +45,20 @@ function StandaloneAdminRoutes() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <StandaloneAuthProvider>
-        <BrowserRouter basename={import.meta.env.BASE_URL}>
-          <Routes>
-            <Route path="/manage/*" element={<ManageRoutes />} />
-            <Route path="/admin/*"  element={<StandaloneAdminRoutes />} />
-            <Route path="/sponsor"  element={<SponsorApp firstName="Dev User" />} />
-            <Route path="*"         element={<DevHome />} />
-          </Routes>
-        </BrowserRouter>
-      </StandaloneAuthProvider>
-    </ThemeProvider>
+    <I18nextProvider i18n={i18n}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <StandaloneAuthProvider>
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
+            <Routes>
+              <Route path="/manage/*" element={<ManageRoutes />} />
+              <Route path="/admin/*"  element={<StandaloneAdminRoutes />} />
+              <Route path="/sponsor"  element={<SponsorApp firstName="Dev User" />} />
+              <Route path="*"         element={<DevHome />} />
+            </Routes>
+          </BrowserRouter>
+        </StandaloneAuthProvider>
+      </ThemeProvider>
+    </I18nextProvider>
   </React.StrictMode>
 );

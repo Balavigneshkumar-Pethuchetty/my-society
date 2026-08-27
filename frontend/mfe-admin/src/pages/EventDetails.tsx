@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Container,
   Grid, IconButton, InputAdornment, Link, MenuItem, Paper, Stack, Tab, Tabs, Table, TableBody, TableCell, TableHead,
@@ -108,6 +109,7 @@ const PAID_STATUSES = new Set(['confirmed', 'attended']);
 // ── Purchases tab ────────────────────────────────────────────────────────────
 
 function PurchasesTab({ registrations }: { registrations: Registration[] }) {
+  const { t } = useTranslation('admin');
   const countByEmail = registrations.reduce<Record<string, number>>((acc, r) => {
     const key = r.user_email ?? r.user_name ?? '';
     acc[key] = (acc[key] ?? 0) + 1;
@@ -132,18 +134,18 @@ function PurchasesTab({ registrations }: { registrations: Registration[] }) {
   return (
     <>
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <StatCard label="Registrations" value={registrations.length} color="#6366f1" />
-        <StatCard label="Tickets Purchased" value={totalTickets} color="#10b981" />
-        <StatCard label="Revenue" value={fmtMoney(totalRevenue, registrations[0]?.display_currency ?? 'INR')} color="#0ea5e9" />
+        <StatCard label={t('eventDetails.purchases.statRegistrations')} value={registrations.length} color="#6366f1" />
+        <StatCard label={t('eventDetails.purchases.statTicketsPurchased')} value={totalTickets} color="#10b981" />
+        <StatCard label={t('eventDetails.purchases.statRevenue')} value={fmtMoney(totalRevenue, registrations[0]?.display_currency ?? 'INR')} color="#0ea5e9" />
       </Grid>
       <Typography fontSize={12} color="text.secondary" sx={{ mb: 2 }}>
-        Tickets Purchased and Revenue count only <strong>confirmed</strong> or <strong>attended</strong> registrations — money actually collected. Cancelled and still-unpaid (pending payment) registrations are excluded.
+        {t('eventDetails.purchases.note')}
       </Typography>
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Resident', 'Tickets', 'Amount', 'Payment', 'Status', 'Registered At'].map(h => (
+              {[t('eventDetails.purchases.table.resident'), t('eventDetails.purchases.table.tickets'), t('eventDetails.purchases.table.amount'), t('eventDetails.purchases.table.payment'), t('eventDetails.purchases.table.status'), t('eventDetails.purchases.table.registeredAt')].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -151,7 +153,7 @@ function PurchasesTab({ registrations }: { registrations: Registration[] }) {
           <TableBody>
             {registrations.length === 0 && (
               <TableRow><TableCell colSpan={6}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No purchases yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.purchases.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
             {registrations.map(r => {
@@ -167,13 +169,13 @@ function PurchasesTab({ registrations }: { registrations: Registration[] }) {
                         <Typography fontWeight={600} fontSize={13}>{r.user_name ?? '—'}</Typography>
                         <Typography fontSize={11} color="text.secondary">{r.user_email ?? '—'}</Typography>
                       </Box>
-                      {multi && <Chip label={`×${countByEmail[key]} purchases`} size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />}
+                      {multi && <Chip label={t('eventDetails.purchases.multiPurchases', { count: countByEmail[key] })} size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />}
                     </Stack>
                   </TableCell>
                   <TableCell><Typography fontWeight={700} fontSize={14}>{r.ticket_count}</Typography></TableCell>
                   <TableCell><Typography fontSize={13}>{fmtMoney(r.total_amount, r.display_currency)}</Typography></TableCell>
                   <TableCell>
-                    {r.payment ? <Chip label={r.payment.status} size="small" /> : <Typography fontSize={12} color="text.secondary">Free</Typography>}
+                    {r.payment ? <Chip label={r.payment.status} size="small" /> : <Typography fontSize={12} color="text.secondary">{t('eventDetails.purchases.free')}</Typography>}
                   </TableCell>
                   <TableCell><Chip label={r.status} size="small" color={r.status === 'confirmed' || r.status === 'attended' ? 'success' : 'default'} /></TableCell>
                   <TableCell><Typography fontSize={12}>{fmtDate(r.registered_at)}</Typography></TableCell>
@@ -190,21 +192,22 @@ function PurchasesTab({ registrations }: { registrations: Registration[] }) {
 // ── Attendance / roster tab ──────────────────────────────────────────────────
 
 function AttendanceTab({ tickets }: { tickets: RosterTicket[] }) {
+  const { t } = useTranslation('admin');
   const totalIssued = tickets.reduce((s, t) => s + t.ticket_count, 0);
   const used = tickets.filter(t => t.status === 'used').length;
 
   return (
     <>
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <StatCard label="Tickets Issued" value={totalIssued} color="#6366f1" />
-        <StatCard label="Checked In" value={used} color="#10b981" />
-        <StatCard label="Not Yet Checked In" value={tickets.length - used} color="#f59e0b" />
+        <StatCard label={t('eventDetails.attendance.statTicketsIssued')} value={totalIssued} color="#6366f1" />
+        <StatCard label={t('eventDetails.attendance.statCheckedIn')} value={used} color="#10b981" />
+        <StatCard label={t('eventDetails.attendance.statNotCheckedIn')} value={tickets.length - used} color="#f59e0b" />
       </Grid>
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Resident', 'Unit', 'Tickets', 'Status', 'Scanned At'].map(h => (
+              {[t('eventDetails.attendance.table.resident'), t('eventDetails.attendance.table.unit'), t('eventDetails.attendance.table.tickets'), t('eventDetails.attendance.table.status'), t('eventDetails.attendance.table.scannedAt')].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -212,19 +215,19 @@ function AttendanceTab({ tickets }: { tickets: RosterTicket[] }) {
           <TableBody>
             {tickets.length === 0 && (
               <TableRow><TableCell colSpan={5}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No tickets issued yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.attendance.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
-            {tickets.map(t => (
-              <TableRow key={t.ticket_id} hover>
+            {tickets.map(tk => (
+              <TableRow key={tk.ticket_id} hover>
                 <TableCell>
-                  <Typography fontWeight={600} fontSize={13}>{t.user_name ?? '—'}</Typography>
-                  <Typography fontSize={11} color="text.secondary">{t.user_email ?? '—'}</Typography>
+                  <Typography fontWeight={600} fontSize={13}>{tk.user_name ?? '—'}</Typography>
+                  <Typography fontSize={11} color="text.secondary">{tk.user_email ?? '—'}</Typography>
                 </TableCell>
-                <TableCell><Typography fontSize={12}>{t.unit_label ?? '—'}</Typography></TableCell>
-                <TableCell><Typography fontWeight={700} fontSize={14}>{t.ticket_count}</Typography></TableCell>
-                <TableCell><Chip label={t.status === 'used' ? 'Checked in' : 'Issued'} size="small" color={t.status === 'used' ? 'success' : 'default'} /></TableCell>
-                <TableCell><Typography fontSize={12}>{t.scanned_at ? fmtDate(t.scanned_at) : '—'}</Typography></TableCell>
+                <TableCell><Typography fontSize={12}>{tk.unit_label ?? '—'}</Typography></TableCell>
+                <TableCell><Typography fontWeight={700} fontSize={14}>{tk.ticket_count}</Typography></TableCell>
+                <TableCell><Chip label={tk.status === 'used' ? t('eventDetails.attendance.checkedIn') : t('eventDetails.attendance.issued')} size="small" color={tk.status === 'used' ? 'success' : 'default'} /></TableCell>
+                <TableCell><Typography fontSize={12}>{tk.scanned_at ? fmtDate(tk.scanned_at) : '—'}</Typography></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -237,23 +240,24 @@ function AttendanceTab({ tickets }: { tickets: RosterTicket[] }) {
 // ── Complimentary tab (read-only summary; full CRUD lives on its own page) ───
 
 function ComplimentaryTab({ entries, eventId }: { entries: ComplimentaryEntry[]; eventId: string }) {
+  const { t } = useTranslation('admin');
   const live = entries.filter(e => !e.cancelled_at);
   const total = live.reduce((s, e) => s + e.ticket_count, 0);
 
   return (
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography fontSize={13} color="text.secondary">{total} complimentary ticket{total === 1 ? '' : 's'} issued for this event.</Typography>
+        <Typography fontSize={13} color="text.secondary">{t('eventDetails.complimentary.summary', { count: total })}</Typography>
         <Button size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}
           onClick={() => { window.location.href = `/manage/complimentary/${eventId}`; }}>
-          Manage Complimentary Tickets
+          {t('eventDetails.complimentary.manageBtn')}
         </Button>
       </Stack>
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Guest / Invited By', 'Type', 'Tickets', 'Status', 'Issued By'].map(h => (
+              {[t('eventDetails.complimentary.table.guest'), t('eventDetails.complimentary.table.type'), t('eventDetails.complimentary.table.tickets'), t('eventDetails.complimentary.table.status'), t('eventDetails.complimentary.table.issuedBy')].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -261,18 +265,18 @@ function ComplimentaryTab({ entries, eventId }: { entries: ComplimentaryEntry[];
           <TableBody>
             {entries.length === 0 && (
               <TableRow><TableCell colSpan={5}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No complimentary tickets issued yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.complimentary.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
             {entries.map(e => (
               <TableRow key={e.id} hover sx={{ opacity: e.cancelled_at ? 0.5 : 1 }}>
                 <TableCell>
                   {e.inviter_type === 'walk_in' && !e.guest_name
-                    ? <Typography fontSize={13} color="text.secondary" sx={{ fontStyle: 'italic' }}>Walk-in counter</Typography>
+                    ? <Typography fontSize={13} color="text.secondary" sx={{ fontStyle: 'italic' }}>{t('eventDetails.complimentary.walkInCounter')}</Typography>
                     : (
                       <>
                         <Typography fontWeight={600} fontSize={13}>{e.guest_name ?? '—'}</Typography>
-                        <Typography fontSize={11} color="text.secondary">Invited by {e.invited_by_name ?? '—'}</Typography>
+                        <Typography fontSize={11} color="text.secondary">{t('eventDetails.complimentary.invitedBy', { name: e.invited_by_name ?? '—' })}</Typography>
                       </>
                     )}
                 </TableCell>
@@ -280,7 +284,7 @@ function ComplimentaryTab({ entries, eventId }: { entries: ComplimentaryEntry[];
                 <TableCell><Typography fontWeight={700} fontSize={14}>{e.ticket_count}</Typography></TableCell>
                 <TableCell>
                   <Chip size="small"
-                    label={e.cancelled_at ? 'Cancelled' : e.ticket_status === 'used' ? 'Used' : 'Issued'}
+                    label={e.cancelled_at ? t('eventDetails.complimentary.cancelled') : e.ticket_status === 'used' ? t('eventDetails.complimentary.used') : t('eventDetails.complimentary.issued')}
                     color={e.cancelled_at ? 'error' : e.ticket_status === 'used' ? 'default' : 'success'} />
                 </TableCell>
                 <TableCell><Typography fontSize={12}>{e.created_by_name ?? '—'}</Typography></TableCell>
@@ -309,6 +313,7 @@ interface Expense {
 const EXPENSE_CATEGORIES = ['venue', 'catering', 'equipment', 'marketing', 'staff', 'other'];
 
 function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
+  const { t } = useTranslation('admin');
   const [summary,  setSummary]  = useState<FinanceSummary | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -340,7 +345,7 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
       setDesc(''); setAmount(''); setCategory('other');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add expense');
+      setError(e instanceof Error ? e.message : t('eventDetails.finance.failedToAddExpense'));
     } finally {
       setSaving(false);
     }
@@ -355,7 +360,7 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
     const res = await fetch(`${apiBase('payments')}/funds/${eventId}/export.${format}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) { setError(`Failed to generate ${format} export`); return; }
+    if (!res.ok) { setError(t('eventDetails.finance.failedToGenerateExport', { format })); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -372,9 +377,9 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
       if (!link) return;
       const fullUrl = `${window.location.origin}${link.path}`;
       await navigator.clipboard.writeText(fullUrl);
-      setShareMsg(`Link copied — valid until ${new Date(link.expires_at).toLocaleDateString('en-IN')}`);
+      setShareMsg(t('eventDetails.finance.shareLinkCopied', { date: new Date(link.expires_at).toLocaleDateString('en-IN') }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create share link');
+      setError(e instanceof Error ? e.message : t('eventDetails.finance.failedToCreateShareLink'));
     }
   };
 
@@ -385,16 +390,16 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
       {shareMsg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setShareMsg(null)}>{shareMsg}</Alert>}
       <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
-        <Button size="small" variant="outlined" onClick={() => downloadExport('xlsx')}>Download Excel</Button>
-        <Button size="small" variant="outlined" onClick={() => downloadExport('pdf')}>Download PDF</Button>
-        <Button size="small" variant="outlined" onClick={copyShareLink}>Copy Share Link</Button>
+        <Button size="small" variant="outlined" onClick={() => downloadExport('xlsx')}>{t('eventDetails.finance.downloadExcel')}</Button>
+        <Button size="small" variant="outlined" onClick={() => downloadExport('pdf')}>{t('eventDetails.finance.downloadPdf')}</Button>
+        <Button size="small" variant="outlined" onClick={copyShareLink}>{t('eventDetails.finance.copyShareLink')}</Button>
       </Stack>
       {summary && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <StatCard label="Ticket Revenue" value={fmtMoney(summary.ticket_revenue, 'INR')} color="#0ea5e9" />
-          <StatCard label="Sponsorship Income" value={fmtMoney(summary.sponsorship_income, 'INR')} color="#8b5cf6" />
-          <StatCard label="Total Expenses" value={fmtMoney(summary.total_expenses, 'INR')} color="#ef4444" />
-          <StatCard label="Net Balance" value={fmtMoney(summary.net_balance, 'INR')}
+          <StatCard label={t('eventDetails.finance.statTicketRevenue')} value={fmtMoney(summary.ticket_revenue, 'INR')} color="#0ea5e9" />
+          <StatCard label={t('eventDetails.finance.statSponsorshipIncome')} value={fmtMoney(summary.sponsorship_income, 'INR')} color="#8b5cf6" />
+          <StatCard label={t('eventDetails.finance.statTotalExpenses')} value={fmtMoney(summary.total_expenses, 'INR')} color="#ef4444" />
+          <StatCard label={t('eventDetails.finance.statNetBalance')} value={fmtMoney(summary.net_balance, 'INR')}
             color={Number(summary.net_balance) >= 0 ? '#10b981' : '#ef4444'} />
         </Grid>
       )}
@@ -402,7 +407,7 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Description', 'Category', 'Amount', 'Logged By', ''].map(h => (
+              {[t('eventDetails.finance.table.description'), t('eventDetails.finance.table.category'), t('eventDetails.finance.table.amount'), t('eventDetails.finance.table.loggedBy'), ''].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -410,7 +415,7 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
           <TableBody>
             {expenses.length === 0 && (
               <TableRow><TableCell colSpan={5}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No expenses logged yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.finance.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
             {expenses.map(e => (
@@ -428,13 +433,13 @@ function FinanceTab({ eventId, token }: { eventId: string; token: string }) {
         </Table>
       </Paper>
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center">
-        <TextField size="small" label="Description" value={desc} onChange={e => setDesc(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
-        <TextField size="small" label="Amount (₹)" type="number" value={amount} onChange={e => setAmount(e.target.value)} sx={{ width: 130 }} />
-        <TextField size="small" select label="Category" value={category} onChange={e => setCategory(e.target.value)} sx={{ width: 140 }}>
+        <TextField size="small" label={t('eventDetails.finance.descLabel')} value={desc} onChange={e => setDesc(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
+        <TextField size="small" label={t('eventDetails.finance.amountLabel')} type="number" value={amount} onChange={e => setAmount(e.target.value)} sx={{ width: 130 }} />
+        <TextField size="small" select label={t('eventDetails.finance.categoryLabel')} value={category} onChange={e => setCategory(e.target.value)} sx={{ width: 140 }}>
           {EXPENSE_CATEGORIES.map(c => <MenuItem key={c} value={c} sx={{ textTransform: 'capitalize' }}>{c}</MenuItem>)}
         </TextField>
         <Button variant="contained" size="small" disabled={saving || !desc.trim() || !amount} onClick={addExpense}>
-          Add Expense
+          {t('eventDetails.finance.addExpenseBtn')}
         </Button>
       </Stack>
     </>
@@ -454,6 +459,7 @@ const VENDOR_CATEGORIES = ['food', 'beverages', 'merchandise', 'games', 'service
 const VENDOR_STATUSES = ['invited', 'confirmed', 'cancelled'];
 
 function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
+  const { t } = useTranslation('admin');
   const [directory, setDirectory] = useState<VendorDirectoryEntry[]>([]);
   const [vendors,   setVendors]   = useState<EventVendor[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -485,7 +491,7 @@ function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
       setNewVendorName(''); setNewVendorCat('other');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add vendor');
+      setError(e instanceof Error ? e.message : t('eventDetails.vendors.failedToAddVendor'));
     } finally {
       setSaving(false);
     }
@@ -500,7 +506,7 @@ function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
       setPickVendorId(''); setStall('');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to invite vendor');
+      setError(e instanceof Error ? e.message : t('eventDetails.vendors.failedToInviteVendor'));
     } finally {
       setSaving(false);
     }
@@ -525,7 +531,7 @@ function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Vendor', 'Category', 'Stall', 'Status', ''].map(h => (
+              {[t('eventDetails.vendors.table.vendor'), t('eventDetails.vendors.table.category'), t('eventDetails.vendors.table.stall'), t('eventDetails.vendors.table.status'), ''].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -533,7 +539,7 @@ function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
           <TableBody>
             {vendors.length === 0 && (
               <TableRow><TableCell colSpan={5}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No vendors invited yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.vendors.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
             {vendors.map(v => (
@@ -556,26 +562,26 @@ function VendorsTab({ eventId, token }: { eventId: string; token: string }) {
         </Table>
       </Paper>
 
-      <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>Invite an existing vendor</Typography>
+      <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>{t('eventDetails.vendors.inviteExistingTitle')}</Typography>
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center" sx={{ mb: 3 }}>
-        <TextField select size="small" label="Vendor" value={pickVendorId}
+        <TextField select size="small" label={t('eventDetails.vendors.vendorLabel')} value={pickVendorId}
           onChange={e => setPickVendorId(e.target.value)} sx={{ minWidth: 200 }}>
           {directory.map(d => <MenuItem key={d.id} value={d.id}>{d.name} ({d.category})</MenuItem>)}
         </TextField>
-        <TextField size="small" label="Stall #" value={stall} onChange={e => setStall(e.target.value)} sx={{ width: 100 }} />
+        <TextField size="small" label={t('eventDetails.vendors.stallLabel')} value={stall} onChange={e => setStall(e.target.value)} sx={{ width: 100 }} />
         <Button variant="contained" size="small" disabled={saving || !pickVendorId} onClick={inviteVendor}>
-          Invite
+          {t('eventDetails.vendors.inviteBtn')}
         </Button>
       </Stack>
 
-      <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>Or add a new vendor to the directory</Typography>
+      <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>{t('eventDetails.vendors.addNewVendorTitle')}</Typography>
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center">
-        <TextField size="small" label="Vendor name" value={newVendorName} onChange={e => setNewVendorName(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
-        <TextField select size="small" label="Category" value={newVendorCat} onChange={e => setNewVendorCat(e.target.value)} sx={{ width: 150 }}>
+        <TextField size="small" label={t('eventDetails.vendors.vendorNameLabel')} value={newVendorName} onChange={e => setNewVendorName(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
+        <TextField select size="small" label={t('eventDetails.vendors.table.category')} value={newVendorCat} onChange={e => setNewVendorCat(e.target.value)} sx={{ width: 150 }}>
           {VENDOR_CATEGORIES.map(c => <MenuItem key={c} value={c} sx={{ textTransform: 'capitalize' }}>{c}</MenuItem>)}
         </TextField>
         <Button variant="outlined" size="small" disabled={saving || !newVendorName.trim()} onClick={createVendor}>
-          Add to Directory
+          {t('eventDetails.vendors.addToDirectoryBtn')}
         </Button>
       </Stack>
     </>
@@ -595,6 +601,7 @@ interface Distribution {
 const RECIPIENT_TYPES = ['sponsor', 'organizer', 'resident', 'society'];
 
 function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
+  const { t } = useTranslation('admin');
   const [dist,    setDist]    = useState<Distribution | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
@@ -622,7 +629,7 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
       });
       setPoolAmount(''); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to set up distribution');
+      setError(e instanceof Error ? e.message : t('eventDetails.revenue.failedToSetupDistribution'));
     } finally {
       setSaving(false);
     }
@@ -637,7 +644,7 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
       });
       setSharePct(''); setEntryAmount(''); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add entry');
+      setError(e instanceof Error ? e.message : t('eventDetails.revenue.failedToAddEntry'));
     } finally {
       setSaving(false);
     }
@@ -662,13 +669,13 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
       <>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
         <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
-          No revenue distribution pool has been set up for this event yet.
+          {t('eventDetails.revenue.noPoolMsg')}
         </Alert>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <TextField size="small" label="Total pool (₹)" type="number" value={poolAmount}
+          <TextField size="small" label={t('eventDetails.revenue.totalPoolLabel')} type="number" value={poolAmount}
             onChange={e => setPoolAmount(e.target.value)} sx={{ width: 160 }} />
           <Button variant="contained" size="small" disabled={saving || !poolAmount} onClick={createPool}>
-            Set Up Distribution
+            {t('eventDetails.revenue.setupDistributionBtn')}
           </Button>
         </Stack>
       </>
@@ -679,14 +686,14 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <StatCard label="Total Pool" value={fmtMoney(dist.total_pool, 'INR')} color="#ec4899" />
-        <StatCard label="Status" value={dist.status} color="#6366f1" />
+        <StatCard label={t('eventDetails.revenue.statTotalPool')} value={fmtMoney(dist.total_pool, 'INR')} color="#ec4899" />
+        <StatCard label={t('eventDetails.revenue.statStatus')} value={dist.status} color="#6366f1" />
       </Grid>
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mb: 3 }}>
         <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: 'action.hover' }}>
-              {['Recipient', 'Type', 'Share', 'Amount', 'Status'].map(h => (
+              {[t('eventDetails.revenue.table.recipient'), t('eventDetails.revenue.table.type'), t('eventDetails.revenue.table.share'), t('eventDetails.revenue.table.amount'), t('eventDetails.revenue.table.status')].map(h => (
                 <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -694,7 +701,7 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
           <TableBody>
             {dist.entries.length === 0 && (
               <TableRow><TableCell colSpan={5}>
-                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No payout entries yet.</Typography>
+                <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('eventDetails.revenue.emptyMsg')}</Typography>
               </TableCell></TableRow>
             )}
             {dist.entries.map(en => (
@@ -712,26 +719,26 @@ function RevenueTab({ eventId, token }: { eventId: string; token: string }) {
 
       {dist.status === 'draft' && (
         <>
-          <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>Add a payout entry</Typography>
+          <Typography fontSize={13} fontWeight={700} sx={{ mb: 1 }}>{t('eventDetails.revenue.addPayoutTitle')}</Typography>
           <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center" sx={{ mb: 3 }}>
-            <TextField select size="small" label="Recipient Type" value={recipientType}
+            <TextField select size="small" label={t('eventDetails.revenue.recipientTypeLabel')} value={recipientType}
               onChange={e => setRecipientType(e.target.value)} sx={{ width: 150 }}>
-              {RECIPIENT_TYPES.map(t => <MenuItem key={t} value={t} sx={{ textTransform: 'capitalize' }}>{t}</MenuItem>)}
+              {RECIPIENT_TYPES.map(rt => <MenuItem key={rt} value={rt} sx={{ textTransform: 'capitalize' }}>{rt}</MenuItem>)}
             </TextField>
-            <TextField size="small" label="Share %" type="number" value={sharePct} onChange={e => setSharePct(e.target.value)} sx={{ width: 100 }} />
-            <TextField size="small" label="Amount (₹)" type="number" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} sx={{ width: 130 }} />
+            <TextField size="small" label={t('eventDetails.revenue.sharePctLabel')} type="number" value={sharePct} onChange={e => setSharePct(e.target.value)} sx={{ width: 100 }} />
+            <TextField size="small" label={t('eventDetails.revenue.amountLabel')} type="number" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} sx={{ width: 130 }} />
             <Button variant="outlined" size="small" disabled={saving || !sharePct || !entryAmount} onClick={addEntry}>
-              Add Entry
+              {t('eventDetails.revenue.addEntryBtn')}
             </Button>
           </Stack>
           <Button variant="contained" size="small" disabled={dist.entries.length === 0} onClick={approve}>
-            Approve Distribution
+            {t('eventDetails.revenue.approveDistributionBtn')}
           </Button>
         </>
       )}
       {dist.status === 'approved' && (
         <Button variant="contained" size="small" color="success" onClick={markDistributed}>
-          Mark as Fully Distributed
+          {t('eventDetails.revenue.markDistributedBtn')}
         </Button>
       )}
     </>
@@ -770,6 +777,7 @@ interface CollectorSettings {
 }
 
 function CollectorSettingsTab({ eventId, token }: { eventId: string; token: string }) {
+  const { t } = useTranslation('admin');
   const [cfg, setCfg]           = useState<CollectorSettings | null>(null);
   const [upiId, setUpiId]       = useState('');
   const [imapHost, setImapHost] = useState('');
@@ -812,10 +820,10 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
         imap_password: imapPassword, imap_mailbox: imapMailbox,
       });
       setImapPassword('');
-      setMsg({ type: 'success', text: 'Collector & email settings saved.' });
+      setMsg({ type: 'success', text: t('eventDetails.collector.savedMsg') });
       load();
     } catch (e) {
-      setMsg({ type: 'error', text: e instanceof Error ? e.message : 'Save failed' });
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : t('common.saveFailed') });
     } finally {
       setSaving(false);
     }
@@ -833,9 +841,9 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
       const r = await apiMutate<{ mailbox: string; message_count: number }>(
         'payments', `/registry/${eventId}/settings/test-imap`, token, 'POST',
       );
-      setMsg({ type: 'success', text: `Connected! Mailbox "${r?.mailbox}" has ${r?.message_count} messages.` });
+      setMsg({ type: 'success', text: t('eventDetails.collector.connectedMsg', { mailbox: r?.mailbox, count: r?.message_count }) });
     } catch (e) {
-      setMsg({ type: 'error', text: e instanceof Error ? e.message : 'IMAP test failed' });
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : t('eventDetails.collector.imapTestFailed') });
     } finally {
       setTesting(false);
     }
@@ -849,10 +857,10 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
       );
       setMsg({
         type: 'success',
-        text: `Reconciliation service connected — it read ${r?.fetched ?? 0} message(s) from your inbox just now.`,
+        text: t('eventDetails.collector.reconConnectedMsg', { count: r?.fetched ?? 0 }),
       });
     } catch (e) {
-      setMsg({ type: 'error', text: e instanceof Error ? e.message : 'Reconciliation service test failed' });
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : t('eventDetails.collector.reconTestFailed') });
     } finally {
       setTestingRecon(false);
     }
@@ -866,10 +874,10 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
       );
       setMsg({
         type: 'success',
-        text: `Scan complete: ${r?.matched ?? 0} matched, ${r?.unmatched ?? 0} unmatched from ${r?.emails_processed ?? 0} emails.`,
+        text: t('eventDetails.collector.scanCompleteMsg', { matched: r?.matched ?? 0, unmatched: r?.unmatched ?? 0, processed: r?.emails_processed ?? 0 }),
       });
     } catch (e) {
-      setMsg({ type: 'error', text: e instanceof Error ? e.message : 'Scan failed' });
+      setMsg({ type: 'error', text: e instanceof Error ? e.message : t('eventDetails.collector.scanFailed') });
     } finally {
       setScanning(false);
     }
@@ -884,19 +892,19 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
         {msg && <Alert severity={msg.type} onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
         <Box>
-          <Typography fontWeight={700} mb={1.5}>Receiver UPI ID</Typography>
+          <Typography fontWeight={700} mb={1.5}>{t('eventDetails.collector.receiverUpiTitle')}</Typography>
           <TextField
-            label="UPI ID"
+            label={t('eventDetails.collector.upiLabel')}
             value={upiId}
             onChange={(e) => setUpiId(e.target.value)}
             size="small"
             fullWidth
-            placeholder="name@bankname"
-            helperText="The UPI ID residents pay into for this event. Can be changed at any time."
+            placeholder={t('eventDetails.collector.upiPlaceholder')}
+            helperText={t('eventDetails.collector.upiHelper')}
           />
           {cfg?.member_name && (
             <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-              Collector on record: {cfg.member_name}
+              {t('eventDetails.collector.collectorOnRecord', { name: cfg.member_name })}
             </Typography>
           )}
         </Box>
@@ -905,34 +913,33 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <EmailIcon color="primary" fontSize="small" />
-              <Typography fontWeight={700}>Payment-Verification Email Account</Typography>
+              <Typography fontWeight={700}>{t('eventDetails.collector.emailAccountTitle')}</Typography>
             </Box>
-            <Button size="small" onClick={useGmailDefaults}>Use Gmail</Button>
+            <Button size="small" onClick={useGmailDefaults}>{t('eventDetails.collector.useGmailBtn')}</Button>
           </Box>
           <Typography variant="caption" color="text.secondary" display="block" mb={2}>
-            The inbox that receives your bank/UPI app's payment notification emails. The
-            reconciliation service scans this mailbox to auto-verify payments for this event only.
+            {t('eventDetails.collector.emailAccountDesc')}
           </Typography>
           <Stack spacing={2}>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
-                label="IMAP Host" value={imapHost} onChange={(e) => setImapHost(e.target.value)}
+                label={t('eventDetails.collector.imapHostLabel')} value={imapHost} onChange={(e) => setImapHost(e.target.value)}
                 size="small" sx={{ flex: 3 }} placeholder="imap.gmail.com"
               />
               <TextField
-                label="Port" value={imapPort} onChange={(e) => setImapPort(Number(e.target.value))}
+                label={t('eventDetails.collector.portLabel')} value={imapPort} onChange={(e) => setImapPort(Number(e.target.value))}
                 size="small" type="number" sx={{ flex: 1 }}
               />
             </Box>
             <TextField
-              label="Email address" value={imapUser} onChange={(e) => setImapUser(e.target.value)}
+              label={t('eventDetails.collector.emailAddressLabel')} value={imapUser} onChange={(e) => setImapUser(e.target.value)}
               size="small" fullWidth placeholder="you@gmail.com"
             />
             <TextField
-              label={cfg?.imap_password_set ? 'App password (leave blank to keep current)' : 'App password'}
+              label={cfg?.imap_password_set ? t('eventDetails.collector.appPasswordLabelKeep') : t('eventDetails.collector.appPasswordLabel')}
               value={imapPassword} onChange={(e) => setImapPassword(e.target.value)}
               size="small" fullWidth type={showPw ? 'text' : 'password'}
-              placeholder={cfg?.imap_password_set ? '••••••••' : 'App password or IMAP password'}
+              placeholder={cfg?.imap_password_set ? '••••••••' : t('eventDetails.collector.appPasswordPlaceholder')}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -944,17 +951,14 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
               }}
             />
             <Alert severity="info" sx={{ py: 0.5 }}>
-              For Gmail, this is <strong>not</strong> your normal Google account password — Gmail
-              requires a 16-character <strong>App Password</strong> once 2-Step Verification is
-              on. Generate one at{' '}
+              {t('eventDetails.collector.gmailNoteBefore')} <strong>{t('eventDetails.collector.gmailNoteNot')}</strong> {t('eventDetails.collector.gmailNoteMid')} <strong>{t('eventDetails.collector.gmailNoteAppPassword')}</strong> {t('eventDetails.collector.gmailNoteAfter')}{' '}
               <Link href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">
                 myaccount.google.com/apppasswords
               </Link>{' '}
-              (enable 2-Step Verification first if you haven't) and paste the 16 characters here.
-              Other providers (Outlook, Yahoo, etc.) have their own equivalent "app password" page.
+              {t('eventDetails.collector.gmailNoteEnd')}
             </Alert>
             <TextField
-              label="Mailbox / Folder" value={imapMailbox} onChange={(e) => setImapMailbox(e.target.value)}
+              label={t('eventDetails.collector.mailboxLabel')} value={imapMailbox} onChange={(e) => setImapMailbox(e.target.value)}
               size="small" sx={{ maxWidth: 260 }} placeholder="INBOX"
             />
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
@@ -964,30 +968,26 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
                   disabled={testing || !imapHost || !imapUser}
                   startIcon={testing ? <CircularProgress size={14} /> : <CheckCircleIcon />}
                 >
-                  Test IMAP Connection
+                  {t('eventDetails.collector.testImapBtn')}
                 </Button>
                 <Typography variant="caption" color="text.secondary" display="block" mt={0.75} maxWidth={260}>
-                  Verifies the app password can actually log in and read this mailbox right now —
-                  use it before saving to confirm it works, and any time after to re-check access.
+                  {t('eventDetails.collector.testImapDesc')}
                 </Typography>
               </Box>
               <Box>
-                <Tooltip title={cfg?.reconciliation_channel_configured ? '' : 'Save your settings first (with host, address and password filled in) to provision this.'}>
+                <Tooltip title={cfg?.reconciliation_channel_configured ? '' : t('eventDetails.collector.testReconTooltip')}>
                   <span>
                     <Button
                       variant="outlined" size="small" color="secondary" onClick={testReconciliation}
                       disabled={testingRecon || !cfg?.reconciliation_channel_configured}
                       startIcon={testingRecon ? <CircularProgress size={14} /> : <SyncIcon />}
                     >
-                      Test via Reconciliation Service
+                      {t('eventDetails.collector.testReconBtn')}
                     </Button>
                   </span>
                 </Tooltip>
                 <Typography variant="caption" color="text.secondary" display="block" mt={0.75} maxWidth={260}>
-                  Checks the optional payment reconciliation service's own copy of these
-                  credentials — the one that powers AI-assisted screenshot verification at
-                  checkout. If this fails while the test above succeeds, re-save your settings
-                  to re-sync it.
+                  {t('eventDetails.collector.testReconDesc')}
                 </Typography>
               </Box>
             </Box>
@@ -997,14 +997,14 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Button variant="contained" onClick={save} disabled={saving || !upiId.trim()}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('common.saving') : t('common.save')}
           </Button>
           <Button
             variant="outlined" color="success" onClick={scanNow}
             disabled={scanning || !imapHost || !imapUser}
             startIcon={scanning ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
           >
-            {scanning ? 'Scanning…' : 'Scan Inbox Now'}
+            {scanning ? t('eventDetails.collector.scanning') : t('eventDetails.collector.scanNowBtn')}
           </Button>
         </Box>
       </Stack>
@@ -1015,6 +1015,7 @@ function CollectorSettingsTab({ eventId, token }: { eventId: string; token: stri
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function EventDetails({ token, id: eventId }: { token?: string | null; id?: string }) {
+  const { t } = useTranslation('admin');
   const [event, setEvent]               = useState<EventInfo | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [tickets, setTickets]           = useState<RosterTicket[]>([]);
@@ -1046,23 +1047,23 @@ export function EventDetails({ token, id: eventId }: { token?: string | null; id
   useEffect(() => { load(); }, [load]);
 
   if (!token) {
-    return <Container maxWidth="md" sx={{ pt: 6 }}><Alert severity="warning">You must be logged in.</Alert></Container>;
+    return <Container maxWidth="md" sx={{ pt: 6 }}><Alert severity="warning">{t('eventDetails.loginRequired')}</Alert></Container>;
   }
 
   if (!eventId) {
     return (
       <Box sx={{ p: 4 }}>
         <Alert severity="info" sx={{ mb: 2 }}>
-          Navigate to this page from an event's row in Manage Events (View Details icon) to see its details.
+          {t('eventDetails.noEventSelected')}
         </Alert>
         <Button startIcon={<ArrowBackIcon />} onClick={() => { window.location.href = '/manage'; }}>
-          Back to Manage Events
+          {t('eventDetails.backToManageEventsBtn')}
         </Button>
       </Box>
     );
   }
 
-  const ss = event ? (STATUS_STYLE[event.status] ?? { label: event.status, color: 'default' as const }) : null;
+  const ss = event ? (STATUS_STYLE[event.status] ? { labelKey: `manageEvents.status.${event.status}`, color: STATUS_STYLE[event.status].color } : { labelKey: '', color: 'default' as const }) : null;
 
   return (
     <Box component="main">
@@ -1070,7 +1071,7 @@ export function EventDetails({ token, id: eventId }: { token?: string | null; id
         <Container maxWidth="lg">
           <Button size="small" startIcon={<ArrowBackIcon />} sx={{ mb: 1 }}
             onClick={() => { window.location.href = '/manage'; }}>
-            Manage Events
+            {t('eventDetails.manageEventsBtn')}
           </Button>
           {event && (
             <>
@@ -1088,16 +1089,16 @@ export function EventDetails({ token, id: eventId }: { token?: string | null; id
                     </Stack>
                   </Stack>
                 </Box>
-                {ss && <Chip label={ss.label} color={ss.color} sx={{ fontWeight: 700 }} />}
+                {ss && <Chip label={ss.labelKey ? t(ss.labelKey) : event.status} color={ss.color} sx={{ fontWeight: 700 }} />}
               </Box>
               <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
-                <Tab icon={<ConfirmationNumberIcon fontSize="small" />} iconPosition="start" label="Purchases" />
-                <Tab icon={<HowToRegIcon fontSize="small" />} iconPosition="start" label="Attendance" />
-                <Tab icon={<CardGiftcardIcon fontSize="small" />} iconPosition="start" label="Complimentary" />
-                <Tab icon={<ReceiptIcon fontSize="small" />} iconPosition="start" label="Finance & Expenses" />
-                <Tab icon={<StorefrontIcon fontSize="small" />} iconPosition="start" label="Vendors" />
-                <Tab icon={<AccountBalanceIcon fontSize="small" />} iconPosition="start" label="Revenue" />
-                <Tab icon={<EmailIcon fontSize="small" />} iconPosition="start" label="Collector & Email" />
+                <Tab icon={<ConfirmationNumberIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.purchases')} />
+                <Tab icon={<HowToRegIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.attendance')} />
+                <Tab icon={<CardGiftcardIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.complimentary')} />
+                <Tab icon={<ReceiptIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.financeExpenses')} />
+                <Tab icon={<StorefrontIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.vendors')} />
+                <Tab icon={<AccountBalanceIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.revenue')} />
+                <Tab icon={<EmailIcon fontSize="small" />} iconPosition="start" label={t('eventDetails.tabs.collectorEmail')} />
               </Tabs>
             </>
           )}

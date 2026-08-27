@@ -1,4 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import './i18n';
 import {
   Alert, Box, Button, Card, CardContent, Chip, CircularProgress,
   Container, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
@@ -217,11 +219,17 @@ function formatDateTimeRange(startIso: string, endIso: string) {
   return `${formatDate(startIso)} ${formatTime(startIso)} – ${formatDate(endIso)} ${formatTime(endIso)}`;
 }
 
-const STATUS_CHIP: Record<string, { label: string; bgcolor: string; color: string }> = {
-  draft:     { label: 'Draft',     bgcolor: '#fef3c7', color: '#92400e' },
-  cancelled: { label: 'Cancelled', bgcolor: '#fee2e2', color: '#991b1b' },
-  completed: { label: 'Completed', bgcolor: '#e0f2fe', color: '#0369a1' },
+// Keyed by common.status.<key> — label text is resolved via statusLabel() below since
+// this table is module-level (outside any component) and can't call useTranslation().
+const STATUS_CHIP: Record<string, { key: string; bgcolor: string; color: string }> = {
+  draft:     { key: 'draft',     bgcolor: '#fef3c7', color: '#92400e' },
+  cancelled: { key: 'cancelled', bgcolor: '#fee2e2', color: '#991b1b' },
+  completed: { key: 'completed', bgcolor: '#e0f2fe', color: '#0369a1' },
 };
+
+function statusLabel(t: (key: string) => string, status: string): string {
+  return t(`common.status.${status}`);
+}
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
 
@@ -253,6 +261,7 @@ function EventDetail({
   const [ticketQtys,     setTicketQtys]     = useState<Record<string, number>>({});
   const [checkoutSaving, setCheckoutSaving] = useState(false);
   const [editOpen,       setEditOpen]       = useState(false);
+  const { t } = useTranslation('events');
   const theme = useTheme();
   const divider = theme.palette.divider;
   const panelBg = theme.palette.action.hover;
@@ -300,9 +309,9 @@ function EventDetail({
       <Container maxWidth="md" sx={{ pt: 4 }}>
         <Box component="button" onClick={onBack}
           sx={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6366f1', fontWeight: 600, mb: 2, p: 0 }}>
-          ← Back to Events
+          {t('common.backToEvents')}
         </Box>
-        <Alert severity="error">Failed to load event: {error}</Alert>
+        <Alert severity="error">{t('detail.loadError', { error })}</Alert>
       </Container>
     );
   }
@@ -344,25 +353,25 @@ function EventDetail({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
           <Box component="button" onClick={onBack}
             sx={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6366f1', fontWeight: 600, fontSize: 14, p: 0, mr: 'auto' }}>
-            ← Back to Events
+            {t('common.backToEvents')}
           </Box>
           {canEditThisEvent && (
-            <Tooltip title="Edit this event">
+            <Tooltip title={t('detail.editTooltip')}>
               <Button
                 size="small" variant="outlined" startIcon={<EditIcon />}
                 onClick={() => setEditOpen(true)}
                 sx={{ fontWeight: 600, fontSize: 12 }}>
-                Edit Event
+                {t('detail.editButton')}
               </Button>
             </Tooltip>
           )}
           {isManager && (
-            <Tooltip title="Go to Manage Events">
+            <Tooltip title={t('detail.manageTooltip')}>
               <Button
                 size="small" variant="outlined" startIcon={<SettingsIcon />}
                 onClick={() => { window.location.href = '/manage'; }}
                 sx={{ fontWeight: 600, fontSize: 12 }}>
-                Manage
+                {t('common.manage')}
               </Button>
             </Tooltip>
           )}
@@ -372,9 +381,9 @@ function EventDetail({
         {statusChip && (
           <Alert severity={event.status === 'cancelled' ? 'error' : event.status === 'draft' ? 'warning' : 'info'}
             sx={{ mb: 2, borderRadius: 1.5 }}>
-            {event.status === 'draft'     && 'This event is a draft — not yet visible to residents.'}
-            {event.status === 'cancelled' && 'This event has been cancelled.'}
-            {event.status === 'completed' && 'This event has concluded.'}
+            {event.status === 'draft'     && t('detail.statusDraft')}
+            {event.status === 'cancelled' && t('detail.statusCancelled')}
+            {event.status === 'completed' && t('detail.statusCompleted')}
           </Alert>
         )}
 
@@ -387,7 +396,7 @@ function EventDetail({
                 sx={{ bgcolor: 'rgba(255,255,255,0.25)', color: '#fff', fontWeight: 600 }} />
             )}
             {statusChip && (
-              <Chip label={statusChip.label} size="small"
+              <Chip label={statusLabel(t, statusChip.key)} size="small"
                 sx={{ bgcolor: statusChip.bgcolor, color: statusChip.color, fontWeight: 700 }} />
             )}
           </Box>
@@ -401,31 +410,31 @@ function EventDetail({
           <Grid container spacing={3}>
             <Grid item xs={12} md={7}>
 
-              <Typography fontWeight={700} mb={1}>About this event</Typography>
+              <Typography fontWeight={700} mb={1}>{t('detail.aboutTitle')}</Typography>
               <Typography color="text.secondary" fontSize={14} lineHeight={1.8}>
-                {event.description ?? `Join us for this event at ${societyName}. All residents and their guests are welcome.`}
+                {event.description ?? t('detail.aboutDefault', { societyName })}
               </Typography>
 
               {/* Event details box */}
               <Box sx={{ mt: 3, p: 2, bgcolor: panelBg, borderRadius: 2, border: '1px solid', borderColor: divider }}>
                 <Typography fontSize={12} fontWeight={600} color="text.secondary" textTransform="uppercase" letterSpacing={0.5} mb={1.5}>
-                  Event Details
+                  {t('detail.detailsTitle')}
                 </Typography>
                 {([
-                  ['Organiser',    event.organizer_name],
+                  ['organiser',    t('detail.organiser'), event.organizer_name],
                   event.approved_members.length > 0
-                    ? ['In charge', event.approved_members.join(', ')] : null,
-                  ['Date',         formatDate(event.start_time)],
-                  ['Time',         `${formatTime(event.start_time)} – ${formatTime(event.end_time)}`],
-                  ['Venue',        event.venue],
-                  ['Capacity',     event.capacity ? `${event.capacity} spots` : 'Unlimited'],
-                  ['Availability', event.is_sold_out
-                    ? 'Sold out'
+                    ? ['inCharge', t('detail.inCharge'), event.approved_members.join(', ')] : null,
+                  ['date',         t('detail.date'),         formatDate(event.start_time)],
+                  ['time',         t('detail.time'),         `${formatTime(event.start_time)} – ${formatTime(event.end_time)}`],
+                  ['venue',        t('detail.venue'),        event.venue],
+                  ['capacity',     t('detail.capacity'),     event.capacity ? t('detail.spotsCount', { count: event.capacity }) : t('detail.unlimited')],
+                  ['availability', t('detail.availability'), event.is_sold_out
+                    ? t('common.soldOut')
                     : event.spots_remaining != null
-                      ? `${event.spots_remaining} spots left`
-                      : 'Open'],
-                ].filter(Boolean) as [string, string][]).map(([label, val]) => (
-                  <Box key={label} sx={{ display: 'flex', gap: 2, mb: 0.75, flexWrap: 'wrap' }}>
+                      ? t('detail.spotsLeft', { count: event.spots_remaining })
+                      : t('detail.open')],
+                ].filter(Boolean) as [string, string, string][]).map(([key, label, val]) => (
+                  <Box key={key} sx={{ display: 'flex', gap: 2, mb: 0.75, flexWrap: 'wrap' }}>
                     <Typography fontSize={13} color="text.secondary" sx={{ minWidth: 90, flexShrink: 0 }}>{label}</Typography>
                     <Typography fontSize={13} fontWeight={500}>{val}</Typography>
                   </Box>
@@ -436,7 +445,7 @@ function EventDetail({
               {event.venue_lat != null && event.venue_lng != null && (
                 <Box sx={{ mt: 3 }}>
                   <Typography fontWeight={700} mb={1.5} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <LocationOnIcon sx={{ fontSize: 18, color: '#6366f1' }} /> Venue & Directions
+                    <LocationOnIcon sx={{ fontSize: 18, color: '#6366f1' }} /> {t('detail.venueDirections')}
                   </Typography>
 
                   <Typography fontSize={14} fontWeight={600}>{event.venue}</Typography>
@@ -476,7 +485,7 @@ function EventDetail({
               {(event.announcements ?? []).length > 0 && (
                 <Box sx={{ mt: 3 }}>
                   <Typography fontWeight={700} mb={1.5} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CampaignIcon sx={{ fontSize: 18 }} /> Announcements
+                    <CampaignIcon sx={{ fontSize: 18 }} /> {t('detail.announcementsTitle')}
                   </Typography>
                   <Stack spacing={1.5}>
                     {(event.announcements ?? []).map(ann => (
@@ -499,11 +508,11 @@ function EventDetail({
                 {/* Card header */}
                 <Box sx={{ bgcolor: color, px: 2.5, py: 2 }}>
                   <Typography fontWeight={800} fontSize={16} color="#fff">
-                    {event.is_free && !hasTypes ? 'Free Entry' : 'Select Tickets'}
+                    {event.is_free && !hasTypes ? t('detail.freeEntry') : t('detail.selectTickets')}
                   </Typography>
                   {event.spots_remaining != null && !event.is_sold_out && (
                     <Typography fontSize={12} sx={{ color: 'rgba(255,255,255,0.85)', mt: 0.25 }}>
-                      {event.spots_remaining} spots remaining
+                      {t('detail.spotsRemaining', { count: event.spots_remaining })}
                     </Typography>
                   )}
                 </Box>
@@ -534,13 +543,13 @@ function EventDetail({
                                 )}
                                 {tt.capacity != null && (
                                   <Typography fontSize={11} color="text.secondary">
-                                    Max {tt.capacity} tickets
+                                    {t('detail.maxTickets', { count: tt.capacity })}
                                   </Typography>
                                 )}
                               </Box>
                               <Typography fontWeight={800} fontSize={15}
                                 sx={{ color: tt.is_free ? 'success.main' : color, flexShrink: 0 }}>
-                                {tt.is_free ? 'Free' : `₹${Number(tt.price).toLocaleString('en-IN')}`}
+                                {tt.is_free ? t('common.free') : `₹${Number(tt.price).toLocaleString('en-IN')}`}
                               </Typography>
                             </Box>
 
@@ -584,7 +593,7 @@ function EventDetail({
                                 </Typography>
                               )}
                               {q > 0 && tt.is_free && (
-                                <Typography fontSize={12} color="success.main" fontWeight={600}>✓ Added</Typography>
+                                <Typography fontSize={12} color="success.main" fontWeight={600}>{t('detail.added')}</Typography>
                               )}
                             </Box>
                           </Box>
@@ -598,7 +607,7 @@ function EventDetail({
                     <Box sx={{ mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                         <Typography fontSize={14} fontWeight={600}>
-                          ₹{Number(event.ticket_price).toLocaleString('en-IN')} per ticket
+                          {t('detail.perTicket', { price: `₹${Number(event.ticket_price).toLocaleString('en-IN')}` })}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
                           {([['−', () => setQty(q => Math.max(1, q - 1))], ['+', () => setQty(q => Math.min(10, q + 1))]] as [string, () => void][]).map(([lbl, fn], i) => (
@@ -632,7 +641,7 @@ function EventDetail({
                                 {tt.name} × {ticketQtys[tt.id]}
                               </Typography>
                               <Typography fontSize={12} fontWeight={600}>
-                                {tt.is_free ? 'Free' : `₹${(Number(tt.price) * (ticketQtys[tt.id] ?? 0)).toLocaleString('en-IN')}`}
+                                {tt.is_free ? t('common.free') : `₹${(Number(tt.price) * (ticketQtys[tt.id] ?? 0)).toLocaleString('en-IN')}`}
                               </Typography>
                             </Box>
                           ))
@@ -640,10 +649,10 @@ function EventDetail({
                       }
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1,
                         borderTop: hasTypes && typedCount > 0 ? `1px solid ${divider}` : 'none', mt: hasTypes ? 0.5 : 0 }}>
-                        <Typography fontWeight={700}>Total</Typography>
+                        <Typography fontWeight={700}>{t('common.total')}</Typography>
                         <Typography fontWeight={800} sx={{ color }}>
                           {(hasTypes ? typedTotal : singleTotal) === 0
-                            ? 'Free'
+                            ? t('common.free')
                             : `₹${(hasTypes ? typedTotal : singleTotal).toLocaleString('en-IN')}`}
                         </Typography>
                       </Box>
@@ -689,18 +698,18 @@ function EventDetail({
                       '&:hover': canProceed ? { opacity: 0.9 } : {},
                     }}>
                     {checkoutSaving
-                      ? 'Saving…'
+                      ? t('common.saving')
                       : hasEnded
-                        ? 'Event Ended'
+                        ? t('detail.eventEnded')
                         : event.is_sold_out
-                          ? 'Sold Out'
+                          ? t('common.soldOutButton')
                           : event.status !== 'published'
-                            ? 'Registrations Closed'
+                            ? t('detail.registrationsClosed')
                             : hasTypes
-                              ? (typedCount === 0 ? 'Select at least one ticket' : `Proceed to Checkout (${typedCount} ticket${typedCount > 1 ? 's' : ''})`)
+                              ? (typedCount === 0 ? t('detail.selectAtLeastOne') : t('detail.proceedToCheckoutCount', { count: typedCount }))
                               : event.is_free
-                                ? 'Register for Free'
-                                : 'Proceed to Checkout'}
+                                ? t('detail.registerFree')
+                                : t('detail.proceedToCheckout')}
                   </Box>
 
                   {/* Edit shortcut for the organizer/approved member managing this event */}
@@ -708,7 +717,7 @@ function EventDetail({
                     <Button fullWidth variant="outlined" startIcon={<EditIcon />} size="small"
                       sx={{ mt: 1.5, fontSize: 12 }}
                       onClick={() => setEditOpen(true)}>
-                      Edit this event
+                      {t('detail.editThisEvent')}
                     </Button>
                   )}
 
@@ -765,6 +774,7 @@ function LocationTab({
   const [locateError, setLocateError] = useState<string | null>(null);
   const [locatingMe,  setLocatingMe]  = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { t } = useTranslation('events');
 
   const lat = parseFloat(venueLat);
   const lng = parseFloat(venueLng);
@@ -787,7 +797,7 @@ function LocationTab({
     if (pos) {
       await handleMapPositionChange(pos.lat, pos.lng);
     } else {
-      setLocateError('Couldn\'t detect your location — search for an address above, or open the map and drag the pin to the right spot.');
+      setLocateError(t('locationTab.locateFailed'));
     }
     setLocatingMe(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -810,14 +820,14 @@ function LocationTab({
     try {
       const results = await nominatimSearch(text);
       if (results.length === 0) {
-        setLocateError(`No location found for "${text}". Try a more specific address or city name.`);
+        setLocateError(t('locationTab.noLocationFound', { query: text }));
         return;
       }
       const r = results[0];
       onChange({ venueLat: r.lat, venueLng: r.lon });
       if (!venueAddress) onChange({ venueAddress: r.display_name });
     } catch {
-      setLocateError('Could not reach the geocoding service. Check your internet connection.');
+      setLocateError(t('locationTab.geocodeServiceError'));
     } finally {
       setLocating(false);
     }
@@ -849,11 +859,11 @@ function LocationTab({
     <Stack spacing={2} sx={{ pt: 1 }}>
       <Box>
         <TextField
-          label="Search venue / address" size="small" fullWidth value={query}
+          label={t('locationTab.searchLabel')} size="small" fullWidth value={query}
           onChange={e => handleSearchInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setSuggestions([]); void geocodeAddress(query); } }}
-          placeholder="e.g. Whitefield Bengaluru, Society Clubhouse…"
-          helperText="Type and pick a suggestion, or press Enter to locate"
+          placeholder={t('locationTab.searchPlaceholder')}
+          helperText={t('locationTab.searchHelper')}
           InputProps={{
             startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment>,
             endAdornment: searching ? <InputAdornment position="end"><CircularProgress size={16} /></InputAdornment> : null,
@@ -882,22 +892,22 @@ function LocationTab({
 
       <Box>
         <TextField
-          label="Full address" size="small" fullWidth multiline rows={2}
+          label={t('locationTab.fullAddressLabel')} size="small" fullWidth multiline rows={2}
           value={venueAddress} onChange={e => onChange({ venueAddress: e.target.value })}
-          placeholder="Street, area, city, state — shown to attendees"
+          placeholder={t('locationTab.fullAddressPlaceholder')}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
           <Button size="small" variant={needsGeocode ? 'contained' : 'outlined'} color={needsGeocode ? 'primary' : 'inherit'}
             startIcon={locating ? <CircularProgress size={14} color="inherit" /> : <LocationOnIcon sx={{ fontSize: 16 }} />}
             disabled={locating || !hasAddress} onClick={() => void geocodeAddress(venueAddress || query)}
             sx={{ fontSize: 12, textTransform: 'none', fontWeight: 600 }}>
-            {locating ? 'Locating…' : 'Find on Map'}
+            {locating ? t('common.locating') : t('locationTab.findOnMap')}
           </Button>
           {needsGeocode && !locating && (
-            <Typography fontSize={11} color="warning.main" fontWeight={600}>⚠ Address entered but no coordinates yet — click "Find on Map"</Typography>
+            <Typography fontSize={11} color="warning.main" fontWeight={600}>{t('locationTab.noCoordsWarning')}</Typography>
           )}
           {hasCoords && !locating && (
-            <Typography fontSize={11} color="success.main" fontWeight={600}>✓ Coordinates set</Typography>
+            <Typography fontSize={11} color="success.main" fontWeight={600}>{t('locationTab.coordsSet')}</Typography>
           )}
         </Box>
         {locateError && (
@@ -907,18 +917,18 @@ function LocationTab({
 
       <Box>
         <Typography fontSize={12} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={0.5} mb={1}>
-          GPS Coordinates
+          {t('locationTab.gpsCoordinates')}
         </Typography>
         <Grid container spacing={2}>
           <Grid item xs={6}>
-            <TextField label="Latitude" size="small" fullWidth value={venueLat}
-              onChange={e => onChange({ venueLat: e.target.value })} placeholder="e.g. 12.9716"
-              InputProps={{ startAdornment: <InputAdornment position="start"><Typography fontSize={11} color="text.secondary" fontFamily="monospace">lat</Typography></InputAdornment> }} />
+            <TextField label={t('locationTab.latitude')} size="small" fullWidth value={venueLat}
+              onChange={e => onChange({ venueLat: e.target.value })} placeholder={t('locationTab.latPlaceholder')}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Typography fontSize={11} color="text.secondary" fontFamily="monospace">{t('locationTab.latAbbr')}</Typography></InputAdornment> }} />
           </Grid>
           <Grid item xs={6}>
-            <TextField label="Longitude" size="small" fullWidth value={venueLng}
-              onChange={e => onChange({ venueLng: e.target.value })} placeholder="e.g. 77.5946"
-              InputProps={{ startAdornment: <InputAdornment position="start"><Typography fontSize={11} color="text.secondary" fontFamily="monospace">lng</Typography></InputAdornment> }} />
+            <TextField label={t('locationTab.longitude')} size="small" fullWidth value={venueLng}
+              onChange={e => onChange({ venueLng: e.target.value })} placeholder={t('locationTab.lngPlaceholder')}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Typography fontSize={11} color="text.secondary" fontFamily="monospace">{t('locationTab.lngAbbr')}</Typography></InputAdornment> }} />
           </Grid>
         </Grid>
         {hasCoords && (
@@ -933,10 +943,10 @@ function LocationTab({
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
           <Box>
             <Typography fontSize={12} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={0.5}>
-              Map — drag the pin or click to set location
+              {t('locationTab.mapInstructions')}
             </Typography>
             <Typography fontSize={11} color="text.secondary">
-              "Use current location" is often approximate on desktops (no GPS) — always drag the pin to the exact spot.
+              {t('locationTab.mapHint')}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1.5} alignItems="center">
@@ -944,7 +954,7 @@ function LocationTab({
               startIcon={locatingMe ? <CircularProgress size={12} /> : <MyLocationIcon sx={{ fontSize: 14 }} />}
               onClick={() => void useCurrentLocation()} disabled={locatingMe}
               sx={{ fontSize: 11, textTransform: 'none', fontWeight: 600 }}>
-              Use current location
+              {t('locationTab.useCurrentLocation')}
             </Button>
             {hasCoords && <Typography fontSize={11} color="text.secondary" fontFamily="monospace">{lat.toFixed(5)}, {lng.toFixed(5)}</Typography>}
           </Stack>
@@ -962,8 +972,8 @@ function LocationTab({
         ) : (
           <Alert severity="info" icon={<LocationOnIcon fontSize="inherit" />} sx={{ borderRadius: 1.5 }}>
             {hasAddress
-              ? 'Click "Find on Map" above to geocode the address — then drag the pin to fine-tune.'
-              : 'Enter an address and click "Find on Map", or "Use current location" above, to open the map.'}
+              ? t('locationTab.clickFindOnMap')
+              : t('locationTab.enterAddressPrompt')}
           </Alert>
         )}
       </Box>
@@ -971,7 +981,7 @@ function LocationTab({
       {hasCoords && (
         <Box>
           <Typography fontSize={12} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={0.5} mb={1}>
-            Open in Navigation App
+            {t('locationTab.openInNav')}
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             {[
@@ -1005,6 +1015,8 @@ function TicketTypesTab({ eventId, token }: { eventId: string | undefined; token
   const [editId,   setEditId]   = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
+  // Aliased to `tr` — this component uses `t` as the loop variable name for TicketType.
+  const { t: tr } = useTranslation('events');
 
   const loadTypes = useCallback(async () => {
     if (!eventId) return;
@@ -1062,7 +1074,7 @@ function TicketTypesTab({ eventId, token }: { eventId: string | undefined; token
   };
 
   if (!eventId) {
-    return <Alert severity="info" sx={{ mt: 1, borderRadius: 1.5 }}>Save the event as a draft first, then come back here to add ticket types.</Alert>;
+    return <Alert severity="info" sx={{ mt: 1, borderRadius: 1.5 }}>{tr('ticketTypes.saveDraftFirst')}</Alert>;
   }
 
   return (
@@ -1070,16 +1082,16 @@ function TicketTypesTab({ eventId, token }: { eventId: string | undefined; token
       {error && <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>{error}</Alert>}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography fontWeight={700} fontSize={14} sx={{ flex: 1 }}>
-          Ticket Types ({types.filter(t => t.is_active).length} active)
+          {tr('ticketTypes.title', { count: types.filter(t => t.is_active).length })}
         </Typography>
-        <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Add Type</Button>
+        <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openAdd}>{tr('ticketTypes.addType')}</Button>
       </Box>
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
       ) : types.length === 0 ? (
         <Alert severity="info" sx={{ borderRadius: 1.5 }}>
-          No ticket types yet. Single-price from the event details will be used. Add types for sub-events like "Play Area", "Lunch Coupon", "Music Pass", etc.
+          {tr('ticketTypes.emptyState')}
         </Alert>
       ) : (
         <Stack spacing={1}>
@@ -1088,23 +1100,23 @@ function TicketTypesTab({ eventId, token }: { eventId: string | undefined; token
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography fontWeight={700} fontSize={13}>{t.name}</Typography>
-                  {!t.is_active && <Chip label="Inactive" size="small" sx={{ height: 16, fontSize: 10 }} />}
+                  {!t.is_active && <Chip label={tr('ticketTypes.inactive')} size="small" sx={{ height: 16, fontSize: 10 }} />}
                 </Box>
                 {t.description && <Typography fontSize={11} color="text.secondary" noWrap>{t.description}</Typography>}
                 <Box sx={{ display: 'flex', gap: 1.5, mt: 0.5 }}>
                   <Typography fontSize={12} fontWeight={700} color={t.is_free ? 'success.main' : '#6366f1'}>
-                    {t.is_free ? 'Free' : `₹${Number(t.price).toLocaleString('en-IN')}`}
+                    {t.is_free ? tr('common.free') : `₹${Number(t.price).toLocaleString('en-IN')}`}
                   </Typography>
-                  {t.capacity && <Typography fontSize={12} color="text.secondary">Capacity: {t.capacity}</Typography>}
-                  <Typography fontSize={12} color="text.secondary">Order: {t.sort_order}</Typography>
+                  {t.capacity && <Typography fontSize={12} color="text.secondary">{tr('ticketTypes.capacityLabel', { count: t.capacity })}</Typography>}
+                  <Typography fontSize={12} color="text.secondary">{tr('ticketTypes.orderLabel', { order: t.sort_order })}</Typography>
                 </Box>
               </Box>
               <Stack direction="row" spacing={0.5}>
-                <Tooltip title={t.is_active ? 'Deactivate' : 'Activate'}>
+                <Tooltip title={t.is_active ? tr('ticketTypes.deactivate') : tr('ticketTypes.activate')}>
                   <Switch size="small" checked={t.is_active} onChange={() => void toggleActive(t)} />
                 </Tooltip>
-                <Tooltip title="Edit"><IconButton size="small" onClick={() => openEdit(t)}><EditIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
-                <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => void handleDelete(t.id)}><DeleteIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
+                <Tooltip title={tr('common.edit')}><IconButton size="small" onClick={() => openEdit(t)}><EditIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
+                <Tooltip title={tr('common.delete')}><IconButton size="small" color="error" onClick={() => void handleDelete(t.id)}><DeleteIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
               </Stack>
             </Box>
           ))}
@@ -1113,41 +1125,41 @@ function TicketTypesTab({ eventId, token }: { eventId: string | undefined; token
 
       {showForm && (
         <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, bgcolor: 'action.hover' }}>
-          <Typography fontWeight={700} fontSize={13} mb={1.5}>{editId ? 'Edit Ticket Type' : 'New Ticket Type'}</Typography>
+          <Typography fontWeight={700} fontSize={13} mb={1.5}>{editId ? tr('ticketTypes.editTitle') : tr('ticketTypes.newTitle')}</Typography>
           {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
           <Stack spacing={1.5}>
             <Grid container spacing={1.5}>
               <Grid item xs={8}>
-                <TextField label="Name *" size="small" fullWidth value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Play Area, Lunch Coupon, Water Games…" />
+                <TextField label={tr('ticketTypes.nameLabel')} size="small" fullWidth value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={tr('ticketTypes.namePlaceholder')} />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Sort Order" type="number" size="small" fullWidth value={form.sort_order}
+                <TextField label={tr('ticketTypes.sortOrderLabel')} type="number" size="small" fullWidth value={form.sort_order}
                   onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))} />
               </Grid>
             </Grid>
-            <TextField label="Description" size="small" fullWidth multiline rows={2} value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this ticket include?" />
+            <TextField label={tr('common.description')} size="small" fullWidth multiline rows={2} value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={tr('ticketTypes.descPlaceholder')} />
             <Grid container spacing={1.5} alignItems="center">
               <Grid item xs={4}>
                 <FormControlLabel control={<Switch size="small" checked={form.is_free}
                   onChange={e => setForm(f => ({ ...f, is_free: e.target.checked, price: e.target.checked ? '0' : f.price }))} />}
-                  label={<Typography fontSize={12} fontWeight={600}>Free</Typography>} />
+                  label={<Typography fontSize={12} fontWeight={600}>{tr('common.free')}</Typography>} />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Price (₹)" type="number" size="small" fullWidth value={form.price} disabled={form.is_free}
+                <TextField label={tr('ticketTypes.priceLabel')} type="number" size="small" fullWidth value={form.price} disabled={form.is_free}
                   onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
               </Grid>
               <Grid item xs={4}>
-                <TextField label="Capacity (∞ if blank)" type="number" size="small" fullWidth value={form.capacity}
+                <TextField label={tr('ticketTypes.capacityFieldLabel')} type="number" size="small" fullWidth value={form.capacity}
                   onChange={e => setForm(f => ({ ...f, capacity: e.target.value }))} />
               </Grid>
             </Grid>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button size="small" onClick={() => { setShowForm(false); setEditId(null); }}>Cancel</Button>
+              <Button size="small" onClick={() => { setShowForm(false); setEditId(null); }}>{tr('common.cancel')}</Button>
               <Button size="small" variant="contained" disabled={!form.name || saving}
                 startIcon={saving ? <CircularProgress size={12} /> : <SaveIcon />} onClick={() => void handleSave()}>
-                {editId ? 'Save' : 'Add'}
+                {editId ? tr('common.save') : tr('common.add')}
               </Button>
             </Stack>
           </Stack>
@@ -1182,6 +1194,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [saved,   setSaved]   = useState(false);
+  const { t } = useTranslation('events');
 
   const load = useCallback(() => {
     if (!eventId) return;
@@ -1195,7 +1208,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
   useEffect(() => { load(); }, [load]);
 
   if (!eventId) {
-    return <Alert severity="info">Save step 1 first, then come back here to set this event's payment collection UPI ID.</Alert>;
+    return <Alert severity="info">{t('paymentSettings.saveStep1First')}</Alert>;
   }
 
   const save = async () => {
@@ -1212,7 +1225,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
       setSaved(true);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('paymentSettings.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -1223,24 +1236,24 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
   return (
     <Stack spacing={2.5} sx={{ pt: 1, maxWidth: 480 }}>
       <Box>
-        <Typography fontWeight={700} mb={0.5}>Event Payment Settings</Typography>
+        <Typography fontWeight={700} mb={0.5}>{t('paymentSettings.title')}</Typography>
         <Typography variant="body2" color="text.secondary">
-          Assign a UPI ID to each event to manage registration fees and collections.
+          {t('paymentSettings.subtitle')}
         </Typography>
       </Box>
 
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-      {saved && <Alert severity="success" onClose={() => setSaved(false)}>Payment settings saved.</Alert>}
+      {saved && <Alert severity="success" onClose={() => setSaved(false)}>{t('paymentSettings.saved')}</Alert>}
 
       <TextField
-        label="UPI ID" size="small" fullWidth value={upiId}
+        label={t('paymentSettings.upiIdLabel')} size="small" fullWidth value={upiId}
         onChange={e => setUpiId(e.target.value)}
-        placeholder="name@bankname"
-        helperText="The UPI ID residents pay into for this event's registration fees."
+        placeholder={t('paymentSettings.upiIdPlaceholder')}
+        helperText={t('paymentSettings.upiIdHelper')}
       />
       {cfg?.member_name && (
         <Typography variant="caption" color="text.secondary">
-          Collector on record: {cfg.member_name}
+          {t('paymentSettings.collectorOnRecord', { name: cfg.member_name })}
         </Typography>
       )}
 
@@ -1250,7 +1263,7 @@ function PaymentSettingsTab({ eventId, token }: { eventId: string | undefined; t
           disabled={saving || upiId.trim().length < 5}
           startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
         >
-          {saving ? 'Saving…' : 'Save Payment Settings'}
+          {saving ? t('common.saving') : t('paymentSettings.saveButton')}
         </Button>
       </Box>
     </Stack>
@@ -1278,6 +1291,7 @@ function EventForm({
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | undefined>(initial?.id);
+  const { t } = useTranslation('events');
 
   const [form, setForm] = useState<FormState>({
     title: initial?.title ?? '', description: initial?.description ?? '',
@@ -1308,12 +1322,12 @@ function EventForm({
   const handleSave = async (nextTab?: number) => {
     setError(null);
     if (!form.title.trim() || !form.venue.trim() || !form.start_time || !form.end_time) {
-      setError('Title, venue, and start / end dates are required.');
+      setError(t('eventForm.validationRequired'));
       setTab(0);
       return;
     }
     if (form.cancel_freeze_at && new Date(form.cancel_freeze_at) >= new Date(form.start_time)) {
-      setError('Ticket cancellation freeze time must be before the event start time.');
+      setError(t('eventForm.validationFreezeTime'));
       setTab(0);
       return;
     }
@@ -1354,18 +1368,21 @@ function EventForm({
   const isDraft     = initial ? initial.status === 'draft' : hasId;
   const isPublished = initial ? initial.status === 'published' : false;
 
-  const STEP_LABELS = ['1. Event Details', '2. Location', '3. Ticket Types', '4. Payment Settings'];
+  const STEP_LABELS = [
+    t('eventForm.steps.details'), t('eventForm.steps.location'),
+    t('eventForm.steps.ticketTypes'), t('eventForm.steps.paymentSettings'),
+  ];
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ fontWeight: 700, pb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {initial ? `Edit — ${initial.title}` : 'Create New Event'}
+          {initial ? t('eventForm.editTitle', { title: initial.title }) : t('eventForm.createTitle')}
           {initial && (
-            <Chip label={STATUS_CHIP[initial.status]?.label ?? initial.status}
+            <Chip label={STATUS_CHIP[initial.status] ? statusLabel(t, STATUS_CHIP[initial.status].key) : initial.status}
               sx={{ bgcolor: STATUS_CHIP[initial.status]?.bgcolor, color: STATUS_CHIP[initial.status]?.color, fontWeight: 700, fontSize: 11 }} />
           )}
-          {!initial && hasId && <Chip label="Draft saved" size="small" color="default" sx={{ fontSize: 11 }} />}
+          {!initial && hasId && <Chip label={t('eventForm.draftSaved')} size="small" color="default" sx={{ fontSize: 11 }} />}
         </Box>
       </DialogTitle>
 
@@ -1373,7 +1390,7 @@ function EventForm({
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           {STEP_LABELS.map((label, i) => (
             <Tab key={label} label={label} disabled={i > 0 && !hasId}
-              icon={i > 0 && !hasId ? <Typography fontSize={10} color="text.disabled">Save step 1 first</Typography> : undefined}
+              icon={i > 0 && !hasId ? <Typography fontSize={10} color="text.disabled">{t('eventForm.saveStep1First')}</Typography> : undefined}
               iconPosition="end" sx={{ fontSize: 13 }} />
           ))}
         </Tabs>
@@ -1384,29 +1401,29 @@ function EventForm({
 
         {tab === 0 && (
           <Stack spacing={2.5} sx={{ pt: 1 }}>
-            <TextField label="Title *" size="small" fullWidth value={form.title} onChange={e => patch({ title: e.target.value })} />
-            <TextField label="Description" size="small" fullWidth multiline rows={3} value={form.description} onChange={e => patch({ description: e.target.value })} />
-            <TextField label="Venue / Location Name *" size="small" fullWidth value={form.venue}
-              onChange={e => patch({ venue: e.target.value })} placeholder="e.g. Society Clubhouse, Rooftop Garden Block A" />
+            <TextField label={t('eventForm.titleLabel')} size="small" fullWidth value={form.title} onChange={e => patch({ title: e.target.value })} />
+            <TextField label={t('common.description')} size="small" fullWidth multiline rows={3} value={form.description} onChange={e => patch({ description: e.target.value })} />
+            <TextField label={t('eventForm.venueLabel')} size="small" fullWidth value={form.venue}
+              onChange={e => patch({ venue: e.target.value })} placeholder={t('eventForm.venuePlaceholder')} />
             <Stack direction="row" spacing={2}>
-              <TextField label="Start Date & Time *" type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
+              <TextField label={t('eventForm.startDateLabel')} type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
                 InputLabelProps={{ shrink: true }} value={form.start_time}
                 onChange={e => patch({ start_time: e.target.value })} />
-              <TextField label="End Date & Time *" type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
+              <TextField label={t('eventForm.endDateLabel')} type="datetime-local" size="small" fullWidth sx={{ flex: 1 }}
                 InputLabelProps={{ shrink: true }} value={form.end_time}
                 onChange={e => patch({ end_time: e.target.value })} />
             </Stack>
             <TextField
-              label="Ticket Cancellation Freeze Time (optional)"
+              label={t('eventForm.freezeTimeLabel')}
               type="datetime-local" size="small" fullWidth
               InputLabelProps={{ shrink: true }} value={form.cancel_freeze_at}
               onChange={e => { freezeTouchedRef.current = true; patch({ cancel_freeze_at: e.target.value }); }}
-              helperText="Defaults to 1 day before the start time; clear it to let residents cancel a confirmed ticket any time before the event starts. Must be before the start time."
+              helperText={t('eventForm.freezeTimeHelper')}
             />
             <Stack direction="row" spacing={2}>
-              <TextField label="Capacity (blank = unlimited)" type="number" size="small" fullWidth sx={{ flex: 1 }} value={form.capacity} onChange={e => patch({ capacity: e.target.value })} />
-              <TextField label="Category" select size="small" fullWidth sx={{ flex: 2 }} value={form.category_id} onChange={e => patch({ category_id: e.target.value })}>
-                <MenuItem value=""><em>None</em></MenuItem>
+              <TextField label={t('eventForm.capacityLabel')} type="number" size="small" fullWidth sx={{ flex: 1 }} value={form.capacity} onChange={e => patch({ capacity: e.target.value })} />
+              <TextField label={t('eventForm.categoryLabel')} select size="small" fullWidth sx={{ flex: 2 }} value={form.category_id} onChange={e => patch({ category_id: e.target.value })}>
+                <MenuItem value=""><em>{t('common.none')}</em></MenuItem>
                 {categories.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
               </TextField>
             </Stack>
@@ -1429,23 +1446,23 @@ function EventForm({
           <Stack spacing={3} sx={{ pt: 1 }}>
             <Box>
               <Typography fontSize={12} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={0.5} mb={1.5}>
-                Event Pricing
+                {t('eventForm.eventPricing')}
               </Typography>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={4}>
-                  <TextField label="Ticket pricing" select size="small" fullWidth value={form.is_free ? 'true' : 'false'}
+                  <TextField label={t('eventForm.ticketPricingLabel')} select size="small" fullWidth value={form.is_free ? 'true' : 'false'}
                     onChange={e => { const f = e.target.value === 'true'; patch({ is_free: f }); if (f) patch({ ticket_price: '0' }); }}>
-                    <MenuItem value="true">Free event</MenuItem>
-                    <MenuItem value="false">Paid event</MenuItem>
+                    <MenuItem value="true">{t('eventForm.freeEvent')}</MenuItem>
+                    <MenuItem value="false">{t('eventForm.paidEvent')}</MenuItem>
                   </TextField>
                 </Grid>
                 {!form.is_free && (
                   <>
                     <Grid item xs={4}>
-                      <TextField label="Default ticket price" type="number" size="small" fullWidth value={form.ticket_price} onChange={e => patch({ ticket_price: e.target.value })} />
+                      <TextField label={t('eventForm.defaultPriceLabel')} type="number" size="small" fullWidth value={form.ticket_price} onChange={e => patch({ ticket_price: e.target.value })} />
                     </Grid>
                     <Grid item xs={4}>
-                      <TextField label="Currency" select size="small" fullWidth value={form.price_currency} onChange={e => patch({ price_currency: e.target.value })}>
+                      <TextField label={t('eventForm.currencyLabel')} select size="small" fullWidth value={form.price_currency} onChange={e => patch({ price_currency: e.target.value })}>
                         {['INR', 'USD', 'GBP', 'EUR', 'SGD', 'AED'].map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                       </TextField>
                     </Grid>
@@ -1456,7 +1473,7 @@ function EventForm({
             <Divider />
             <Box>
               <Typography fontSize={12} fontWeight={700} color="text.secondary" textTransform="uppercase" letterSpacing={0.5} mb={1.5}>
-                Ticket Types
+                {t('eventForm.ticketTypesTitle')}
               </Typography>
               <TicketTypesTab eventId={savedId} token={token} />
             </Box>
@@ -1470,27 +1487,27 @@ function EventForm({
         <Stack direction="row" spacing={1}>
           {isDraft && onPublish && (
             <Button variant="contained" color="success" size="small" startIcon={<PublishIcon />} onClick={onPublish}>
-              Publish Event
+              {t('eventForm.publishEvent')}
             </Button>
           )}
           {isPublished && onCancel && (
             <Button variant="outlined" color="error" size="small" startIcon={<BlockIcon />} onClick={onCancel}>
-              Cancel Event
+              {t('eventForm.cancelEvent')}
             </Button>
           )}
         </Stack>
         <Stack direction="row" spacing={1}>
-          <Button onClick={onClose}>Close</Button>
-          {tab > 0 && <Button variant="outlined" onClick={() => setTab(tab - 1)}>← Back</Button>}
+          <Button onClick={onClose}>{t('common.close')}</Button>
+          {tab > 0 && <Button variant="outlined" onClick={() => setTab(tab - 1)}>{t('common.back')}</Button>}
           {tab < 3 ? (
             <Button variant="contained" onClick={() => void handleSave(tab + 1)} disabled={saving}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}>
-              {saving ? 'Saving…' : 'Save & Next →'}
+              {saving ? t('common.saving') : t('eventForm.saveAndNext')}
             </Button>
           ) : (
             <Button variant="contained" onClick={() => void handleSave()} disabled={saving}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}>
-              {saving ? 'Saving…' : (initial ? 'Save Changes' : 'Save Draft')}
+              {saving ? t('common.saving') : (initial ? t('eventForm.saveChanges') : t('eventForm.saveDraft'))}
             </Button>
           )}
         </Stack>
@@ -1516,6 +1533,7 @@ function ManageAccessDialog({
   const [email,   setEmail]   = useState('');
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  const { t } = useTranslation('events');
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
@@ -1547,11 +1565,10 @@ function ManageAccessDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Manage Access</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 700 }}>{t('manageAccess.title')}</DialogTitle>
       <DialogContent dividers>
         <Typography fontSize={13} color="text.secondary" mb={2}>
-          Approved members can manage this event — edit, publish, ticket types — the same as
-          you, but only this one event.
+          {t('manageAccess.description')}
         </Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {loading ? (
@@ -1559,7 +1576,7 @@ function ManageAccessDialog({
         ) : (
           <Stack spacing={1} sx={{ mb: 2 }}>
             {members.length === 0 && (
-              <Typography fontSize={13} color="text.secondary">No approved members yet.</Typography>
+              <Typography fontSize={13} color="text.secondary">{t('manageAccess.empty')}</Typography>
             )}
             {members.map(m => (
               <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
@@ -1567,7 +1584,7 @@ function ManageAccessDialog({
                   <Typography fontWeight={600} fontSize={13}>{m.user_name}</Typography>
                   <Typography fontSize={11} color="text.secondary">{m.user_email}</Typography>
                 </Box>
-                <Tooltip title="Revoke access">
+                <Tooltip title={t('manageAccess.revokeTooltip')}>
                   <IconButton size="small" color="error" onClick={() => void revoke(m.user_id)}>
                     <DeleteIcon sx={{ fontSize: 16 }} />
                   </IconButton>
@@ -1577,12 +1594,12 @@ function ManageAccessDialog({
           </Stack>
         )}
         <Stack direction="row" spacing={1}>
-          <TextField size="small" fullWidth label="Email address" value={email} onChange={e => setEmail(e.target.value)} />
-          <Button variant="contained" disabled={saving || !email.trim()} onClick={() => void grant()}>Grant</Button>
+          <TextField size="small" fullWidth label={t('manageAccess.emailLabel')} value={email} onChange={e => setEmail(e.target.value)} />
+          <Button variant="contained" disabled={saving || !email.trim()} onClick={() => void grant()}>{t('manageAccess.grantButton')}</Button>
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{t('common.close')}</Button>
       </DialogActions>
     </Dialog>
   );
@@ -1630,6 +1647,7 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
   const [amount,   setAmount]   = useState('');
   const [category, setCategory] = useState('other');
   const [saving,   setSaving]   = useState(false);
+  const { t } = useTranslation('events');
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
@@ -1652,7 +1670,7 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
       setDesc(''); setAmount(''); setCategory('other');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add expense');
+      setError(e instanceof Error ? e.message : t('funds.addExpenseFailed'));
     } finally {
       setSaving(false);
     }
@@ -1667,7 +1685,7 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
     const res = await fetch(`${paymentsApiBase()}/funds/${event.id}/export.${format}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) { setError(`Failed to generate ${format} export`); return; }
+    if (!res.ok) { setError(t('funds.exportFailed', { format })); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1684,9 +1702,9 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
       if (!link) return;
       const fullUrl = `${window.location.origin}${link.path}`;
       await navigator.clipboard.writeText(fullUrl);
-      setShareMsg(`Link copied — valid until ${new Date(link.expires_at).toLocaleDateString('en-IN')}`);
+      setShareMsg(t('funds.linkCopied', { date: new Date(link.expires_at).toLocaleDateString('en-IN') }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create share link');
+      setError(e instanceof Error ? e.message : t('funds.shareLinkFailed'));
     }
   };
 
@@ -1696,9 +1714,9 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
           <Box component="button" onClick={onClose}
             sx={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6366f1', fontWeight: 600, fontSize: 14, p: 0 }}>
-            ← Back to My Events
+            {t('funds.backToMyEvents')}
           </Box>
-          <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{event.title} — Funds</Typography>
+          <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{t('funds.pageTitle', { title: event.title })}</Typography>
         </Box>
 
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
@@ -1708,17 +1726,17 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
         {!loading && (
           <>
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
-              <Button size="small" variant="outlined" onClick={() => downloadExport('xlsx')}>Download Excel</Button>
-              <Button size="small" variant="outlined" onClick={() => downloadExport('pdf')}>Download PDF</Button>
-              <Button size="small" variant="outlined" onClick={() => void copyShareLink()}>Copy Share Link</Button>
+              <Button size="small" variant="outlined" onClick={() => downloadExport('xlsx')}>{t('funds.downloadExcel')}</Button>
+              <Button size="small" variant="outlined" onClick={() => downloadExport('pdf')}>{t('funds.downloadPdf')}</Button>
+              <Button size="small" variant="outlined" onClick={() => void copyShareLink()}>{t('funds.copyShareLink')}</Button>
             </Stack>
 
             {summary && (
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <StatCard label="Ticket Revenue" value={fmtMoney(summary.ticket_revenue, 'INR')} color="#0ea5e9" />
-                <StatCard label="Sponsorship Income" value={fmtMoney(summary.sponsorship_income, 'INR')} color="#8b5cf6" />
-                <StatCard label="Total Expenses" value={fmtMoney(summary.total_expenses, 'INR')} color="#ef4444" />
-                <StatCard label="Net Balance" value={fmtMoney(summary.net_balance, 'INR')}
+                <StatCard label={t('funds.ticketRevenue')} value={fmtMoney(summary.ticket_revenue, 'INR')} color="#0ea5e9" />
+                <StatCard label={t('funds.sponsorshipIncome')} value={fmtMoney(summary.sponsorship_income, 'INR')} color="#8b5cf6" />
+                <StatCard label={t('funds.totalExpenses')} value={fmtMoney(summary.total_expenses, 'INR')} color="#ef4444" />
+                <StatCard label={t('funds.netBalance')} value={fmtMoney(summary.net_balance, 'INR')}
                   color={Number(summary.net_balance) >= 0 ? '#10b981' : '#ef4444'} />
               </Grid>
             )}
@@ -1727,21 +1745,21 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
               <Table>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
-                    {['Description', 'Category', 'Amount', 'Logged By', ''].map(h => (
-                      <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
+                    {[t('funds.colDescription'), t('funds.colCategory'), t('funds.colAmount'), t('funds.colLoggedBy'), ''].map((h, i) => (
+                      <TableCell key={i} sx={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', color: 'text.secondary' }}>{h}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {expenses.length === 0 && (
                     <TableRow><TableCell colSpan={5}>
-                      <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>No expenses logged yet.</Typography>
+                      <Typography fontSize={13} color="text.secondary" textAlign="center" py={2}>{t('funds.noExpenses')}</Typography>
                     </TableCell></TableRow>
                   )}
                   {expenses.map(e => (
                     <TableRow key={e.id} hover>
                       <TableCell><Typography fontSize={13}>{e.description}</Typography></TableCell>
-                      <TableCell><Chip label={e.category} size="small" sx={{ textTransform: 'capitalize' }} /></TableCell>
+                      <TableCell><Chip label={t(`funds.categories.${e.category}`, e.category)} size="small" sx={{ textTransform: 'capitalize' }} /></TableCell>
                       <TableCell><Typography fontWeight={700} fontSize={13}>{fmtMoney(e.amount, e.currency_code)}</Typography></TableCell>
                       <TableCell><Typography fontSize={12} color="text.secondary">{e.created_by_name}</Typography></TableCell>
                       <TableCell align="right">
@@ -1754,13 +1772,13 @@ function EventFunds({ event, token, onClose }: { event: EventItem; token: string
             </Paper>
 
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center">
-              <TextField size="small" label="Description" value={desc} onChange={e => setDesc(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
-              <TextField size="small" label="Amount (₹)" type="number" value={amount} onChange={e => setAmount(e.target.value)} sx={{ width: 130 }} />
-              <TextField size="small" select label="Category" value={category} onChange={e => setCategory(e.target.value)} sx={{ width: 140 }}>
-                {EXPENSE_CATEGORIES.map(c => <MenuItem key={c} value={c} sx={{ textTransform: 'capitalize' }}>{c}</MenuItem>)}
+              <TextField size="small" label={t('common.description')} value={desc} onChange={e => setDesc(e.target.value)} sx={{ flex: 1, minWidth: 180 }} />
+              <TextField size="small" label={t('funds.amountLabel')} type="number" value={amount} onChange={e => setAmount(e.target.value)} sx={{ width: 130 }} />
+              <TextField size="small" select label={t('funds.categoryLabel')} value={category} onChange={e => setCategory(e.target.value)} sx={{ width: 140 }}>
+                {EXPENSE_CATEGORIES.map(c => <MenuItem key={c} value={c} sx={{ textTransform: 'capitalize' }}>{t(`funds.categories.${c}`)}</MenuItem>)}
               </TextField>
               <Button variant="contained" size="small" disabled={saving || !desc.trim() || !amount} onClick={() => void addExpense()}>
-                Add Expense
+                {t('funds.addExpenseButton')}
               </Button>
             </Stack>
           </>
@@ -1781,6 +1799,7 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
   const [editing,  setEditing]  = useState<EventItem | undefined>(undefined);
   const [accessTarget, setAccessTarget] = useState<EventItem | undefined>(undefined);
   const [fundsTarget, setFundsTarget] = useState<EventItem | undefined>(undefined);
+  const { t } = useTranslation('events');
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
@@ -1795,19 +1814,22 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
   const transition = async (ev: EventItem, action: 'publish' | 'cancel' | 'complete') => {
     try {
       await eventsApiFetch(`/events/${ev.id}/${action}`, token, { method: 'PATCH' });
-      setActionMsg(`"${ev.title}" ${action === 'publish' ? 'published' : action === 'cancel' ? 'cancelled' : 'marked completed'}.`);
+      setActionMsg(t(
+        action === 'publish' ? 'myEvents.publishedMsg' : action === 'cancel' ? 'myEvents.cancelledMsg' : 'myEvents.completedMsg',
+        { title: ev.title },
+      ));
       load();
     } catch (e: unknown) { setError((e as Error).message); }
   };
 
   const remove = async (ev: EventItem) => {
     const message = ev.status === 'completed'
-      ? `Delete "${ev.title}"? This removes the event and its announcements/ticket-types/complimentary-ticket log, plus all registrations, tickets, and payment records for it. This cannot be undone.`
-      : `Delete draft "${ev.title}"? This cannot be undone.`;
+      ? t('myEvents.deleteCompletedConfirm', { title: ev.title })
+      : t('myEvents.deleteDraftConfirm', { title: ev.title });
     if (!window.confirm(message)) return;
     try {
       await eventsApiFetch(`/events/${ev.id}`, token, { method: 'DELETE' });
-      setActionMsg(`"${ev.title}" deleted.`);
+      setActionMsg(t('myEvents.deletedMsg', { title: ev.title }));
       load();
     } catch (e: unknown) { setError((e as Error).message); }
   };
@@ -1828,16 +1850,14 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
           <Box component="button" onClick={onClose}
             sx={{ border: 'none', background: 'none', cursor: 'pointer', color: '#6366f1', fontWeight: 600, fontSize: 14, p: 0 }}>
-            ← Back to Events
+            {t('common.backToEvents')}
           </Box>
-          <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>My Events</Typography>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Create Event</Button>
+          <Typography variant="h5" fontWeight={800} sx={{ flex: 1 }}>{t('myEvents.title')}</Typography>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>{t('myEvents.createEvent')}</Button>
         </Box>
 
         <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-          Events below are ones you organize, or where you've been added as a person in
-          charge. You can edit, publish, cancel, or complete them and set up ticket
-          types — this does not give you access to any other event.
+          {t('myEvents.infoBanner')}
         </Alert>
 
         {actionMsg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setActionMsg(null)}>{actionMsg}</Alert>}
@@ -1846,7 +1866,7 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
 
         {!loading && events.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 6 }}>
-            <Typography color="text.secondary">You haven't created any events yet.</Typography>
+            <Typography color="text.secondary">{t('myEvents.emptyState')}</Typography>
           </Box>
         )}
 
@@ -1861,8 +1881,8 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography fontWeight={700}>{ev.title}</Typography>
                         {ev.status === 'published'
-                          ? <Chip label="Published" size="small" color="success" sx={{ fontWeight: 700 }} />
-                          : badge && <Chip label={badge.label} size="small" sx={{ bgcolor: badge.bgcolor, color: badge.color, fontWeight: 700 }} />}
+                          ? <Chip label={t('common.status.published')} size="small" color="success" sx={{ fontWeight: 700 }} />
+                          : badge && <Chip label={statusLabel(t, badge.key)} size="small" sx={{ bgcolor: badge.bgcolor, color: badge.color, fontWeight: 700 }} />}
                       </Box>
                       <Typography fontSize={13} color="text.secondary" mt={0.5}>
                         {formatDate(ev.start_time)} · {ev.venue}
@@ -1870,7 +1890,7 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
                     </Box>
                     <Stack direction="row" spacing={1}>
                       {(ev.status === 'draft' || ev.status === 'published') && (
-                        <Tooltip title="Edit">
+                        <Tooltip title={t('common.edit')}>
                           <IconButton size="small" onClick={() => openEdit(ev)}>
                             <EditIcon sx={{ fontSize: 18 }} />
                           </IconButton>
@@ -1878,12 +1898,12 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
                       )}
                       {ev.status === 'draft' && (
                         <>
-                          <Tooltip title="Publish">
+                          <Tooltip title={t('myEvents.publishTooltip')}>
                             <IconButton size="small" color="primary" onClick={() => transition(ev, 'publish')}>
                               <PublishIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Delete draft">
+                          <Tooltip title={t('myEvents.deleteDraftTooltip')}>
                             <IconButton size="small" color="error" onClick={() => void remove(ev)}>
                               <DeleteIcon sx={{ fontSize: 18 }} />
                             </IconButton>
@@ -1892,12 +1912,12 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
                       )}
                       {ev.status === 'published' && (
                         <>
-                          <Tooltip title="Mark completed">
+                          <Tooltip title={t('myEvents.markCompletedTooltip')}>
                             <IconButton size="small" color="success" onClick={() => transition(ev, 'complete')}>
                               <DoneAllIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Cancel event">
+                          <Tooltip title={t('myEvents.cancelEventTooltip')}>
                             <IconButton size="small" color="error" onClick={() => transition(ev, 'cancel')}>
                               <BlockIcon sx={{ fontSize: 18 }} />
                             </IconButton>
@@ -1905,20 +1925,20 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
                         </>
                       )}
                       {ev.status === 'completed' && (
-                        <Tooltip title="Delete event (removes registrations, tickets & payments)">
+                        <Tooltip title={t('myEvents.deleteEventTooltip')}>
                           <IconButton size="small" color="error" onClick={() => void remove(ev)}>
                             <DeleteIcon sx={{ fontSize: 18 }} />
                           </IconButton>
                         </Tooltip>
                       )}
                       {ev.is_organizer && (
-                        <Tooltip title="Manage access">
+                        <Tooltip title={t('myEvents.manageAccessTooltip')}>
                           <IconButton size="small" onClick={() => setAccessTarget(ev)}>
                             <GroupAddIcon sx={{ fontSize: 18 }} />
                           </IconButton>
                         </Tooltip>
                       )}
-                      <Tooltip title="Funds">
+                      <Tooltip title={t('myEvents.fundsTooltip')}>
                         <IconButton size="small" onClick={() => setFundsTarget(ev)}>
                           <AccountBalanceWalletIcon sx={{ fontSize: 18 }} />
                         </IconButton>
@@ -1951,23 +1971,25 @@ function MyEvents({ token, categories, onClose }: { token: string; categories: C
 
 // ── Event Listing ─────────────────────────────────────────────────────────────
 
+// Label text resolved via t() inside EventsApp() — these are module-level so they
+// can't call useTranslation() themselves.
 const SORT_OPTIONS = [
-  { value: 'date_asc',   label: 'Date: Earliest first' },
-  { value: 'date_desc',  label: 'Date: Latest first' },
-  { value: 'newest',     label: 'Recently added' },
-  { value: 'price_asc',  label: 'Price: Low to high' },
-  { value: 'price_desc', label: 'Price: High to low' },
-  { value: 'popular',    label: 'Most registrations' },
+  { value: 'date_asc',   labelKey: 'browse.sort.dateAsc' },
+  { value: 'date_desc',  labelKey: 'browse.sort.dateDesc' },
+  { value: 'newest',     labelKey: 'browse.sort.newest' },
+  { value: 'price_asc',  labelKey: 'browse.sort.priceAsc' },
+  { value: 'price_desc', labelKey: 'browse.sort.priceDesc' },
+  { value: 'popular',    labelKey: 'browse.sort.popular' },
 ];
 
 const PAGE_SIZES = [3, 6, 12];
 
 const MANAGER_STATUS_OPTIONS = [
-  { value: '',          label: 'All statuses' },
-  { value: 'published', label: 'Published' },
-  { value: 'draft',     label: 'Draft' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'completed', label: 'Completed' },
+  { value: '',          labelKey: 'browse.allStatuses' },
+  { value: 'published', labelKey: 'common.status.published' },
+  { value: 'draft',     labelKey: 'common.status.draft' },
+  { value: 'cancelled', labelKey: 'common.status.cancelled' },
+  { value: 'completed', labelKey: 'common.status.completed' },
 ];
 
 export function EventsApp({
@@ -1982,6 +2004,7 @@ export function EventsApp({
   const role      = getRoleFromToken(token);
   const isManager = role === 'admin' || role === 'committee_member';
   const canOrganize = role === 'resident';
+  const { t } = useTranslation('events');
 
   const [categories,  setCategories]  = useState<Category[]>([]);
   const [data,        setData]        = useState<EventListResponse | null>(null);
@@ -2002,8 +2025,8 @@ export function EventsApp({
   const [page,        setPage]        = useState(1);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(search), 350);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebouncedQ(search), 350);
+    return () => clearTimeout(timer);
   }, [search]);
 
   useEffect(() => {
@@ -2079,43 +2102,43 @@ export function EventsApp({
             action={
               <Stack direction="row" spacing={1}>
                 <Button size="small" variant="contained" onClick={() => { window.location.href = '/checkout'; }}>
-                  Resume Checkout
+                  {t('browse.resumeCheckout')}
                 </Button>
                 <Button size="small" color="inherit" onClick={() => {
                   setSavedCart(null);
                   if (token) fetch('/api/registrations/registrations/cart', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
                 }}>
-                  Clear
+                  {t('common.clear')}
                 </Button>
               </Stack>
             }
           >
-            You have a saved cart for <strong>{savedCart.eventTitle}</strong>
+            <Trans i18nKey="browse.savedCartMsg" ns="events" values={{ title: savedCart.eventTitle }} components={{ b: <strong /> }} />
           </Alert>
         )}
 
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-end', gap: 2 }}>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h4" fontWeight={800} color="text.primary" sx={{ fontSize: { xs: 24, md: 32 } }}>
-              {isManager ? 'All Events' : 'Upcoming Events'}
+              {isManager ? t('browse.allEventsTitle') : t('browse.upcomingEventsTitle')}
             </Typography>
             <Typography color="text.secondary" mt={0.5} fontSize={14}>{societyName} · {city}</Typography>
           </Box>
           {isManager && (
-            <Tooltip title="Go to full management console">
+            <Tooltip title={t('browse.manageConsoleTooltip')}>
               <Button variant="outlined" size="small" startIcon={<SettingsIcon />}
                 onClick={() => { window.location.href = '/manage'; }}
                 sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                Manage Events
+                {t('browse.manageEventsButton')}
               </Button>
             </Tooltip>
           )}
           {canOrganize && (
-            <Tooltip title="Create and manage events you organize">
+            <Tooltip title={t('browse.myEventsTooltip')}>
               <Button variant="outlined" size="small" startIcon={<AddIcon />}
                 onClick={() => setShowMyEvents(true)}
                 sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                My Events
+                {t('myEvents.title')}
               </Button>
             </Tooltip>
           )}
@@ -2124,15 +2147,15 @@ export function EventsApp({
         {/* Manager info banner */}
         {isManager && (
           <Alert severity="info" sx={{ mb: 2, borderRadius: 1.5 }}>
-            You are viewing as <strong>{role?.replace('_', ' ')}</strong> — drafts and all statuses are visible.
-            Use the <strong>Manage Events</strong> button to create, publish, or edit events.
+            <Trans i18nKey="browse.managerBanner" ns="events"
+              values={{ role: role ? t(`common.roles.${role}`) : '' }} components={{ b: <strong /> }} />
           </Alert>
         )}
 
         {/* Filter row */}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3, flexWrap: 'wrap' }} useFlexGap>
           <TextField
-            placeholder="Search events…" size="small" value={search}
+            placeholder={t('browse.searchPlaceholder')} size="small" value={search}
             onChange={e => setSearch(e.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment> }}
             sx={{ flex: 1, minWidth: { xs: '100%', sm: 180 }, maxWidth: { sm: 280 }, bgcolor: 'background.paper' }}
@@ -2141,7 +2164,7 @@ export function EventsApp({
           <Select size="small" value={categoryId} displayEmpty
             onChange={e => setCategoryId(e.target.value)}
             sx={{ minWidth: { xs: '100%', sm: 150 }, bgcolor: 'background.paper', fontSize: 14 }}>
-            <MenuItem value="" sx={{ fontSize: 14 }}>All Categories</MenuItem>
+            <MenuItem value="" sx={{ fontSize: 14 }}>{t('browse.allCategories')}</MenuItem>
             {categories.map(c => (
               <MenuItem key={c.id} value={c.id} sx={{ fontSize: 14 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2158,7 +2181,7 @@ export function EventsApp({
               onChange={e => setStatusFilter(e.target.value)}
               sx={{ minWidth: { xs: '100%', sm: 150 }, bgcolor: 'background.paper', fontSize: 14 }}>
               {MANAGER_STATUS_OPTIONS.map(o => (
-                <MenuItem key={o.value} value={o.value} sx={{ fontSize: 14 }}>{o.label}</MenuItem>
+                <MenuItem key={o.value} value={o.value} sx={{ fontSize: 14 }}>{t(o.labelKey)}</MenuItem>
               ))}
             </Select>
           )}
@@ -2166,28 +2189,28 @@ export function EventsApp({
           <Select size="small" value={isFree} displayEmpty
             onChange={e => setIsFree(e.target.value as '' | 'true' | 'false')}
             sx={{ minWidth: { xs: '100%', sm: 130 }, bgcolor: 'background.paper', fontSize: 14 }}>
-            <MenuItem value=""      sx={{ fontSize: 14 }}>Free & Paid</MenuItem>
-            <MenuItem value="true"  sx={{ fontSize: 14 }}>Free only</MenuItem>
-            <MenuItem value="false" sx={{ fontSize: 14 }}>Paid only</MenuItem>
+            <MenuItem value=""      sx={{ fontSize: 14 }}>{t('browse.freeAndPaid')}</MenuItem>
+            <MenuItem value="true"  sx={{ fontSize: 14 }}>{t('browse.freeOnly')}</MenuItem>
+            <MenuItem value="false" sx={{ fontSize: 14 }}>{t('browse.paidOnly')}</MenuItem>
           </Select>
 
           <Select size="small" value={sortBy}
             onChange={e => setSortBy(e.target.value)}
             startAdornment={<SortIcon sx={{ fontSize: 16, ml: 1, color: 'text.secondary' }} />}
             sx={{ minWidth: { xs: '100%', sm: 210 }, bgcolor: 'background.paper', fontSize: 14 }}>
-            {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 14 }}>{o.label}</MenuItem>)}
+            {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 14 }}>{t(o.labelKey)}</MenuItem>)}
           </Select>
 
           <Select size="small" value={pageSize}
             onChange={e => setPageSize(Number(e.target.value))}
             sx={{ minWidth: { xs: '100%', sm: 110 }, bgcolor: 'background.paper', fontSize: 14 }}>
-            {PAGE_SIZES.map(n => <MenuItem key={n} value={n} sx={{ fontSize: 14 }}>{n} per page</MenuItem>)}
+            {PAGE_SIZES.map(n => <MenuItem key={n} value={n} sx={{ fontSize: 14 }}>{t('browse.perPage', { n })}</MenuItem>)}
           </Select>
         </Stack>
 
         {hasFilters && !loading && (
           <Typography fontSize={13} color="text.secondary" mb={2}>
-            {totalCount} event{totalCount !== 1 ? 's' : ''} found
+            {t('browse.eventsFound', { count: totalCount })}
           </Typography>
         )}
 
@@ -2195,10 +2218,10 @@ export function EventsApp({
           <Alert severity="error" sx={{ mb: 3 }} action={
             <Box component="button" onClick={fetchEvents}
               sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', color: 'inherit', fontWeight: 600 }}>
-              Retry
+              {t('common.retry')}
             </Box>
           }>
-            Could not load events: {error}
+            {t('browse.loadError', { error })}
           </Alert>
         )}
 
@@ -2232,10 +2255,10 @@ export function EventsApp({
                         {/* Status + Edit badge row for managers */}
                         {isManager && statusBadge && (
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                            <Chip label={statusBadge.label} size="small"
+                            <Chip label={statusLabel(t, statusBadge.key)} size="small"
                               sx={{ bgcolor: statusBadge.bgcolor, color: statusBadge.color, fontWeight: 700, fontSize: 11, height: 20 }} />
                             {(isDraft || event.status === 'published') && (
-                              <Tooltip title="Edit this event">
+                              <Tooltip title={t('detail.editTooltip')}>
                                 <IconButton size="small" color="primary"
                                   onClick={e => { e.stopPropagation(); window.location.href = '/manage'; }}
                                   sx={{ p: 0.5 }}>
@@ -2265,13 +2288,13 @@ export function EventsApp({
                             [<LocationOnIcon    sx={{ fontSize: 13 }} />, event.venue],
                             [<PeopleIcon        sx={{ fontSize: 13 }} />,
                               event.is_sold_out
-                                ? 'Sold out'
+                                ? t('common.soldOut')
                                 : event.spots_remaining != null
-                                  ? `${event.spots_remaining} spots left`
-                                  : `${event.registration_count} registered`],
-                            [<PersonOutlineIcon sx={{ fontSize: 13 }} />, `By ${event.organizer_name}`],
+                                  ? t('card.spotsLeft', { count: event.spots_remaining })
+                                  : t('card.registered', { count: event.registration_count })],
+                            [<PersonOutlineIcon sx={{ fontSize: 13 }} />, t('card.byOrganizer', { name: event.organizer_name })],
                             event.approved_members.length > 0
-                              ? [<GroupAddIcon sx={{ fontSize: 13 }} />, `In charge: ${event.approved_members.join(', ')}`]
+                              ? [<GroupAddIcon sx={{ fontSize: 13 }} />, t('card.inCharge', { names: event.approved_members.join(', ') })]
                               : null,
                           ].filter(Boolean) as [React.ReactElement, string][]).map(([icon, text], i) => (
                             <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -2288,7 +2311,7 @@ export function EventsApp({
                               <ConfirmationNumberIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
                               <Typography fontSize={11} fontWeight={600} color="text.secondary"
                                 textTransform="uppercase" letterSpacing={0.4}>
-                                Tickets
+                                {t('card.ticketsLabel')}
                               </Typography>
                             </Box>
                             <Stack spacing={0.5}>
@@ -2305,7 +2328,7 @@ export function EventsApp({
                                   </Typography>
                                   <Typography fontSize={12} fontWeight={700}
                                     sx={{ color: tt.is_free ? 'success.main' : color, flexShrink: 0 }}>
-                                    {tt.is_free ? 'Free' : `₹${Number(tt.price).toLocaleString('en-IN')}`}
+                                    {tt.is_free ? t('common.free') : `₹${Number(tt.price).toLocaleString('en-IN')}`}
                                   </Typography>
                                 </Box>
                               ))}
@@ -2315,7 +2338,7 @@ export function EventsApp({
                           /* No ticket types — show base price */
                           <Box sx={{ mb: 1.5 }}>
                             <Typography fontWeight={700} fontSize={15} sx={{ color }}>
-                              {event.is_free ? 'Free' : `₹${Number(event.ticket_price).toLocaleString('en-IN')}`}
+                              {event.is_free ? t('common.free') : `₹${Number(event.ticket_price).toLocaleString('en-IN')}`}
                             </Typography>
                           </Box>
                         )}
@@ -2332,7 +2355,7 @@ export function EventsApp({
                               color:   !event.is_sold_out ? '#fff'  : 'text.disabled',
                               transition: 'opacity .15s', '&:hover': { opacity: 0.88 },
                             }}>
-                            {event.is_sold_out ? 'Sold Out' : 'View'}
+                            {event.is_sold_out ? t('common.soldOutButton') : t('common.view')}
                           </Box>
                         </Box>
                       </CardContent>
@@ -2347,7 +2370,7 @@ export function EventsApp({
               <Box sx={{ textAlign: 'center', py: 8 }}>
                 <Typography fontSize={40}>🔍</Typography>
                 <Typography mt={1} color="text.secondary">
-                  {hasFilters ? 'No events match your search.' : 'No upcoming events yet.'}
+                  {hasFilters ? t('browse.noEventsFilter') : t('browse.noEventsEmpty')}
                 </Typography>
               </Box>
             </Grid>

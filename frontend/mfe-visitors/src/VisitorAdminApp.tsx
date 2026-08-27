@@ -1,8 +1,10 @@
+import './i18n';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert, Box, Button, Chip, CircularProgress, Container, MenuItem, Paper,
   Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import DescriptionIcon from '@mui/icons-material/Description';
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -43,6 +45,7 @@ export interface VisitorAdminAppProps {
 }
 
 export function VisitorAdminApp({ token }: VisitorAdminAppProps) {
+  const { t } = useTranslation('visitors');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +78,7 @@ export function VisitorAdminApp({ token }: VisitorAdminAppProps) {
   if (!token) {
     return (
       <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-        <Alert severity="warning">You must be logged in to view the visitor ledger.</Alert>
+        <Alert severity="warning">{t('admin.loginRequired')}</Alert>
       </Container>
     );
   }
@@ -83,53 +86,53 @@ export function VisitorAdminApp({ token }: VisitorAdminAppProps) {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={800}>Visitor Ledger</Typography>
+        <Typography variant="h5" fontWeight={800}>{t('admin.title')}</Typography>
         <Typography variant="body2" color="text.secondary">
-          All visitor passes and anonymous entries, with photos and Aadhaar/identity status.
+          {t('admin.subtitle')}
         </Typography>
       </Box>
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 3 }}>
         <Stack direction="row" spacing={1} alignItems="center" mb={1.5}>
           <FilterListIcon fontSize="small" color="action" />
-          <Typography variant="subtitle2" fontWeight={700}>Filters</Typography>
+          <Typography variant="subtitle2" fontWeight={700}>{t('admin.filtersTitle')}</Typography>
         </Stack>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} flexWrap="wrap" useFlexGap>
           <TextField
-            label="From" type="date" size="small" InputLabelProps={{ shrink: true }}
+            label={t('admin.fromLabel')} type="date" size="small" InputLabelProps={{ shrink: true }}
             value={filters.from_date} onChange={(e) => setFilters((f) => ({ ...f, from_date: e.target.value }))}
           />
           <TextField
-            label="To" type="date" size="small" InputLabelProps={{ shrink: true }}
+            label={t('admin.toLabel')} type="date" size="small" InputLabelProps={{ shrink: true }}
             value={filters.to_date} onChange={(e) => setFilters((f) => ({ ...f, to_date: e.target.value }))}
           />
           <TextField
-            label="Purpose contains" size="small"
+            label={t('admin.purposeLabel')} size="small"
             value={filters.purpose} onChange={(e) => setFilters((f) => ({ ...f, purpose: e.target.value }))}
           />
           <TextField
-            label="Status" size="small" select sx={{ minWidth: 140 }}
+            label={t('admin.statusLabel')} size="small" select sx={{ minWidth: 140 }}
             value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="partially_entered">Partially entered</MenuItem>
-            <MenuItem value="entered">Entered</MenuItem>
-            <MenuItem value="partially_exited">Partially exited</MenuItem>
-            <MenuItem value="exited">Exited</MenuItem>
-            <MenuItem value="cancelled">Cancelled</MenuItem>
-            <MenuItem value="expired">Expired</MenuItem>
+            <MenuItem value="">{t('admin.statusAll')}</MenuItem>
+            <MenuItem value="pending">{t('admin.statusOptions.pending')}</MenuItem>
+            <MenuItem value="partially_entered">{t('admin.statusOptions.partially_entered')}</MenuItem>
+            <MenuItem value="entered">{t('admin.statusOptions.entered')}</MenuItem>
+            <MenuItem value="partially_exited">{t('admin.statusOptions.partially_exited')}</MenuItem>
+            <MenuItem value="exited">{t('admin.statusOptions.exited')}</MenuItem>
+            <MenuItem value="cancelled">{t('admin.statusOptions.cancelled')}</MenuItem>
+            <MenuItem value="expired">{t('admin.statusOptions.expired')}</MenuItem>
           </TextField>
-          <Button variant="outlined" size="small" onClick={() => setFilters(EMPTY_FILTERS)}>Clear</Button>
+          <Button variant="outlined" size="small" onClick={() => setFilters(EMPTY_FILTERS)}>{t('admin.clear')}</Button>
         </Stack>
       </Paper>
 
       <Stack direction="row" spacing={1} justifyContent="flex-end" mb={2}>
         <Button size="small" startIcon={<GridOnIcon />} disabled={exporting !== null} onClick={() => void handleExport('xlsx')}>
-          {exporting === 'xlsx' ? <CircularProgress size={16} /> : 'Export Excel'}
+          {exporting === 'xlsx' ? <CircularProgress size={16} /> : t('admin.exportExcel')}
         </Button>
         <Button size="small" startIcon={<DescriptionIcon />} disabled={exporting !== null} onClick={() => void handleExport('pdf')}>
-          {exporting === 'pdf' ? <CircularProgress size={16} /> : 'Export PDF'}
+          {exporting === 'pdf' ? <CircularProgress size={16} /> : t('admin.exportPdf')}
         </Button>
       </Stack>
 
@@ -142,46 +145,46 @@ export function VisitorAdminApp({ token }: VisitorAdminAppProps) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Visitor</TableCell>
-                <TableCell>Purpose</TableCell>
-                <TableCell>Resident</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="center">Visitors</TableCell>
-                <TableCell>Entry</TableCell>
-                <TableCell>Exit</TableCell>
-                <TableCell align="center">Photo</TableCell>
-                <TableCell align="center">Aadhaar</TableCell>
+                <TableCell>{t('admin.table.visitor')}</TableCell>
+                <TableCell>{t('admin.table.purpose')}</TableCell>
+                <TableCell>{t('admin.table.resident')}</TableCell>
+                <TableCell>{t('admin.table.status')}</TableCell>
+                <TableCell align="center">{t('admin.table.visitors')}</TableCell>
+                <TableCell>{t('admin.table.entry')}</TableCell>
+                <TableCell>{t('admin.table.exit')}</TableCell>
+                <TableCell align="center">{t('admin.table.photo')}</TableCell>
+                <TableCell align="center">{t('admin.table.aadhaar')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.length === 0 && (
-                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>No visitor records match these filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>{t('admin.empty')}</TableCell></TableRow>
               )}
               {rows.map((r) => (
                 <TableRow key={`${r.kind}-${r.id}`} hover>
                   <TableCell>
                     <Typography variant="body2" fontWeight={600}>{r.visitor_name}</Typography>
-                    <Typography variant="caption" color="text.secondary">{r.kind === 'anonymous' ? 'Walk-in' : 'Registered pass'}</Typography>
+                    <Typography variant="caption" color="text.secondary">{r.kind === 'anonymous' ? t('admin.walkIn') : t('admin.registeredPass')}</Typography>
                   </TableCell>
                   <TableCell>{r.purpose}</TableCell>
                   <TableCell>
-                    {r.resident_name ? `${r.resident_name}${r.resident_flat ? ` (${r.resident_flat})` : ''}` : '—'}
+                    {r.resident_name ? `${r.resident_name}${r.resident_flat ? ` (${r.resident_flat})` : ''}` : t('common.dash')}
                   </TableCell>
-                  <TableCell><Chip size="small" label={statusLabel(r.status)} color={statusColor(r.status)} /></TableCell>
+                  <TableCell><Chip size="small" label={t(`common.status.${r.status}`, statusLabel(r.status))} color={statusColor(r.status)} /></TableCell>
                   <TableCell align="center">
                     {r.visitor_count > 1
-                      ? `${r.entered_count}/${r.visitor_count}${r.exited_count > 0 ? ` (${r.exited_count} out)` : ''}`
-                      : '—'}
+                      ? `${r.entered_count}/${r.visitor_count}${r.exited_count > 0 ? ` ${t('admin.table.outSuffix', { count: r.exited_count })}` : ''}`
+                      : t('common.dash')}
                   </TableCell>
                   <TableCell>{fmtDateTime(r.entry_time)}</TableCell>
                   <TableCell>{fmtDateTime(r.exit_time)}</TableCell>
                   <TableCell align="center">
-                    {r.has_photo ? <PhotoCameraIcon fontSize="small" color="success" /> : '—'}
+                    {r.has_photo ? <PhotoCameraIcon fontSize="small" color="success" /> : t('common.dash')}
                   </TableCell>
                   <TableCell align="center">
                     {r.aadhaar_provided
-                      ? <AssignmentIndIcon fontSize="small" color="action" titleAccess="Aadhaar provided (verification not implemented)" />
-                      : '—'}
+                      ? <AssignmentIndIcon fontSize="small" color="action" titleAccess={t('admin.aadhaarTooltip')} />
+                      : t('common.dash')}
                   </TableCell>
                 </TableRow>
               ))}
@@ -191,8 +194,7 @@ export function VisitorAdminApp({ token }: VisitorAdminAppProps) {
       )}
 
       <Alert severity="info" sx={{ mt: 3 }}>
-        Aadhaar verification is a future integration — the Aadhaar column only shows whether a number
-        was captured on the pass, not whether it has been verified against any government API.
+        {t('admin.aadhaarNotice')}
       </Alert>
     </Container>
   );

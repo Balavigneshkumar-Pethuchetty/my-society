@@ -1,0 +1,95 @@
+{
+  "common": {
+    "browseEvents": "Browse Events",
+    "copy": "Copy",
+    "copied": "Copied!"
+  },
+  "status": {
+    "pending": "Pending Verification",
+    "verified": "Verified",
+    "refundRequested": "Refund Requested",
+    "refunded": "Refunded",
+    "cancelled": "Rejected"
+  },
+  "steps": {
+    "confirmBooking": "Confirm Booking",
+    "scanPay": "Scan & Pay",
+    "uploadScreenshot": "Upload Payment Screenshot",
+    "done": "Done"
+  },
+  "login": {
+    "prompt": "Please log in to continue.",
+    "cta": "Go to Login"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "noActiveCart": "No active cart found.",
+    "resumeError": "Could not resume this registration.",
+    "registrationFailed": "Registration failed",
+    "cancelConfirm": "Cancel this registration and choose different tickets? You have not paid yet, so this is safe.",
+    "screenshotUploadError": "Could not upload your payment screenshot.",
+    "referenceInvalid": "Reference number must be exactly 12 digits.",
+    "amountInvalid": "Enter a valid amount.",
+    "datetimeRequired": "Enter the transaction date & time.",
+    "detailsSubmitError": "Could not submit your payment details.",
+    "connectionError": "Could not connect to the payment service. Please try again or contact an admin.",
+    "summary": {
+      "ticketLine": "{{name}} × {{qty}}",
+      "genericTicket": "Ticket",
+      "free": "Free",
+      "total": "Total",
+      "registerFree": "Register for Free",
+      "confirmProceed": "Confirm & Proceed to Payment"
+    },
+    "confirmedStep": {
+      "title": "Registration Confirmed!",
+      "viewTickets": "View My Tickets"
+    },
+    "scanPayStep": {
+      "alert": "Scan the QR or copy the UPI ID below to pay <b>{{amount}}</b>. Once you've paid, continue to upload a screenshot as proof.",
+      "payVia": "Pay via UPI",
+      "scanHint": "Scan with any UPI app",
+      "amount": "Amount",
+      "payToUpi": "Pay to UPI ID",
+      "transactionId": "Transaction ID",
+      "paidContinue": "I've Paid — Continue",
+      "cancelChoose": "Cancel & choose different tickets"
+    },
+    "uploadStep": {
+      "alert": "Upload a screenshot of your successful payment — we'll read the transaction details off it automatically so you can just double-check them.",
+      "title": "Upload Payment Screenshot",
+      "choosePlaceholder": "Choose screenshot to upload",
+      "hint": "A screenshot of the successful UPI payment (bank/app confirmation screen).",
+      "analyzing": "Analyzing screenshot — this can take up to a minute…",
+      "uploadAnalyze": "Upload & Analyze",
+      "backToScanPay": "Back to Scan & Pay"
+    },
+    "reviewStep": {
+      "alert": "Check the details below against your screenshot. They're locked by default — click <b>Edit</b> if anything looks wrong, then submit.",
+      "screenshotAlt": "Payment screenshot",
+      "viewFullScreen": "View full screen",
+      "transactionDetails": "Transaction Details",
+      "edit": "Edit",
+      "dateTimeLabel": "Transaction Date & Time",
+      "referenceLabel": "Reference Number (UTR / RRN)",
+      "referenceHelper": "12-digit reference number from your bank statement/UPI app",
+      "amountLabel": "Amount Paid",
+      "submitPayment": "Submit Payment",
+      "reupload": "Re-upload a different screenshot",
+      "fullScreenAlt": "Payment screenshot full view"
+    },
+    "submittedStep": {
+      "title": "Payment Submitted",
+      "body": "Thanks — your payment is now pending verification. An admin or committee member will confirm it shortly and your registration will be updated automatically. No further action is needed from you.",
+      "goToRegistrations": "Go to My Registrations"
+    }
+  },
+  "myPayments": {
+    "title": "My Payments",
+    "loadError": "Failed to load",
+    "empty": "No payments yet.",
+    "txnLabel": "TXN",
+    "utrLabel": "UTR:",
+    "reuploadRetry": "Re-upload & Retry"
+  }
+}
