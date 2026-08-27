@@ -59,12 +59,10 @@ function CategoryIcon({ icon, sx }: { icon: string | null; sx?: object }) {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 function eventsApiBase(): string {
-  const { hostname, port, protocol, origin } = window.location;
+  const { hostname, port, origin } = window.location;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
   if (isLocal && ['4004', '4005'].includes(port)) return `${origin}/api/events`;
-  if (isLocal && port !== '8080' && port !== '80')
-    return `${protocol}//${hostname}:8080/api/events`;
-  return `${origin}/api/events`;
+  return '/api/events';
 }
 
 async function eventsApiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {

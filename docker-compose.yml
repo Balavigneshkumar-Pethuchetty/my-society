@@ -5,7 +5,7 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    container_name: society_nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_nginx
     restart: always
     environment:
       NGINX_PORT:           ${NGINX_PORT}
@@ -27,7 +27,7 @@ services:
   # ─── Primary Database ──────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: society_postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_postgres
     restart: always
     environment:
       POSTGRES_USER:     ${POSTGRES_USER}
@@ -50,7 +50,7 @@ services:
   # ─── pgAdmin 4 (Database GUI) — served at /pgadmin/ ──────────────────────
   pgadmin:
     image: dpage/pgadmin4:8
-    container_name: society_pgadmin
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_pgadmin
     restart: always
     environment:
       PGADMIN_DEFAULT_EMAIL:              ${PGADMIN_EMAIL}
@@ -78,7 +78,7 @@ services:
   # ─── Redis (Session cache / rate-limiting) ─────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: society_redis
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_redis
     restart: always
     command: >
       redis-server
@@ -103,7 +103,7 @@ services:
     build:
       context: ./services/user
       dockerfile: Dockerfile
-    container_name: society_user_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_user_service
     restart: always
     environment:
       DB_HOST:           postgres
@@ -149,7 +149,7 @@ services:
     build:
       context: ./services/event
       dockerfile: Dockerfile
-    container_name: society_event_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_event_service
     restart: always
     environment:
       DB_HOST:           postgres
@@ -192,7 +192,7 @@ services:
     build:
       context: ./services/registration
       dockerfile: Dockerfile
-    container_name: society_registration_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_registration_service
     restart: always
     environment:
       DB_HOST:           postgres
@@ -237,7 +237,7 @@ services:
     build:
       context: ./services/ticket
       dockerfile: Dockerfile
-    container_name: society_ticket_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_ticket_service
     restart: always
     environment:
       DB_HOST:           postgres
@@ -273,7 +273,7 @@ services:
   # (mirrors ~/payment_reconcilation_service's standalone `db` service).
   visitor-postgres:
     image: postgres:16-alpine
-    container_name: society_visitor_postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_visitor_postgres
     restart: always
     environment:
       POSTGRES_USER:     ${VISITOR_POSTGRES_USER}
@@ -296,7 +296,7 @@ services:
     build:
       context: ./services/visitor
       dockerfile: Dockerfile
-    container_name: society_visitor_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_visitor_service
     restart: always
     environment:
       DB_HOST:           visitor-postgres
@@ -336,7 +336,7 @@ services:
     build:
       context: ./services/payment
       dockerfile: Dockerfile
-    container_name: society_payment_service
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_payment_service
     restart: always
     environment:
       DB_HOST:           postgres
@@ -393,7 +393,8 @@ services:
         VITE_APP_ENV: ${VITE_APP_ENV:-prod}
         VITE_GOOGLE_LOGIN: ${VITE_GOOGLE_LOGIN:-}
         VITE_PHONE_LOGIN: ${VITE_PHONE_LOGIN:-}
-    container_name: society_frontend
+        VITE_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_URL:-}
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_frontend
     restart: always
     # No host port — served by nginx at /
     healthcheck:
@@ -413,7 +414,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_admin
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_admin
     restart: always
     # No host port — served by nginx at /mfe-admin/
     healthcheck:
@@ -433,7 +434,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_events
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_events
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
@@ -452,7 +453,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_booking
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_booking
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
@@ -471,7 +472,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_tickets
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_tickets
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
@@ -490,7 +491,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_payment
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_payment
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
@@ -509,7 +510,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MODE: ${VITE_MODE:-production}
-    container_name: society_mfe_visitors
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_mfe_visitors
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]

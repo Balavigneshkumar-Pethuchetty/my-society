@@ -114,6 +114,8 @@ up: validate-ports ## Start all services (detached). ENV=dev|test|stage|prod
 	@echo ""
 	@_port=$$(grep -m1 '^NGINX_PORT=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]' || echo 8080); \
 	 _local="http://localhost:$$_port"; \
+	 _kc=$$(grep -m1 '^KEYCLOAK_PUBLIC_URL=' $(ENV_FILE) | cut -d= -f2- | tr -d '"[:space:]' || echo https://auth.gm-global-techies-town.club); \
+	 _hec=$$(grep -m1 '^SPLUNK_HEC_TOKEN=' $(ENV_FILE) | cut -d= -f2- | tr -d '"[:space:]'); \
 	 if [ "$(ENV)" = "prod" ] || [ "$(ENV)" = "stage" ]; then \
 	   _site="https://gm-global-techies-town.club"; \
 	   _pgadmin="https://pgadmin.gm-global-techies-town.club"; \
@@ -125,7 +127,7 @@ up: validate-ports ## Start all services (detached). ENV=dev|test|stage|prod
 	 echo "  $(CYAN)[$(ENV)] Services starting…$(RESET)"; \
 	 echo "  Env file           → $(ENV_FILE)"; \
 	 echo "  Local              → $$_local/"; \
-	 echo "  Keycloak           → https://auth.gm-global-techies-town.club/admin/"; \
+	 echo "  Keycloak           → $$_kc/admin/  (shared, external — in ~/auth-service, not started by this stack)"; \
 	 echo ""; \
 	 echo "  $(CYAN)Browser pages$(RESET)"; \
 	 echo "  App home           → $$_site/"; \
@@ -142,9 +144,13 @@ up: validate-ports ## Start all services (detached). ENV=dev|test|stage|prod
 	 echo "  Entry log          → $$_site/entry-log"; \
 	 echo ""; \
 	 echo "  $(CYAN)Admin / docs$(RESET)"; \
-	 echo "  Keycloak admin     → https://auth.gm-global-techies-town.club/admin/"; \
+	 echo "  Keycloak admin     → $$_kc/admin/  (shared, external)"; \
 	 echo "  pgAdmin            → $$_pgadmin"; \
-	 echo "  Splunk             → https://splunk.gm-global-techies-town.club  (start: make splunk-up)"; \
+	 if [ -n "$$_hec" ]; then \
+	   echo "  Splunk             → https://splunk.gm-global-techies-town.club  (shared, external — this env ships logs there)"; \
+	 else \
+	   echo "  Splunk             → not configured for [$(ENV)] (no SPLUNK_HEC_TOKEN in $(ENV_FILE)) — logs stay local"; \
+	 fi; \
 	 echo "  User API docs      → $$_local/api/users/docs"; \
 	 echo "  Event API docs     → $$_local/api/events/docs"; \
 	 echo "  Registration docs  → $$_local/api/registrations/docs"; \
@@ -356,7 +362,7 @@ sync-users: ## Sync users from auth-service realm.json → postgres (inserts onl
 	  --network $(COMPOSE_PROJECT)_network \
 	  -v $(HOME)/auth-service/keycloak/realm.json:/realm.json:ro \
 	  -v $(PWD)/scripts/sync_keycloak_users.py:/sync.py:ro \
-	  -e POSTGRES_HOST=society_postgres \
+	  -e POSTGRES_HOST=$(COMPOSE_PROJECT)_postgres \
 	  -e POSTGRES_DB=$(POSTGRES_DB_NAME) \
 	  -e POSTGRES_USER=$$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]') \
 	  -e POSTGRES_PASSWORD=$$(grep -m1 '^POSTGRES_PASSWORD=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]') \

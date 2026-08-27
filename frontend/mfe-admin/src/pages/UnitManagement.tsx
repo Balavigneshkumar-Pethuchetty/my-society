@@ -17,11 +17,8 @@ import { AdminSidebar } from '../components/AdminSidebar';
 
 function apiBase() {
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const isStandalone = isLocal && ['4004', '4005'].includes(window.location.port);
-  if (isStandalone) return `${window.location.origin}/api/users`;
-  return isLocal && window.location.port !== '8080' && window.location.port !== '80'
-    ? `${window.location.protocol}//${window.location.hostname}:8080/api/users`
-    : `${window.location.origin}/api/users`;
+  if (isLocal && ['4004', '4005'].includes(window.location.port)) return `${window.location.origin}/api/users`;
+  return '/api/users';
 }
 
 async function apiFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {

@@ -24,12 +24,10 @@ import DeleteIcon         from '@mui/icons-material/DeleteOutline';
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 function apiBase(service: string): string {
-  const { hostname, port, protocol, origin } = window.location;
+  const { hostname, port, origin } = window.location;
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
   if (isLocal && ['4004', '4005'].includes(port)) return `${origin}/api/${service}`;
-  if (isLocal && port !== '8080' && port !== '80')
-    return `${protocol}//${hostname}:8080/api/${service}`;
-  return `${origin}/api/${service}`;
+  return `/api/${service}`;
 }
 
 async function apiFetch<T>(service: string, path: string, token: string): Promise<T> {

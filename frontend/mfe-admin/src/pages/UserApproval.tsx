@@ -56,11 +56,8 @@ const ACTION_COLORS: Record<string, { bg: string; color: string }> = {
 
 function apiBase() {
   const isLocalDevHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const isStandaloneAdminDev = isLocalDevHost && ['4004', '4005'].includes(window.location.port);
-  if (isStandaloneAdminDev) return `${window.location.origin}/api/users`;
-  return isLocalDevHost && window.location.port !== '8080' && window.location.port !== '80'
-    ? `${window.location.protocol}//${window.location.hostname}:8080/api/users`
-    : `${window.location.origin}/api/users`;
+  if (isLocalDevHost && ['4004', '4005'].includes(window.location.port)) return `${window.location.origin}/api/users`;
+  return '/api/users';
 }
 
 async function apiFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
