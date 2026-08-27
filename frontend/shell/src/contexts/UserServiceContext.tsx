@@ -15,6 +15,10 @@ interface UserServiceContextValue {
   syncError: string | null;
   refreshProfile: () => Promise<void>;
   updateProfile: (data: { name?: string; phone?: string | null }) => Promise<void>;
+  updateSettings: (data: {
+    theme?: 'light' | 'dark' | 'system'; locale?: string;
+    notify_sms?: boolean; notify_email?: boolean; notify_telegram?: boolean;
+  }) => Promise<void>;
   uploadAvatar: (file: File) => Promise<void>;
   removeAvatar: () => Promise<void>;
   sendEmailVerification: () => Promise<void>;
@@ -62,6 +66,15 @@ export function UserServiceProvider({ children }: { children: React.ReactNode })
   }, [token]);
 
   const updateProfile = useCallback(async (data: { name?: string; phone?: string | null }) => {
+    if (!token) throw new Error('Not authenticated');
+    const u = await userService.update(token, data);
+    setDbUser(u);
+  }, [token]);
+
+  const updateSettings = useCallback(async (data: {
+    theme?: 'light' | 'dark' | 'system'; locale?: string;
+    notify_sms?: boolean; notify_email?: boolean; notify_telegram?: boolean;
+  }) => {
     if (!token) throw new Error('Not authenticated');
     const u = await userService.update(token, data);
     setDbUser(u);
@@ -130,7 +143,7 @@ export function UserServiceProvider({ children }: { children: React.ReactNode })
   return (
     <UserServiceContext.Provider
       value={{
-        dbUser, apartments, isSyncing, syncError, refreshProfile, updateProfile,
+        dbUser, apartments, isSyncing, syncError, refreshProfile, updateProfile, updateSettings,
         uploadAvatar, removeAvatar,
         sendEmailVerification, checkEmailVerification,
         requestPhoneVerification, confirmPhoneVerification,

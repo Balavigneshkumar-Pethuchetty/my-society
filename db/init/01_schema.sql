@@ -844,3 +844,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);
 -- ---------------------------------------------------------------------------
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ---------------------------------------------------------------------------
+-- USERS.theme / locale / notify_sms / notify_email / notify_telegram
+-- (see db/migrations/031_user_settings.sql)
+-- ---------------------------------------------------------------------------
+ALTER TABLE users ADD COLUMN IF NOT EXISTS theme            VARCHAR(10) NOT NULL DEFAULT 'system';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locale           VARCHAR(10) NOT NULL DEFAULT 'en';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_sms       BOOLEAN     NOT NULL DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_email     BOOLEAN     NOT NULL DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_telegram  BOOLEAN     NOT NULL DEFAULT TRUE;

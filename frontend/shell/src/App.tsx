@@ -7,6 +7,8 @@ import i18n from './i18n';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SocietyProvider, useSociety } from './contexts/SocietyContext';
 import { UserServiceProvider } from './contexts/UserServiceContext';
+import { ThemeSyncBridge } from './contexts/ThemeSyncBridge';
+import { LocaleSyncBridge } from './contexts/LocaleSyncBridge';
 import { ThemeModeProvider, useThemeMode } from './contexts/ThemeModeContext';
 import { Nav } from './components/Nav';
 import { Footer } from './components/Footer';
@@ -16,6 +18,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { PhoneLogin } from './pages/PhoneLogin';
 import { PendingApproval } from './pages/PendingApproval';
 import { Profile } from './pages/Profile';
+import { Settings } from './pages/Settings';
 import { SecurityScanner } from './pages/SecurityScanner';
 import { EntryLog } from './pages/EntryLog';
 import { getTheme } from './theme';
@@ -384,6 +387,7 @@ function AppShell() {
           <Routes>
             <Route path="/"        element={<Home />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
 
             <Route path="/events/*" element={
               <React.Suspense fallback={<MfeFallback label="Events" />}>
@@ -469,6 +473,8 @@ function ThemedApp() {
       <CssBaseline enableColorScheme />
       <AuthProvider>
         <UserServiceProvider>
+          <ThemeSyncBridge />
+          <LocaleSyncBridge />
           <SocietyProvider>
             <AppShell />
           </SocietyProvider>

@@ -6,7 +6,7 @@ import uuid as uuid_lib
 from uuid import UUID
 from typing import Optional
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from asyncpg import Pool
 import aiofiles
 import httpx
@@ -14,6 +14,7 @@ import httpx
 from app.database import get_pool
 from app.auth import get_current_claims, require_role
 from app.config import settings
+from app.notifications import notify_admins, send_channels
 from app.otp_bridge import get_oidc_token_for_user
 from app.models import (
     UserResponse,
@@ -144,7 +145,7 @@ _USER_COLS = """
     u.id, u.username, u.name, u.email, u.phone, u.avatar_url,
     u.email_verified, u.phone_verified, u.role,
     u.keycloak_sub, u.identity_provider, u.is_active, u.created_at,
-    u.structure_node_id
+    u.structure_node_id, u.theme, u.locale, u.notify_sms, u.notify_email, u.notify_telegram
 """
 
 _AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -197,6 +198,11 @@ def _row_to_user(row, apartments: list, unit_node_ids: list = []) -> UserRespons
         created_at=row["created_at"],
         structure_node_id=row["structure_node_id"],
         unit_node_ids=unit_node_ids,
+        theme=row["theme"],
+        locale=row["locale"],
+        notify_sms=row["notify_sms"],
+        notify_email=row["notify_email"],
+        notify_telegram=row["notify_telegram"],
     )
 
 
@@ -204,6 +210,7 @@ def _row_to_user(row, apartments: list, unit_node_ids: list = []) -> UserRespons
 
 @router.post("/sync", response_model=UserResponse, summary="Upsert user from Keycloak JWT")
 async def sync_user(
+    background_tasks: BackgroundTasks,
     claims: dict = Depends(get_current_claims),
     pool: Pool = Depends(get_pool),
 ):
@@ -246,21 +253,12 @@ async def sync_user(
         user_id = upsert["id"]
 
         # Notify all active admins only on brand-new registration
+        recipients: list[dict] = []
+        message = f"{name} ({email}) has registered and is awaiting approval."
         if upsert["is_new"]:
-            admin_ids = await conn.fetch(
-                "SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE"
+            recipients = await notify_admins(
+                conn, "new_registration", "New User Registration", message, related_id=user_id,
             )
-            for admin in admin_ids:
-                await conn.execute(
-                    """
-                    INSERT INTO notification (user_id, type, title, message, related_id)
-                    VALUES ($1, 'new_registration', $2, $3, $4)
-                    """,
-                    admin["id"],
-                    "New User Registration",
-                    f"{name} ({email}) has registered and is awaiting approval.",
-                    user_id,
-                )
 
         row = await conn.fetchrow(
             f"SELECT {_USER_COLS} FROM users u WHERE u.id = $1",
@@ -270,6 +268,9 @@ async def sync_user(
             raise HTTPException(status_code=500, detail="User not found after sync")
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
+
+    if recipients:
+        background_tasks.add_task(send_channels, recipients, message)
     return _row_to_user(row, apartments, units)
 
 
@@ -310,6 +311,16 @@ async def update_me(
         # altogether, which leaves whatever's on file untouched. Stored as SQL NULL rather
         # than "" so the UNIQUE constraint doesn't collide the next time someone clears theirs.
         updates["phone"] = body.phone.strip() if body.phone and body.phone.strip() else None
+    if body.theme is not None:
+        updates["theme"] = body.theme
+    if body.locale is not None:
+        updates["locale"] = body.locale.strip()[:10] or "en"
+    if body.notify_sms is not None:
+        updates["notify_sms"] = body.notify_sms
+    if body.notify_email is not None:
+        updates["notify_email"] = body.notify_email
+    if body.notify_telegram is not None:
+        updates["notify_telegram"] = body.notify_telegram
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

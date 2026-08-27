@@ -70,6 +70,11 @@ export interface DbUser {
   created_at: string;
   structure_node_id?: string | null;
   unit_node_ids: string[];
+  theme: 'light' | 'dark' | 'system';
+  locale: string;
+  notify_sms: boolean;
+  notify_email: boolean;
+  notify_telegram: boolean;
 }
 
 export type OtpChannel = 'telegram' | 'sms';
@@ -215,7 +220,11 @@ export const userService = {
 
   // phone: null explicitly clears the number on file (frees it up for another resident to
   // register with) — omitting the key entirely leaves it untouched.
-  update: (token: string, data: { name?: string; phone?: string | null }) =>
+  update: (token: string, data: {
+    name?: string; phone?: string | null;
+    theme?: 'light' | 'dark' | 'system'; locale?: string;
+    notify_sms?: boolean; notify_email?: boolean; notify_telegram?: boolean;
+  }) =>
     apiFetch<DbUser>('/users/me', token, {
       method: 'PUT',
       body: JSON.stringify(data),

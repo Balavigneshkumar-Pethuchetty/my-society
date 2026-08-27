@@ -34,11 +34,21 @@ class UserResponse(BaseModel):
                                                # endpoints (see services/visitor's user_client.py,
                                                # which has no local DB to join structure_nodes/
                                                # apartment itself)
+    theme: str = "system"
+    locale: str = "en"
+    notify_sms: bool = True
+    notify_email: bool = True
+    notify_telegram: bool = True
 
 
 class UserUpdateRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    theme: Optional[Literal["light", "dark", "system"]] = None
+    locale: Optional[str] = None
+    notify_sms: Optional[bool] = None
+    notify_email: Optional[bool] = None
+    notify_telegram: Optional[bool] = None
 
 
 class PhoneVerifyRequestBody(BaseModel):

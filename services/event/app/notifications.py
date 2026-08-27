@@ -28,7 +28,8 @@ async def notify_all_users(
     related_id: str | None = None,
 ) -> list[dict]:
     rows = await conn.fetch(
-        "SELECT id, phone, email FROM users WHERE is_active = TRUE AND role != 'guest'",
+        "SELECT id, phone, email, notify_sms, notify_email, notify_telegram "
+        "FROM users WHERE is_active = TRUE AND role != 'guest'",
     )
     for r in rows:
         await conn.execute(
@@ -49,7 +50,9 @@ async def send_channels(recipients: list[dict], message: str, title: str) -> Non
         return
 
     if settings.gmail_smtp_user and settings.gmail_app_password:
-        email_recipients = [(r["email"], title) for r in recipients if r.get("email")]
+        email_recipients = [
+            (r["email"], title) for r in recipients if r.get("email") and r.get("notify_email", True)
+        ]
         if email_recipients:
             failures = await asyncio.to_thread(send_notification_emails_sequential, email_recipients, message)
             for email, error in failures:
@@ -62,10 +65,12 @@ async def send_channels(recipients: list[dict], message: str, title: str) -> Non
                 phone = r.get("phone")
                 if not phone:
                     continue
-                for url in (
-                    f"{settings.auth_service_url}/api/sms/send",
-                    f"{settings.auth_service_url}/api/telegram/send",
-                ):
+                channel_urls = []
+                if r.get("notify_sms", True):
+                    channel_urls.append(f"{settings.auth_service_url}/api/sms/send")
+                if r.get("notify_telegram", True):
+                    channel_urls.append(f"{settings.auth_service_url}/api/telegram/send")
+                for url in channel_urls:
                     try:
                         resp = await client.post(url, json={"phone": phone, "message": message}, headers=headers)
                         if resp.status_code >= 300 or not resp.json().get("sent", True):

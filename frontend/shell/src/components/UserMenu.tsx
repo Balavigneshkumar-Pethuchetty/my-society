@@ -11,6 +11,7 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import LogoutIcon from '@mui/icons-material/Logout';
+import SettingsIcon from '@mui/icons-material/Settings';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserService } from '../contexts/UserServiceContext';
@@ -99,6 +100,11 @@ export function UserMenu() {
         <MenuItem dense onClick={() => navigate('/profile')} sx={{ gap: 1.25, py: 1.25 }}>
           <ListItemIcon sx={{ minWidth: 0 }}><AccountCircleIcon fontSize="small" /></ListItemIcon>
           {t('userMenu.myProfile')}
+        </MenuItem>
+
+        <MenuItem dense onClick={() => navigate('/settings')} sx={{ gap: 1.25, py: 1.25 }}>
+          <ListItemIcon sx={{ minWidth: 0 }}><SettingsIcon fontSize="small" /></ListItemIcon>
+          {t('userMenu.settings')}
         </MenuItem>
 
         <MenuItem dense onClick={() => navigate('/tickets')} sx={{ gap: 1.25, py: 1.25 }}>

@@ -343,6 +343,7 @@ async def list_leave_requests(
 )
 async def approve_leave_request(
     request_id: UUID,
+    background_tasks: BackgroundTasks,
     claims: dict = Depends(get_current_claims),
     pool: Pool = Depends(get_pool),
 ):
@@ -367,13 +368,21 @@ async def approve_leave_request(
             "DELETE FROM notification WHERE type = 'leave_request_submitted' AND related_id = $1",
             request_id,
         )
+        message = (
+            "Your request to leave the society has been approved. "
+            "Visit your Profile page to review and finalize."
+        )
+        recipients: list[dict] = []
         if row["user_id"]:
-            await _notify(
-                conn, row["user_id"], "leave_request_approved", "Leave Request Approved",
-                "Your request to leave the society has been approved. "
-                "Visit your Profile page to review and finalize.",
-            )
-        return await _to_response(conn, dict(row))
+            await _notify(conn, row["user_id"], "leave_request_approved", "Leave Request Approved", message)
+            user = await conn.fetchrow("SELECT phone, email FROM users WHERE id = $1", row["user_id"])
+            if user:
+                recipients = [{"phone": user["phone"], "email": user["email"], "title": "Leave Request Approved"}]
+
+        response = await _to_response(conn, dict(row))
+
+    background_tasks.add_task(send_channels, recipients, message)
+    return response
 
 
 @router.post(

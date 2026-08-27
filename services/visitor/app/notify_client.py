@@ -40,11 +40,18 @@ async def notify_in_app(user_id: str, type_: str, title: str, message: str, rela
         logger.exception("in-app notification failed for %s", user_id)
 
 
-async def send_sms_telegram(phone: str | None, message: str) -> None:
+async def send_sms_telegram(
+    phone: str | None, message: str, notify_sms: bool = True, notify_telegram: bool = True,
+) -> None:
     if not phone or not settings.auth_service_api_key:
         return
+    urls = []
+    if notify_sms:
+        urls.append(f"{settings.auth_service_url}/api/sms/send")
+    if notify_telegram:
+        urls.append(f"{settings.auth_service_url}/api/telegram/send")
     async with httpx.AsyncClient(timeout=15) as client:
-        for url in (f"{settings.auth_service_url}/api/sms/send", f"{settings.auth_service_url}/api/telegram/send"):
+        for url in urls:
             try:
                 resp = await client.post(url, json={"phone": phone, "message": message}, headers=_AUTH_HEADERS)
                 if resp.status_code >= 300:
@@ -57,7 +64,16 @@ async def notify_all(
     user_id: str, phone: str | None, type_: str, title: str, message: str, related_id: str | None = None,
 ) -> None:
     await notify_in_app(user_id, type_, title, message, related_id)
-    await send_sms_telegram(phone, message)
+    from app.user_client import get_by_id
+    notify_sms = notify_telegram = True
+    try:
+        user = await get_by_id(user_id)
+        if user:
+            notify_sms = user.get("notify_sms", True)
+            notify_telegram = user.get("notify_telegram", True)
+    except Exception:
+        logger.warning("pref lookup failed for %s — defaulting to notify=True", user_id)
+    await send_sms_telegram(phone, message, notify_sms, notify_telegram)
 
 
 async def broadcast_to_role(role: str, type_: str, title: str, message: str, related_id: str | None = None) -> None:

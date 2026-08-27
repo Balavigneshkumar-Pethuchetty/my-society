@@ -30,7 +30,7 @@ async def resolve_and_record(
     conn, event_id: str, actor_user_id: str, type_: str, title: str, message: str, related_id: str | None = None,
 ) -> list[dict]:
     rows = await conn.fetch(
-        "SELECT u.id, u.phone, u.email FROM users u "
+        "SELECT u.id, u.phone, u.email, u.notify_sms, u.notify_email, u.notify_telegram FROM users u "
         "WHERE (u.id = (SELECT organizer_id FROM event WHERE id = $1::uuid) "
         "   OR u.id IN (SELECT user_id FROM event_permission WHERE event_id = $1::uuid AND revoked_at IS NULL)) "
         "  AND u.id != $2::uuid",
@@ -42,7 +42,13 @@ async def resolve_and_record(
             "VALUES ($1, $2::uuid, $3, $4, $5, $6)",
             r["id"], event_id, type_, title, message, related_id,
         )
-    return [{"id": str(r["id"]), "phone": r["phone"], "email": r["email"], "title": title} for r in rows]
+    return [
+        {
+            "id": str(r["id"]), "phone": r["phone"], "email": r["email"], "title": title,
+            "notify_sms": r["notify_sms"], "notify_email": r["notify_email"], "notify_telegram": r["notify_telegram"],
+        }
+        for r in rows
+    ]
 
 
 async def send_channels(recipients: list[dict], message: str) -> None:
@@ -55,7 +61,10 @@ async def send_channels(recipients: list[dict], message: str) -> None:
         return
 
     if settings.gmail_smtp_user and settings.gmail_app_password:
-        email_recipients = [(r["email"], r.get("title") or "Notification") for r in recipients if r.get("email")]
+        email_recipients = [
+            (r["email"], r.get("title") or "Notification")
+            for r in recipients if r.get("email") and r.get("notify_email", True)
+        ]
         if email_recipients:
             failures = await asyncio.to_thread(send_notification_emails_sequential, email_recipients, message)
             for email, error in failures:
@@ -68,10 +77,12 @@ async def send_channels(recipients: list[dict], message: str) -> None:
                 phone = r.get("phone")
                 if not phone:
                     continue
-                for url in (
-                    f"{settings.auth_service_url}/api/sms/send",
-                    f"{settings.auth_service_url}/api/telegram/send",
-                ):
+                channel_urls = []
+                if r.get("notify_sms", True):
+                    channel_urls.append(f"{settings.auth_service_url}/api/sms/send")
+                if r.get("notify_telegram", True):
+                    channel_urls.append(f"{settings.auth_service_url}/api/telegram/send")
+                for url in channel_urls:
                     try:
                         resp = await client.post(url, json={"phone": phone, "message": message}, headers=headers)
                         if resp.status_code >= 300 or not resp.json().get("sent", True):
