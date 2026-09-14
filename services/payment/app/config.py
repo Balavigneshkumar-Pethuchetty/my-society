@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # (e.g. straight to the reconciliation/refund console for a given txn_ref).
     app_public_url: str = "http://localhost:8080"
 
+    event_service_internal_url: str = "http://event-service:3002/internal"
+    user_service_internal_url: str = "http://user-service:3001/internal/users"
+
     payment_provider: str = "MANUAL_UPI"
 
     # Fernet key encrypting per-event IMAP passwords (committee_registry.imap_password).
@@ -47,6 +50,10 @@ class Settings(BaseSettings):
     reconciliation_service_audience: str = "payment-service"
 
     uploads_dir: str = "/app/uploads"
+    minio_endpoint: str = "http://minio:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = "uploads"
 
     # Gmail SMTP — shared credential with services/registration, used to email
     # residents/organizers a copy of payment/refund verdict notifications.

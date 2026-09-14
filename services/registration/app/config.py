@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # (e.g. straight to the payment approval / refund queue for a given registration).
     app_public_url: str = "http://localhost:8080"
 
+    event_service_internal_url: str = "http://event-service:3002/internal"
+    user_service_internal_url: str = "http://user-service:3001/internal/users"
+    ticket_service_internal_url: str = "http://ticket-service:3006/internal/tickets"
+
     splunk_hec_url: str = "http://splunk:8088/services/collector/event"
     splunk_hec_token: str = ""
 
@@ -33,6 +37,10 @@ class Settings(BaseSettings):
     society_bank_ifsc: str = ""
     society_bank_beneficiary: str = ""
     uploads_dir: str = "/app/uploads"
+    minio_endpoint: str = "http://minio:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = "uploads"
 
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

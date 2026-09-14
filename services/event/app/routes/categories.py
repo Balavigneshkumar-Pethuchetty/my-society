@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_current_claims, require_role
+from app.cache import cache_delete, cache_get_json, cache_set_json
 from app.config import settings
 from app.database import get_pool
 from app.models import CategoryOut, CategoryCreate
@@ -7,10 +8,15 @@ from app.models import CategoryOut, CategoryCreate
 router = APIRouter()
 
 _SOCIETY = settings.society_id
+_CACHE_KEY = "cat:list"
 
 
 @router.get("", response_model=list[CategoryOut], summary="List all event categories")
 async def list_categories():
+    cached = await cache_get_json(_CACHE_KEY)
+    if cached is not None:
+        return cached
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -18,7 +24,9 @@ async def list_categories():
             "WHERE society_id = $1 ORDER BY name",
             _SOCIETY,
         )
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    await cache_set_json(_CACHE_KEY, result)
+    return result
 
 
 @router.post("", response_model=CategoryOut, status_code=201,
@@ -34,6 +42,7 @@ async def create_category(
             "VALUES ($1, $2, $3, $4) RETURNING id::text, name, icon, color_hex",
             _SOCIETY, body.name, body.icon, body.color_hex,
         )
+    await cache_delete(_CACHE_KEY)
     return dict(row)
 
 
@@ -54,6 +63,7 @@ async def update_category(
         )
     if not row:
         raise HTTPException(status_code=404, detail="Category not found")
+    await cache_delete(_CACHE_KEY)
     return dict(row)
 
 
@@ -71,3 +81,4 @@ async def delete_category(
         )
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Category not found")
+    await cache_delete(_CACHE_KEY)

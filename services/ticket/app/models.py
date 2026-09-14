@@ -61,3 +61,34 @@ class ScanOut(BaseModel):
     scanned_at: Optional[datetime] = None
     user_name: Optional[str] = None
     already_scanned: bool = False
+
+
+class TicketInternal(BaseModel):
+    """`ticket` now lives in ticket-service's own `ticket_svc` schema (see
+    DB_ISOLATION_PLAN.md) — this is what registration-service's complimentary-
+    ticket list/detail endpoint gets back instead of its old LEFT JOIN."""
+    id: str
+    reg_id: str
+    status: str
+    qr_token: str
+
+
+class TicketActivityInternal(BaseModel):
+    """One row of a user's ticket history, for user-service's account-deletion
+    activity-export endpoint (used to read this straight off `ticket`)."""
+    event_id: str
+    status: str
+    issued_at: datetime
+    scanned_at: Optional[datetime] = None
+
+
+class TicketIssueBody(BaseModel):
+    reg_id: str
+    user_id: str
+    event_id: str
+    qr_token: Optional[str] = None
+
+
+class TicketIssueOut(BaseModel):
+    id: str
+    qr_token: str

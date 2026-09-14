@@ -117,6 +117,50 @@ class EventListResponse(BaseModel):
     total_pages: int
 
 
+# ── Internal API (other services, via X-Internal-Key) ────────────────────────
+# Lean shapes — raw columns only, no registration/ticket aggregation — since
+# these back point-lookups from other services, not the admin UI.
+
+class EventInternal(BaseModel):
+    id: str
+    society_id: str
+    title: str
+    start_time: datetime
+    end_time: datetime
+    venue: str
+    venue_lat: Optional[float] = None
+    venue_lng: Optional[float] = None
+    venue_place_id: Optional[str] = None
+    venue_address: Optional[str] = None
+    capacity: Optional[int] = None
+    status: str
+    ticket_price: Decimal
+    price_currency: str
+    is_free: bool
+    cancel_freeze_at: Optional[datetime] = None
+    organizer_id: str
+    category_id: Optional[str] = None
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
+
+
+class EventManagersOut(BaseModel):
+    organizer_id: str
+    manager_user_ids: list[str] = []
+
+
+class AuthorshipSummaryOut(BaseModel):
+    organized_event_titles: list[str] = []
+    announcement_count: int = 0
+    event_permission_granted_count: int = 0
+
+
+class TicketTypeInternal(BaseModel):
+    id: str
+    name: str
+    sort_order: int
+
+
 # ── Announcement ──────────────────────────────────────────────────────────────
 
 class AnnouncementOut(BaseModel):
@@ -185,53 +229,3 @@ class EventPermissionOut(BaseModel):
     granted_by: str
     granted_by_name: str
     granted_at: datetime
-
-
-# ── Registration & Payment (manual screenshot flow) ───────────────────────────
-
-class TicketSelection(BaseModel):
-    ticket_type_id: Optional[str] = None
-    ticket_type_name: str = "General Entry"
-    quantity: int = Field(1, ge=1, le=20)
-    unit_price: Decimal = Decimal("0.00")
-
-
-class RegistrationCreate(BaseModel):
-    event_id: str
-    tickets: list[TicketSelection] = Field(default_factory=list)
-    ticket_count: int = Field(1, ge=1, le=20)
-
-
-class PaymentOut(BaseModel):
-    id: str
-    status: str
-    payment_method: Optional[str] = None
-    screenshot_path: Optional[str] = None
-    utr_number: Optional[str] = None
-    review_notes: Optional[str] = None
-    created_at: datetime
-    reviewed_at: Optional[datetime] = None
-
-
-class RegistrationOut(BaseModel):
-    id: str
-    event_id: str
-    event_title: str
-    event_start_time: datetime
-    event_end_time: datetime
-    event_venue: str
-    event_is_free: bool
-    event_image_color: Optional[str] = None
-    ticket_count: int
-    total_amount: Decimal
-    display_currency: str
-    status: str
-    registered_at: datetime
-    payment: Optional[PaymentOut] = None
-    user_name: Optional[str] = None
-    user_email: Optional[str] = None
-
-
-class PaymentReviewBody(BaseModel):
-    action: str = Field(..., pattern=r'^(approve|reject)$')
-    notes: Optional[str] = None

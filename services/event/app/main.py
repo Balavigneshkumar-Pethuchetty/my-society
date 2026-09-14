@@ -5,9 +5,10 @@ from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 from app.database import wait_for_db, close_pool, get_pool
-from app.routes import events, categories
+from app.redis_client import wait_for_redis, close_redis
+from app.routes import events, categories, internal
 from app.middleware.splunk import SplunkLoggingMiddleware
-from app.swagger_theme import themed_swagger_ui_html
+from shared.swagger_theme import themed_swagger_ui_html
 
 _OPENAPI_URL    = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
@@ -16,7 +17,9 @@ _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await wait_for_db()
+    await wait_for_redis()
     yield
+    await close_redis()
     await close_pool()
 
 
@@ -76,6 +79,8 @@ app.add_middleware(SplunkLoggingMiddleware)
 
 app.include_router(events.router,     prefix="/events",     tags=["events"])
 app.include_router(categories.router, prefix="/categories", tags=["categories"])
+app.include_router(internal.router,             prefix="/internal/events",       tags=["internal"])
+app.include_router(internal.ticket_types_router, prefix="/internal/ticket-types", tags=["internal"])
 
 
 @app.get("/health", tags=["ops"], summary="Liveness + DB ping")

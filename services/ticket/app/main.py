@@ -7,9 +7,9 @@ from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.database import wait_for_db, close_pool, get_pool
-from app.routes import tickets
+from app.routes import internal, tickets
 from app.middleware.splunk import SplunkLoggingMiddleware
-from app.swagger_theme import themed_swagger_ui_html
+from shared.swagger_theme import themed_swagger_ui_html
 
 _OPENAPI_URL     = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
@@ -77,6 +77,7 @@ app.add_middleware(
 app.add_middleware(SplunkLoggingMiddleware)
 
 app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
+app.include_router(internal.router, prefix="/internal/tickets", tags=["internal"])
 
 
 @app.get("/health", tags=["ops"], summary="Liveness + DB ping")

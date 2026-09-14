@@ -1,5 +1,4 @@
 import io
-import json
 import uuid
 from datetime import datetime, timezone
 
@@ -10,7 +9,9 @@ from fastapi.responses import Response as FastAPIResponse
 
 from app.auth import get_current_claims, require_role
 from app.database import get_pool
+from app.event_client import get_event, get_events, get_ticket_types
 from app.models import EventTicketItem, ScanBody, ScanOut, TicketOut
+from shared.user_client import get_by_id, get_by_ids, get_by_sub
 
 router = APIRouter()
 
@@ -19,45 +20,26 @@ _TICKET_QUERY = """
         t.id::text,
         t.reg_id::text,
         t.event_id::text,
+        t.user_id::text,
         t.qr_token,
         t.status,
         t.issued_at,
         t.scanned_at,
+        r.id::text AS registration_id,
         r.ticket_count,
         r.total_amount,
         r.display_currency,
-        e.title            AS event_title,
-        e.start_time       AS event_start_time,
-        e.end_time         AS event_end_time,
-        e.venue            AS event_venue,
-        e.cancel_freeze_at AS cancel_freeze_at,
-        ec.color_hex   AS event_image_color,
-        u.name         AS user_name,
-        u.email        AS user_email,
-        u.keycloak_sub,
-        (
-            SELECT json_agg(
-                json_build_object(
-                    'ticket_type_name', tt.name,
-                    'quantity', ri.quantity,
-                    'unit_price', ri.unit_price
-                ) ORDER BY tt.sort_order, tt.name
-            )::text
-            FROM registration_item ri
-            JOIN ticket_type tt ON tt.id = ri.ticket_type_id
-            WHERE ri.registration_id = r.id
-        ) AS ticket_items_json,
         -- When this registration was actually paid/reconciled: prefer the centralized
         -- reconciliation flow's audit trail (exact moment it flipped to 'verified', not
         -- its `updated_at` which also moves on later refund transitions), falling back
         -- to the legacy manual-payment flow's `payment.paid_at`. NULL for free tickets.
         COALESCE(
             (SELECT pal.at
-             FROM payment_transaction pt
-             JOIN payment_audit_log pal ON pal.txn_id = pt.id AND pal.to_status = 'verified'
+             FROM payment_svc.payment_transaction pt
+             JOIN payment_svc.payment_audit_log pal ON pal.txn_id = pt.id AND pal.to_status = 'verified'
              WHERE pt.registration_id = r.id
              ORDER BY pal.at DESC LIMIT 1),
-            (SELECT p.paid_at FROM payment p
+            (SELECT p.paid_at FROM registration_svc.payment p
              WHERE p.registration_id = r.id AND p.paid_at IS NOT NULL
              ORDER BY p.paid_at DESC LIMIT 1)
         ) AS paid_at,
@@ -65,24 +47,69 @@ _TICKET_QUERY = """
         -- whether the refund has actually been paid out lives on payment_transaction instead,
         -- so surface it here too rather than leaving the resident with no way to tell
         -- "still waiting on the committee" from "already refunded".
-        (SELECT pt.status FROM payment_transaction pt
+        (SELECT pt.status FROM payment_svc.payment_transaction pt
          WHERE pt.registration_id = r.id
          ORDER BY pt.updated_at DESC LIMIT 1) AS refund_status,
         (SELECT pal.at
-         FROM payment_transaction pt
-         JOIN payment_audit_log pal ON pal.txn_id = pt.id AND pal.to_status = 'refunded'
+         FROM payment_svc.payment_transaction pt
+         JOIN payment_svc.payment_audit_log pal ON pal.txn_id = pt.id AND pal.to_status = 'refunded'
          WHERE pt.registration_id = r.id
          ORDER BY pal.at DESC LIMIT 1) AS refunded_at
     FROM ticket t
-    JOIN registration r  ON r.id  = t.reg_id
-    JOIN event e         ON e.id  = t.event_id
-    LEFT JOIN event_category ec ON ec.id = e.category_id
-    JOIN users u         ON u.id  = t.user_id
+    JOIN registration_svc.registration r  ON r.id  = t.reg_id
 """
 
 
+async def _hydrate_tickets(conn, rows) -> list[dict]:
+    """event/event_category/ticket_type now live in event-service's own schema,
+    and users stays out of ticket-service's own DB access entirely (see
+    DB_ISOLATION_PLAN.md) — merge in event + user fields + per-item ticket-type
+    names via internal API calls instead of JOINs/a correlated subquery."""
+    events = await get_events(r["event_id"] for r in rows)
+    users = await get_by_ids(r["user_id"] for r in rows)
+
+    reg_ids = list({r["registration_id"] for r in rows})
+    items_by_reg: dict[str, list[dict]] = {}
+    if reg_ids:
+        item_rows = await conn.fetch(
+            "SELECT registration_id::text, ticket_type_id::text, quantity, unit_price "
+            "FROM registration_svc.registration_item WHERE registration_id = ANY($1::uuid[])",
+            reg_ids,
+        )
+        ticket_types = await get_ticket_types(r["ticket_type_id"] for r in item_rows)
+        for r in item_rows:
+            tt = ticket_types.get(r["ticket_type_id"], {})
+            items_by_reg.setdefault(r["registration_id"], []).append({
+                "ticket_type_name": tt.get("name", "Ticket"),
+                "quantity": r["quantity"],
+                "unit_price": r["unit_price"],
+                "_sort_order": tt.get("sort_order", 0),
+            })
+        for items in items_by_reg.values():
+            items.sort(key=lambda it: (it["_sort_order"], it["ticket_type_name"]))
+            for it in items:
+                del it["_sort_order"]
+
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        e = events.get(d["event_id"], {})
+        u = users.get(d["user_id"], {})
+        d["event_title"] = e.get("title")
+        d["event_start_time"] = e.get("start_time")
+        d["event_end_time"] = e.get("end_time")
+        d["event_venue"] = e.get("venue")
+        d["cancel_freeze_at"] = e.get("cancel_freeze_at")
+        d["event_image_color"] = e.get("category_color")
+        d["ticket_items"] = items_by_reg.get(d["registration_id"], [])
+        d["user_name"] = u.get("name")
+        d["user_email"] = u.get("email")
+        d["keycloak_sub"] = u.get("keycloak_sub")
+        hydrated.append(d)
+    return hydrated
+
+
 def _build_out(row) -> TicketOut:
-    raw_items = row.get("ticket_items_json")
     return TicketOut(
         id=row["id"],
         reg_id=row["reg_id"],
@@ -102,7 +129,7 @@ def _build_out(row) -> TicketOut:
         scanned_at=row.get("scanned_at"),
         user_name=row.get("user_name"),
         user_email=row.get("user_email"),
-        ticket_items=json.loads(raw_items) if raw_items else [],
+        ticket_items=row.get("ticket_items", []),
         paid_at=row.get("paid_at"),
         refund_status=row.get("refund_status"),
         refunded_at=row.get("refunded_at"),
@@ -117,11 +144,11 @@ def _generate_qr_svg(token: str) -> bytes:
     return buf.getvalue()
 
 
-async def _get_db_user_id(conn, sub: str) -> str:
-    row = await conn.fetchrow("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-    if not row:
+async def _get_db_user_id(sub: str) -> str:
+    user = await get_by_sub(sub)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return row["id"]
+    return user["id"]
 
 
 async def _ensure_tickets_issued(conn, user_id: str) -> None:
@@ -130,7 +157,7 @@ async def _ensure_tickets_issued(conn, user_id: str) -> None:
         """
         SELECT r.id::text AS reg_id, r.event_id::text, r.user_id::text,
                r.qr_code AS existing_qr
-        FROM registration r
+        FROM registration_svc.registration r
         LEFT JOIN ticket t ON t.reg_id = r.id
         WHERE r.user_id = $1::uuid
           AND r.status   = 'confirmed'
@@ -158,43 +185,31 @@ async def get_my_tickets(claims: dict = Depends(get_current_claims)):
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
         await _ensure_tickets_issued(conn, user_id)
         rows = await conn.fetch(
-            _TICKET_QUERY + " WHERE t.user_id = $1::uuid ORDER BY e.start_time DESC",
+            _TICKET_QUERY + " WHERE t.user_id = $1::uuid",
             user_id,
         )
-    return [_build_out(r) for r in rows]
+        hydrated = await _hydrate_tickets(conn, rows)
+    # ORDER BY e.start_time DESC can no longer run in SQL since `event` moved to
+    # event-service's own schema — sort here instead, after hydration.
+    hydrated.sort(key=lambda d: d["event_start_time"], reverse=True)
+    return [_build_out(d) for d in hydrated]
 
 
 # ── Shared roster query ───────────────────────────────────────────────────────
 
 _ROSTER_QUERY = """
     SELECT t.id::text AS ticket_id,
-           u.name     AS user_name,
-           u.email    AS user_email,
-           u.phone    AS user_phone,
+           t.user_id::text,
            r.ticket_count,
            t.status,
-           t.scanned_at,
-           COALESCE(
-               (SELECT sn.name
-                FROM user_units uu
-                JOIN structure_nodes sn ON sn.id = uu.node_id
-                WHERE uu.user_id = u.id
-                LIMIT 1),
-               (SELECT a.block || ' – ' || a.unit_number
-                FROM user_apartments ua
-                JOIN apartment a ON a.id = ua.apartment_id
-                WHERE ua.user_id = u.id
-                LIMIT 1)
-           ) AS unit_label
+           t.scanned_at
     FROM ticket t
-    JOIN registration r ON r.id  = t.reg_id
-    JOIN users u        ON u.id  = t.user_id
+    JOIN registration_svc.registration r ON r.id  = t.reg_id
     WHERE t.event_id = $1::uuid
       AND t.status  != 'cancelled'
-    ORDER BY u.name
 """
 
 
@@ -208,7 +223,25 @@ async def list_event_tickets(
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(_ROSTER_QUERY, event_id)
-    return [dict(r) for r in rows]
+    # users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md) —
+    # unit_label is already computed server-side there, so this one batch call
+    # replaces both the old JOIN and the local user_units/user_apartments subqueries.
+    users = await get_by_ids(r["user_id"] for r in rows)
+    roster = []
+    for r in rows:
+        u = users.get(r["user_id"], {})
+        roster.append({
+            "ticket_id": r["ticket_id"],
+            "user_name": u.get("name"),
+            "user_email": u.get("email"),
+            "user_phone": u.get("phone"),
+            "ticket_count": r["ticket_count"],
+            "status": r["status"],
+            "scanned_at": r["scanned_at"],
+            "unit_label": u.get("unit_label"),
+        })
+    roster.sort(key=lambda d: d["user_name"] or "")
+    return roster
 
 
 # ── POST /tickets/{ticket_id}/enter — mark entry by ticket ID (guard / admin) ─
@@ -221,25 +254,21 @@ async def enter_by_ticket_id(
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        scanner_id = await _get_db_user_id(conn, sub)
+        scanner_id = await _get_db_user_id(sub)
         row = await conn.fetchrow(
             """
-            SELECT t.id::text, t.reg_id::text, t.event_id::text, t.status,
-                   t.scanned_at, r.ticket_count,
-                   e.title        AS event_title,
-                   e.start_time   AS event_start_time,
-                   e.venue        AS event_venue,
-                   u.name         AS user_name
+            SELECT t.id::text, t.reg_id::text, t.event_id::text, t.user_id::text, t.status,
+                   t.scanned_at, r.ticket_count
             FROM ticket t
-            JOIN registration r ON r.id = t.reg_id
-            JOIN event e        ON e.id = t.event_id
-            JOIN users u        ON u.id = t.user_id
+            JOIN registration_svc.registration r ON r.id = t.reg_id
             WHERE t.id = $1::uuid
             """,
             ticket_id,
         )
         if not row:
             raise HTTPException(status_code=404, detail="Ticket not found")
+        event = await get_event(row["event_id"])
+        ticket_holder = await get_by_id(row["user_id"])
 
         already_scanned = row["status"] == "used"
 
@@ -250,7 +279,7 @@ async def enter_by_ticket_id(
                 now, scanner_id, ticket_id,
             )
             await conn.execute(
-                "UPDATE registration SET status = 'attended' WHERE id = $1::uuid",
+                "UPDATE registration_svc.registration SET status = 'attended' WHERE id = $1::uuid",
                 row["reg_id"],
             )
 
@@ -258,13 +287,13 @@ async def enter_by_ticket_id(
         ticket_id=row["id"],
         reg_id=row["reg_id"],
         event_id=row["event_id"],
-        event_title=row["event_title"],
-        event_start_time=row["event_start_time"],
-        event_venue=row["event_venue"],
+        event_title=event["title"],
+        event_start_time=event["start_time"],
+        event_venue=event["venue"],
         ticket_count=row["ticket_count"],
         status="used",
         scanned_at=row["scanned_at"] if already_scanned else datetime.now(timezone.utc),
-        user_name=row.get("user_name"),
+        user_name=(ticket_holder or {}).get("name"),
         already_scanned=already_scanned,
     )
 
@@ -279,18 +308,16 @@ async def get_ticket(ticket_id: str, claims: dict = Depends(get_current_claims))
 
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
         row = await conn.fetchrow(_TICKET_QUERY + " WHERE t.id = $1::uuid", ticket_id)
         if not row:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        if not is_privileged and row["user_id" if "user_id" in dict(row) else "keycloak_sub"] != (user_id if is_privileged else user_id):
-            # simpler ownership check via keycloak_sub
-            pass
+        hydrated = (await _hydrate_tickets(conn, [row]))[0]
     # ownership: ticket belongs to the calling user OR caller is privileged
-    reg_owner = dict(row).get("keycloak_sub") == sub or is_privileged
+    reg_owner = hydrated.get("keycloak_sub") == sub or is_privileged
     if not reg_owner:
         raise HTTPException(status_code=403, detail="Not your ticket")
-    return _build_out(row)
+    return _build_out(hydrated)
 
 
 # ── GET /tickets/{id}/qr ──────────────────────────────────────────────────────
@@ -322,24 +349,22 @@ async def scan_ticket(
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        scanner_id = await _get_db_user_id(conn, sub)
+        scanner_id = await _get_db_user_id(sub)
 
         row = await conn.fetchrow(
             """
-            SELECT t.id::text, t.reg_id::text, t.event_id::text, t.status,
-                   t.scanned_at, r.ticket_count,
-                   e.title AS event_title, e.start_time AS event_start_time, e.venue AS event_venue,
-                   u.name  AS user_name
+            SELECT t.id::text, t.reg_id::text, t.event_id::text, t.user_id::text, t.status,
+                   t.scanned_at, r.ticket_count
             FROM ticket t
-            JOIN registration r ON r.id = t.reg_id
-            JOIN event e        ON e.id = t.event_id
-            JOIN users u        ON u.id = t.user_id
+            JOIN registration_svc.registration r ON r.id = t.reg_id
             WHERE t.qr_token = $1
             """,
             body.token,
         )
         if not row:
             raise HTTPException(status_code=404, detail="QR code not found or invalid")
+        event = await get_event(row["event_id"])
+        ticket_holder = await get_by_id(row["user_id"])
 
         already_scanned = row["status"] == "used"
 
@@ -351,7 +376,7 @@ async def scan_ticket(
             )
             # Keep registration table in sync so other services stay consistent
             await conn.execute(
-                "UPDATE registration SET status = 'attended' WHERE id = $1::uuid",
+                "UPDATE registration_svc.registration SET status = 'attended' WHERE id = $1::uuid",
                 row["reg_id"],
             )
 
@@ -359,13 +384,13 @@ async def scan_ticket(
         ticket_id=row["id"],
         reg_id=row["reg_id"],
         event_id=row["event_id"],
-        event_title=row["event_title"],
-        event_start_time=row["event_start_time"],
-        event_venue=row["event_venue"],
+        event_title=event["title"],
+        event_start_time=event["start_time"],
+        event_venue=event["venue"],
         ticket_count=row["ticket_count"],
         status="used",
         scanned_at=row["scanned_at"] if already_scanned else datetime.now(timezone.utc),
-        user_name=row.get("user_name"),
+        user_name=(ticket_holder or {}).get("name"),
         already_scanned=already_scanned,
     )
 

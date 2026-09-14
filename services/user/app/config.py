@@ -22,10 +22,17 @@ class Settings(BaseSettings):
     internal_api_key: str
     # Default society UUID matches seed data; override for multi-society later
     society_id: str = "11100000-0000-0000-0000-000000000001"
+
+    event_service_internal_url: str = "http://event-service:3002/internal"
+    ticket_service_internal_url: str = "http://ticket-service:3006/internal/tickets"
     society_name: str = "GM Global Techies Town"
     society_short_name: str = "GMGT"
     society_city: str = "Bengaluru"
     uploads_dir: str = "/app/uploads"
+    minio_endpoint: str = "http://minio:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = "uploads"
     # ~/auth-service's turnkey OTP request/verify API — used for phone verification
     # and phone-number login (POST /api/otp/request, /api/otp/verify). Shared
     # secret must match auth-service's OTP_SERVICE_API_KEY.

@@ -1,6 +1,5 @@
 import datetime
 import hashlib
-import os
 import secrets
 import uuid as uuid_lib
 from uuid import UUID
@@ -8,12 +7,12 @@ from typing import Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from asyncpg import Pool
-import aiofiles
 import httpx
 
 from app.database import get_pool
 from app.auth import get_current_claims, require_role
 from app.config import settings
+from app.object_storage import delete_object, upload_bytes
 from app.notifications import notify_admins, send_channels
 from app.otp_bridge import get_oidc_token_for_user
 from app.models import (
@@ -389,15 +388,13 @@ async def upload_my_avatar(
 
         ext = (file.filename or "avatar.jpg").rsplit(".", 1)[-1].lower()
         filename = f"{uuid_lib.uuid4()}.{ext}"
-        save_dir = os.path.join(settings.uploads_dir, "avatars")
-        os.makedirs(save_dir, exist_ok=True)
-        async with aiofiles.open(os.path.join(save_dir, filename), "wb") as f:
-            await f.write(content)
+        object_key = f"avatars/{filename}"
+        await upload_bytes(object_key, content, file.content_type)
 
         old_avatar = user["avatar_url"]
         await conn.execute(
             "UPDATE users SET avatar_url = $1 WHERE id = $2",
-            f"avatars/{filename}", user_id,
+            object_key, user_id,
         )
 
         row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM users u WHERE u.id = $1", user_id)
@@ -406,9 +403,9 @@ async def upload_my_avatar(
 
     if old_avatar:
         try:
-            os.remove(os.path.join(settings.uploads_dir, old_avatar))
-        except OSError:
-            pass  # already gone, or never existed on disk — not worth failing the request over
+            await delete_object(old_avatar)
+        except Exception:
+            pass  # already gone, or never existed — not worth failing the request over
 
     return _row_to_user(row, apartments, units)
 
@@ -435,8 +432,8 @@ async def remove_my_avatar(
 
     if old_avatar:
         try:
-            os.remove(os.path.join(settings.uploads_dir, old_avatar))
-        except OSError:
+            await delete_object(old_avatar)
+        except Exception:
             pass
 
     return _row_to_user(row, apartments, units)

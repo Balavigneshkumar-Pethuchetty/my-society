@@ -8,6 +8,7 @@ from asyncpg import Pool
 from app.config import settings
 from app.database import get_pool
 from app.auth import get_current_claims, require_role
+from app.event_client import get_authorship_summary, get_events
 from app.models import (
     LeaveRequestCreate,
     LeaveRequestReview,
@@ -16,6 +17,7 @@ from app.models import (
 )
 from app.notifications import notify_admins, send_channels
 from app.routes.users import _keycloak_delete_user
+from app.ticket_client import get_ticket_activity
 
 router = APIRouter()
 
@@ -38,39 +40,40 @@ async def _leave_blockers(conn, user_id: UUID) -> tuple[bool, list[str]]:
     an admin to reassign ownership first — there's no safe FK cascade for them."""
     blockers: list[str] = []
 
-    pending_payments = await conn.fetch(
-        """
-        SELECT DISTINCT e.title
-        FROM payment_transaction pt JOIN event e ON e.id = pt.event_id
-        WHERE pt.user_id = $1 AND pt.status IN ('pending', 'verified', 'refund_requested')
-        """,
+    # event/announcement/event_permission now live in event-service's own schema
+    # (see DB_ISOLATION_PLAN.md) — resolve titles/counts via the internal API
+    # instead of a JOIN.
+    pending_txn_event_ids = await conn.fetch(
+        "SELECT DISTINCT event_id FROM payment_svc.payment_transaction "
+        "WHERE user_id = $1 AND status IN ('pending', 'verified', 'refund_requested')",
         user_id,
     )
-    has_pending_payment = len(pending_payments) > 0
-    for r in pending_payments:
-        blockers.append(f'Pending payment for event "{r["title"]}" — cancel your ticket first.')
+    has_pending_payment = len(pending_txn_event_ids) > 0
+    if has_pending_payment:
+        pending_events = await get_events(str(r["event_id"]) for r in pending_txn_event_ids)
+        for e in pending_events.values():
+            blockers.append(f'Pending payment for event "{e["title"]}" — cancel your ticket first.')
 
-    organizer_events = await conn.fetch("SELECT title FROM event WHERE organizer_id = $1", user_id)
-    for r in organizer_events:
-        blockers.append(f'You are the organizer of event "{r["title"]}" — ask an admin to reassign it first.')
-
-    collector_events = await conn.fetch(
-        """
-        SELECT DISTINCT e.title FROM committee_registry cr JOIN event e ON e.id = cr.event_id
-        WHERE cr.member_id = $1 OR cr.assigned_by = $1
-        """,
+    collector_event_ids = await conn.fetch(
+        "SELECT DISTINCT event_id FROM payment_svc.committee_registry WHERE member_id = $1 OR assigned_by = $1",
         user_id,
     )
-    for r in collector_events:
-        blockers.append(f'You are the payment collector for event "{r["title"]}" — ask an admin to reassign it first.')
+    if collector_event_ids:
+        collector_events = await get_events(str(r["event_id"]) for r in collector_event_ids)
+        for e in collector_events.values():
+            blockers.append(f'You are the payment collector for event "{e["title"]}" — ask an admin to reassign it first.')
 
-    if await conn.fetchval("SELECT COUNT(*) FROM announcement WHERE author_id = $1", user_id):
-        blockers.append("You have authored event announcements — ask an admin to reassign authorship first.")
+    summary = await get_authorship_summary(str(user_id))
+    for title in summary["organized_event_titles"]:
+        blockers.append(f'You are the organizer of event "{title}" — ask an admin to reassign it first.')
 
-    if await conn.fetchval("SELECT COUNT(*) FROM sponsorship_refund WHERE requested_by = $1", user_id):
+    if await conn.fetchval("SELECT COUNT(*) FROM payment_svc.sponsorship_refund WHERE requested_by = $1", user_id):
         blockers.append("You have open sponsorship refund requests — ask an admin to resolve them first.")
 
-    if await conn.fetchval("SELECT COUNT(*) FROM event_permission WHERE granted_by = $1", user_id):
+    if summary["announcement_count"]:
+        blockers.append("You have authored event announcements — ask an admin to reassign authorship first.")
+
+    if summary["event_permission_granted_count"]:
         blockers.append("You have granted event permissions to other organizers — ask an admin to reassign these first.")
 
     return has_pending_payment, blockers
@@ -193,21 +196,13 @@ async def export_activity(
             user_id,
         )
         registrations = await conn.fetch(
-            "SELECT e.title AS event_title, r.status, r.ticket_count, r.total_amount, r.registered_at "
-            "FROM registration r JOIN event e ON e.id = r.event_id "
-            "WHERE r.user_id = $1 ORDER BY r.registered_at DESC",
-            user_id,
-        )
-        tickets = await conn.fetch(
-            "SELECT e.title AS event_title, t.status, t.issued_at, t.scanned_at "
-            "FROM ticket t JOIN event e ON e.id = t.event_id "
-            "WHERE t.user_id = $1 ORDER BY t.issued_at DESC",
+            "SELECT event_id, status, ticket_count, total_amount, registered_at "
+            "FROM registration_svc.registration WHERE user_id = $1 ORDER BY registered_at DESC",
             user_id,
         )
         payments = await conn.fetch(
-            "SELECT e.title AS event_title, pt.amount, pt.currency, pt.status, pt.created_at "
-            "FROM payment_transaction pt JOIN event e ON e.id = pt.event_id "
-            "WHERE pt.user_id = $1 ORDER BY pt.created_at DESC",
+            "SELECT event_id, amount, currency, status, created_at "
+            "FROM payment_svc.payment_transaction WHERE user_id = $1 ORDER BY created_at DESC",
             user_id,
         )
         notifications = await conn.fetch(
@@ -216,12 +211,27 @@ async def export_activity(
             user_id,
         )
 
+    # ticket now lives in ticket-service's own schema (see DB_ISOLATION_PLAN.md,
+    # step 2) — fetch via its internal API instead of a direct table read.
+    tickets = await get_ticket_activity(str(user_id))
+
+    # event now lives in event-service's own schema (see DB_ISOLATION_PLAN.md) —
+    # resolve titles via the internal API instead of a JOIN.
+    events = await get_events(
+        str(r["event_id"]) for r in [*registrations, *tickets, *payments]
+    )
+
+    def _with_title(r: dict) -> dict:
+        d = dict(r)
+        d["event_title"] = events.get(str(d.pop("event_id")), {}).get("title")
+        return d
+
     return {
         "profile": dict(profile) if profile else None,
         "apartments": [dict(r) for r in apartments],
-        "registrations": [dict(r) for r in registrations],
-        "tickets": [dict(r) for r in tickets],
-        "payments": [dict(r) for r in payments],
+        "registrations": [_with_title(r) for r in registrations],
+        "tickets": [_with_title(r) for r in tickets],
+        "payments": [_with_title(r) for r in payments],
         "notifications": [dict(r) for r in notifications],
     }
 
@@ -260,27 +270,27 @@ async def confirm_leave(
             # them now instead of leaving permanently-orphaned cards in the popup.
             await conn.execute(
                 "DELETE FROM notification WHERE type = 'cancellation_requested' "
-                "AND related_id IN (SELECT id FROM registration WHERE user_id = $1)",
+                "AND related_id IN (SELECT id FROM registration_svc.registration WHERE user_id = $1)",
                 user["id"],
             )
             await conn.execute(
                 "DELETE FROM notification WHERE type IN ('refund_requested', 'payment_verification_requested') "
-                "AND related_id IN (SELECT id FROM payment_transaction WHERE user_id = $1)",
+                "AND related_id IN (SELECT id FROM payment_svc.payment_transaction WHERE user_id = $1)",
                 user["id"],
             )
             await conn.execute(
-                "DELETE FROM refund WHERE payment_id IN "
-                "(SELECT id FROM payment WHERE registration_id IN "
-                "(SELECT id FROM registration WHERE user_id = $1))",
+                "DELETE FROM registration_svc.refund WHERE payment_id IN "
+                "(SELECT id FROM registration_svc.payment WHERE registration_id IN "
+                "(SELECT id FROM registration_svc.registration WHERE user_id = $1))",
                 user["id"],
             )
             await conn.execute(
-                "DELETE FROM payment WHERE registration_id IN "
-                "(SELECT id FROM registration WHERE user_id = $1)",
+                "DELETE FROM registration_svc.payment WHERE registration_id IN "
+                "(SELECT id FROM registration_svc.registration WHERE user_id = $1)",
                 user["id"],
             )
-            await conn.execute("DELETE FROM payment_transaction WHERE user_id = $1", user["id"])
-            await conn.execute("DELETE FROM registration WHERE user_id = $1", user["id"])
+            await conn.execute("DELETE FROM payment_svc.payment_transaction WHERE user_id = $1", user["id"])
+            await conn.execute("DELETE FROM registration_svc.registration WHERE user_id = $1", user["id"])
 
             await conn.execute(
                 "UPDATE leave_request SET status = 'completed', completed_at = NOW() WHERE id = $1",

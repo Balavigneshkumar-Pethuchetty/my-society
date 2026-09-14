@@ -17,10 +17,12 @@ from app.adapters.factory import get_processor
 from app.auth import _has_event_access, get_current_claims, require_role
 from app.config import settings
 from app.database import get_pool
+from app.event_client import get_events
 from app.models import ScreenshotExtraction, TransactionOut
 from app.notifications import notify_refund_processed, send_channels
 from app.splunk_logger import log_app_error
 from app.uploads import save_screenshot
+from shared.user_client import get_by_id, get_by_ids
 
 router = APIRouter()
 
@@ -30,17 +32,18 @@ _TXN_QUERY = """
            pt.amount, pt.currency, pt.payee_upi, pt.payer_upi, pt.refund_upi_id,
            pt.status, pt.payment_utr, pt.refund_utr, pt.reconciliation_txn_id,
            pt.screenshot_path, pt.refund_screenshot_path,
-           pt.created_at, pt.updated_at,
-           e.title AS event_title,
-           u.name  AS user_name, u.email AS user_email, u.keycloak_sub
+           pt.created_at, pt.updated_at
     FROM payment_transaction pt
-    JOIN event e ON e.id = pt.event_id
-    JOIN users u ON u.id = pt.user_id
 """
 
 
-def _build_out(row) -> dict:
+def _build_out(row, event_title: str | None = None, user: dict | None = None) -> dict:
+    user = user or {}
     d = dict(row)
+    d["event_title"] = event_title
+    d["user_name"] = user.get("name")
+    d["user_email"] = user.get("email")
+    d["keycloak_sub"] = user.get("keycloak_sub")
     d["amount"] = float(d["amount"])
     d["screenshot_url"] = f"/api/payments/uploads/{d['screenshot_path']}" if d.get("screenshot_path") else None
     d["refund_screenshot_url"] = (
@@ -70,7 +73,12 @@ async def list_refunds(
         rows = await conn.fetch(
             _TXN_QUERY + " WHERE pt.status = 'refund_requested' ORDER BY pt.updated_at ASC"
         )
-    return [_build_out(r) for r in rows]
+    events = await get_events(r["event_id"] for r in rows)
+    users = await get_by_ids(r["user_id"] for r in rows)
+    return [
+        _build_out(r, events.get(r["event_id"], {}).get("title"), users.get(r["user_id"]))
+        for r in rows
+    ]
 
 
 # ── GET /refunds/{txn_ref}/qr — UPI QR to pay the refund ─────────────────────
@@ -99,8 +107,10 @@ async def get_refund_qr(
                    "then complete the refund with POST /refunds/{txn_ref}/complete.",
         )
 
-    name   = (row["user_name"] or "Resident")[:50].replace(" ", "+")
-    title  = (row["event_title"] or "Event")[:40].replace(" ", "+")
+    events = await get_events([row["event_id"]])
+    ticket_holder = await get_by_id(row["user_id"])
+    name   = ((ticket_holder or {}).get("name") or "Resident")[:50].replace(" ", "+")
+    title  = (events.get(row["event_id"], {}).get("title") or "Event")[:40].replace(" ", "+")
     amount = float(row["amount"])
     upi_link = (
         f"upi://pay?pa={upi_id}&pn={name}&am={amount:.2f}"

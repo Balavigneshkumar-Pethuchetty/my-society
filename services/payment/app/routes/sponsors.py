@@ -11,22 +11,23 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import _has_event_access, get_current_claims, require_role
 from app.database import get_pool
+from app.event_client import get_event, get_events
 from app.models import (
     SponsorCreate, SponsorOut, SponsorUpdate,
     SponsorshipCreate, SponsorshipOut, SponsorshipUpdate,
     SponsorshipRefundApprove, SponsorshipRefundCreate, SponsorshipRefundOut,
 )
+from shared.user_client import get_by_ids, get_by_sub
 
 router = APIRouter()
 
 _SPONSOR_SELECT = (
     "SELECT s.id::text, s.organization_name, s.organization_type, "
     "s.contact_name, s.contact_email, s.contact_phone, "
-    "s.user_id::text, u.name AS platform_user_name, s.is_active, s.created_at, "
+    "s.user_id::text, s.is_active, s.created_at, "
     "COALESCE(agg.event_count, 0)::int AS event_count, "
     "COALESCE(agg.total_pledged, 0) AS total_pledged "
     "FROM sponsor s "
-    "LEFT JOIN users u ON u.id = s.user_id "
     "LEFT JOIN ("
     "  SELECT sponsor_id, COUNT(*) AS event_count, SUM(amount) AS total_pledged "
     "  FROM event_sponsorship GROUP BY sponsor_id"
@@ -34,35 +35,82 @@ _SPONSOR_SELECT = (
 )
 
 _SPONSORSHIP_SELECT = (
-    "SELECT es.id::text, es.event_id::text, e.title AS event_title, e.start_time AS event_start_time, "
+    "SELECT es.id::text, es.event_id::text, "
     "es.sponsor_id::text, s.organization_name AS sponsor_name, "
     "es.amount, es.currency_code, es.status, es.payment_reference, es.notes, es.sponsored_at "
     "FROM event_sponsorship es "
-    "JOIN event e ON e.id = es.event_id "
     "JOIN sponsor s ON s.id = es.sponsor_id "
 )
 
 _REFUND_SELECT = (
-    "SELECT sr.id::text, sr.sponsorship_id::text, e.title AS event_title, "
+    "SELECT sr.id::text, sr.sponsorship_id::text, es.event_id::text AS event_id, "
     "s.organization_name AS sponsor_name, s.contact_name AS sponsor_contact, "
     "es.amount AS sponsorship_amount, es.status AS sponsorship_status, "
     "sr.amount, sr.reason, sr.status, "
-    "ru.name AS requested_by, rv.name AS reviewed_by, "
+    "sr.requested_by::text AS requested_by_id, sr.reviewed_by::text AS reviewed_by_id, "
     "sr.reviewed_at, sr.processed_at, sr.created_at "
     "FROM sponsorship_refund sr "
     "JOIN event_sponsorship es ON es.id = sr.sponsorship_id "
-    "JOIN event e ON e.id = es.event_id "
     "JOIN sponsor s ON s.id = es.sponsor_id "
-    "JOIN users ru ON ru.id = sr.requested_by "
-    "LEFT JOIN users rv ON rv.id = sr.reviewed_by "
 )
 
 
-async def _caller_user_id(conn, claims: dict) -> str:
-    row = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
-    if not row:
+async def _hydrate_sponsor_rows(rows) -> list[dict]:
+    """users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md)
+    — resolve the linked platform account's name via a batch call instead of a JOIN."""
+    users = await get_by_ids(r["user_id"] for r in rows if r["user_id"])
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        d["platform_user_name"] = users.get(d["user_id"], {}).get("name") if d["user_id"] else None
+        hydrated.append(d)
+    return hydrated
+
+
+async def _hydrate_with_event(rows, fields: dict) -> list[dict]:
+    """event now lives in event-service's own schema (see DB_ISOLATION_PLAN.md)
+    — merge in event fields via the internal API instead of a JOIN.
+    `fields` maps output-column-name -> EventInternal field name."""
+    events = await get_events(r["event_id"] for r in rows)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        e = events.get(d["event_id"], {})
+        for out_key, src_key in fields.items():
+            d[out_key] = e.get(src_key)
+        hydrated.append(d)
+    return hydrated
+
+
+_SPONSORSHIP_EVENT_FIELDS = {"event_title": "title", "event_start_time": "start_time"}
+
+
+async def _hydrate_refund_rows(rows) -> list[dict]:
+    """event and users both now live behind their owning service's internal API
+    (see DB_ISOLATION_PLAN.md) — resolve both in one pass instead of a JOIN
+    into event and two JOINs into users."""
+    events = await get_events(r["event_id"] for r in rows)
+    user_ids = [r["requested_by_id"] for r in rows if r["requested_by_id"]]
+    user_ids += [r["reviewed_by_id"] for r in rows if r["reviewed_by_id"]]
+    users = await get_by_ids(user_ids)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        e = events.get(d["event_id"], {})
+        d["event_title"] = e.get("title")
+        requested_by_id = d.pop("requested_by_id")
+        reviewed_by_id = d.pop("reviewed_by_id")
+        d["requested_by"] = users.get(requested_by_id, {}).get("name")
+        d["reviewed_by"] = users.get(reviewed_by_id, {}).get("name") if reviewed_by_id else None
+        hydrated.append(d)
+    return hydrated
+
+
+async def _caller_user_id(claims: dict) -> str:
+    user = await get_by_sub(claims.get("sub", ""))
+    if not user:
         raise HTTPException(status_code=404, detail="User record not found")
-    return str(row["id"])
+    return user["id"]
 
 
 async def _require_own_sponsor_or_staff(conn, claims: dict, sponsor_id: str) -> None:
@@ -70,7 +118,7 @@ async def _require_own_sponsor_or_staff(conn, claims: dict, sponsor_id: str) -> 
     realm_roles: list[str] = claims.get("realm_access", {}).get("roles", [])
     if any(r in realm_roles for r in ("admin", "committee_member")):
         return
-    user_id = await _caller_user_id(conn, claims)
+    user_id = await _caller_user_id(claims)
     owns = await conn.fetchval(
         "SELECT 1 FROM sponsor WHERE id = $1::uuid AND user_id = $2::uuid", sponsor_id, user_id,
     )
@@ -87,7 +135,7 @@ async def list_sponsors(
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(_SPONSOR_SELECT + "ORDER BY s.organization_name")
-    return [dict(r) for r in rows]
+    return await _hydrate_sponsor_rows(rows)
 
 
 @router.post("", response_model=SponsorOut, status_code=201, summary="Add a sponsor")
@@ -105,7 +153,7 @@ async def create_sponsor(
             body.contact_name, body.contact_email, body.contact_phone,
         )
         full = await conn.fetchrow(_SPONSOR_SELECT + "WHERE s.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_sponsor_rows([full]))[0]
 
 
 @router.put("/{sponsor_id}", response_model=SponsorOut, summary="Update a sponsor")
@@ -135,7 +183,7 @@ async def update_sponsor(
         params.append(sponsor_id)
         await conn.execute(f"UPDATE sponsor SET {', '.join(updates)} WHERE id=${idx}::uuid", *params)
         full = await conn.fetchrow(_SPONSOR_SELECT + "WHERE s.id = $1::uuid", sponsor_id)
-    return dict(full)
+    return (await _hydrate_sponsor_rows([full]))[0]
 
 
 @router.get("/me", response_model=SponsorOut, summary="Resolve the caller's own sponsor record")
@@ -144,11 +192,11 @@ async def get_my_sponsor(
 ):
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _caller_user_id(conn, claims)
+        user_id = await _caller_user_id(claims)
         row = await conn.fetchrow(_SPONSOR_SELECT + "WHERE s.user_id = $1::uuid", user_id)
     if not row:
         raise HTTPException(status_code=404, detail="No sponsor record linked to this account")
-    return dict(row)
+    return (await _hydrate_sponsor_rows([row]))[0]
 
 
 # ── Per-event sponsorships ────────────────────────────────────────────────────
@@ -166,7 +214,7 @@ async def list_sponsorships(
             _SPONSORSHIP_SELECT + "WHERE es.sponsor_id = $1::uuid ORDER BY es.sponsored_at DESC",
             sponsor_id,
         )
-    return [dict(r) for r in rows]
+    return await _hydrate_with_event(rows, _SPONSORSHIP_EVENT_FIELDS)
 
 
 @router.post("/{sponsor_id}/sponsorships", response_model=SponsorshipOut, status_code=201,
@@ -181,8 +229,7 @@ async def create_sponsorship(
         sponsor_exists = await conn.fetchval("SELECT 1 FROM sponsor WHERE id=$1::uuid", sponsor_id)
         if not sponsor_exists:
             raise HTTPException(status_code=404, detail="Sponsor not found")
-        event_exists = await conn.fetchval("SELECT 1 FROM event WHERE id=$1::uuid", body.event_id)
-        if not event_exists:
+        if not await get_event(body.event_id):
             raise HTTPException(status_code=404, detail="Event not found")
         if not await _has_event_access(conn, claims.get("sub"), body.event_id):
             raise HTTPException(status_code=403, detail="You don't have access to this event")
@@ -199,7 +246,7 @@ async def create_sponsorship(
                 raise HTTPException(status_code=409, detail="Sponsor is already linked to this event") from exc
             raise
         full = await conn.fetchrow(_SPONSORSHIP_SELECT + "WHERE es.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_with_event([full], _SPONSORSHIP_EVENT_FIELDS))[0]
 
 
 @router.put("/sponsorships/{sponsorship_id}", response_model=SponsorshipOut,
@@ -231,7 +278,7 @@ async def update_sponsorship(
         params.append(sponsorship_id)
         await conn.execute(f"UPDATE event_sponsorship SET {', '.join(updates)} WHERE id=${idx}::uuid", *params)
         full = await conn.fetchrow(_SPONSORSHIP_SELECT + "WHERE es.id = $1::uuid", sponsorship_id)
-    return dict(full)
+    return (await _hydrate_with_event([full], _SPONSORSHIP_EVENT_FIELDS))[0]
 
 
 # ── Sponsorship refunds ───────────────────────────────────────────────────────
@@ -253,7 +300,7 @@ async def request_refund(
         # The sponsor themselves may request a refund on their own sponsorship; otherwise
         # only the event's organizer/approved members can log one on the sponsor's behalf —
         # no more blanket admin/committee bypass under the isolation model.
-        user_id = await _caller_user_id(conn, claims)
+        user_id = await _caller_user_id(claims)
         owns_sponsorship = await conn.fetchval(
             "SELECT 1 FROM sponsor WHERE id = $1::uuid AND user_id = $2::uuid",
             sponsorship["sponsor_id"], user_id,
@@ -261,7 +308,7 @@ async def request_refund(
         if not owns_sponsorship and not await _has_event_access(conn, claims.get("sub"), sponsorship["event_id"]):
             raise HTTPException(status_code=403, detail="Not your sponsorship and no access to this event")
 
-        requester_id = await _caller_user_id(conn, claims)
+        requester_id = await _caller_user_id(claims)
         row = await conn.fetchrow(
             "INSERT INTO sponsorship_refund (sponsorship_id, requested_by, amount, reason) "
             "VALUES ($1::uuid, $2::uuid, $3, $4) RETURNING id",
@@ -271,7 +318,7 @@ async def request_refund(
             "UPDATE event_sponsorship SET status='refund_requested' WHERE id=$1::uuid", sponsorship_id,
         )
         full = await conn.fetchrow(_REFUND_SELECT + "WHERE sr.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_refund_rows([full]))[0]
 
 
 @router.get("/refunds", response_model=list[SponsorshipRefundOut],
@@ -285,11 +332,11 @@ async def list_refunds(
         if any(r in realm_roles for r in ("admin", "committee_member")):
             rows = await conn.fetch(_REFUND_SELECT + "ORDER BY sr.created_at DESC")
         else:
-            user_id = await _caller_user_id(conn, claims)
+            user_id = await _caller_user_id(claims)
             rows = await conn.fetch(
                 _REFUND_SELECT + "WHERE s.user_id = $1::uuid ORDER BY sr.created_at DESC", user_id,
             )
-    return [dict(r) for r in rows]
+    return await _hydrate_refund_rows(rows)
 
 
 @router.patch("/refunds/{refund_id}/approve", response_model=SponsorshipRefundOut,
@@ -312,7 +359,7 @@ async def approve_refund(
             raise HTTPException(status_code=403, detail="You don't have access to this event")
         if refund["status"] != "pending":
             raise HTTPException(status_code=409, detail="Refund request already reviewed")
-        reviewer_id = await _caller_user_id(conn, claims)
+        reviewer_id = await _caller_user_id(claims)
 
         if body.approved_amount is not None:
             await conn.execute(
@@ -325,7 +372,7 @@ async def approve_refund(
             reviewer_id, refund_id,
         )
         full = await conn.fetchrow(_REFUND_SELECT + "WHERE sr.id = $1::uuid", refund_id)
-    return dict(full)
+    return (await _hydrate_refund_rows([full]))[0]
 
 
 @router.patch("/refunds/{refund_id}/reject", response_model=SponsorshipRefundOut,
@@ -347,7 +394,7 @@ async def reject_refund(
             raise HTTPException(status_code=403, detail="You don't have access to this event")
         if refund["status"] != "pending":
             raise HTTPException(status_code=409, detail="Refund request already reviewed")
-        reviewer_id = await _caller_user_id(conn, claims)
+        reviewer_id = await _caller_user_id(claims)
 
         await conn.execute(
             "UPDATE sponsorship_refund SET status='rejected', reviewed_by=$1::uuid, reviewed_at=now() "
@@ -361,7 +408,7 @@ async def reject_refund(
             refund["sponsorship_id"],
         )
         full = await conn.fetchrow(_REFUND_SELECT + "WHERE sr.id = $1::uuid", refund_id)
-    return dict(full)
+    return (await _hydrate_refund_rows([full]))[0]
 
 
 @router.patch("/refunds/{refund_id}/process", response_model=SponsorshipRefundOut,
@@ -392,4 +439,4 @@ async def process_refund(
             "UPDATE event_sponsorship SET status='refunded' WHERE id=$1::uuid", refund["sponsorship_id"],
         )
         full = await conn.fetchrow(_REFUND_SELECT + "WHERE sr.id = $1::uuid", refund_id)
-    return dict(full)
+    return (await _hydrate_refund_rows([full]))[0]

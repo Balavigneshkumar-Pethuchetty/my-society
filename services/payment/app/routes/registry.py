@@ -12,7 +12,9 @@ from app import reconciliation_client
 from app.auth import get_current_claims, require_event_access
 from app.crypto import decrypt, encrypt
 from app.database import get_pool
+from app.event_client import get_event
 from app.models import CollectorOut, CollectorSettingsIn, CollectorSettingsOut
+from shared.user_client import get_by_id, get_by_sub
 
 router = APIRouter()
 
@@ -37,21 +39,20 @@ async def get_collector(
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """SELECT cr.upi_id, u.name AS upi_name,
-                      e.title, e.price_currency
+            """SELECT cr.upi_id, cr.member_id::text
                FROM committee_registry cr
-               JOIN users u ON u.id = cr.member_id
-               JOIN event e ON e.id = cr.event_id
                WHERE cr.event_id = $1::uuid""",
             event_id,
         )
     if not row:
         raise HTTPException(status_code=404, detail="No collector assigned for this event")
+    event = await get_event(event_id)
+    member = await get_by_id(row["member_id"])
 
     upi_id  = row["upi_id"]
-    name    = row["upi_name"]
-    title   = row["title"]
-    currency = row.get("price_currency", "INR")
+    name    = (member or {}).get("name")
+    title   = event["title"]
+    currency = event.get("price_currency", "INR")
     uri = (
         f"upi://pay?pa={quote_plus(upi_id)}&pn={quote_plus(name)}"
         f"&am={amount:.2f}&cu=INR&tn={quote_plus(title[:50])}"
@@ -75,19 +76,19 @@ async def get_collector_qr(
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """SELECT cr.upi_id, u.name AS upi_name, e.title
+            """SELECT cr.upi_id, cr.member_id::text
                FROM committee_registry cr
-               JOIN users u ON u.id = cr.member_id
-               JOIN event e ON e.id = cr.event_id
                WHERE cr.event_id = $1::uuid""",
             event_id,
         )
     if not row:
         raise HTTPException(status_code=404, detail="No collector assigned for this event")
+    event = await get_event(event_id)
+    member = await get_by_id(row["member_id"])
 
     uri = (
-        f"upi://pay?pa={quote_plus(row['upi_id'])}&pn={quote_plus(row['upi_name'])}"
-        f"&am={amount:.2f}&cu=INR&tn={quote_plus(row['title'][:50])}"
+        f"upi://pay?pa={quote_plus(row['upi_id'])}&pn={quote_plus((member or {}).get('name') or '')}"
+        f"&am={amount:.2f}&cu=INR&tn={quote_plus(event['title'][:50])}"
     )
     return FastAPIResponse(content=_qr_svg(uri), media_type="image/svg+xml")
 
@@ -107,11 +108,10 @@ async def get_collector_settings(
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """SELECT cr.member_id::text, u.name AS member_name, cr.upi_id,
+            """SELECT cr.member_id::text, cr.upi_id,
                       cr.imap_host, cr.imap_port, cr.imap_user, cr.imap_password,
                       cr.imap_mailbox, cr.assigned_at, cr.reconciliation_channel_id
                FROM committee_registry cr
-               LEFT JOIN users u ON u.id = cr.member_id
                WHERE cr.event_id = $1::uuid""",
             event_id,
         )
@@ -123,10 +123,11 @@ async def get_collector_settings(
             reconciliation_channel_configured=False,
         )
     d = dict(row)
+    member = await get_by_id(d["member_id"]) if d["member_id"] else None
     return CollectorSettingsOut(
         event_id=event_id,
         member_id=d["member_id"],
-        member_name=d["member_name"],
+        member_name=(member or {}).get("name"),
         upi_id=d["upi_id"],
         imap_host=d["imap_host"],
         imap_port=d["imap_port"],
@@ -145,11 +146,9 @@ async def save_collector_settings(
     body: CollectorSettingsIn,
     claims: dict = Depends(require_event_access()),
 ):
+    caller = await get_by_sub(claims.get("sub", ""))
     pool = await get_pool()
     async with pool.acquire() as conn:
-        caller = await conn.fetchrow(
-            "SELECT id::text FROM users WHERE keycloak_sub = $1", claims.get("sub"),
-        )
         member_id = body.member_id or (caller["id"] if caller else None)
         if not member_id:
             raise HTTPException(status_code=404, detail="User record not found")

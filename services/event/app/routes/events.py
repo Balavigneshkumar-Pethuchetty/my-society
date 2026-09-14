@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from app.auth import _has_event_access, get_current_claims, get_optional_claims, require_event_access, require_role, require_role_or_organizer
+from app.cache import cache_delete, cache_delete_pattern, cache_get_json, cache_set_json
 from app.config import settings
 from app.database import get_pool
 from app.models import (
@@ -13,6 +14,7 @@ from app.models import (
     TicketTypeOut, TicketTypeCreate, TicketTypeUpdate,
 )
 from app.notifications import notify_all_users, send_channels
+from shared.user_client import get_by_email, get_by_ids, get_by_sub
 
 router = APIRouter()
 
@@ -42,7 +44,6 @@ _EVENT_COLS = """
     ec.id::text          AS category_id,
     ec.name              AS category_name,
     ec.color_hex         AS category_color,
-    u.name               AS organizer_name,
     COALESCE(rc.registration_count, 0)::int  AS registration_count,
     COALESCE(rc.confirmed_tickets,  0)::int  AS confirmed_tickets,
     CASE
@@ -58,11 +59,10 @@ _EVENT_COLS = """
         WHERE tt.event_id = e.id AND tt.is_active = TRUE
     )                    AS ticket_types_json,
     (
-        SELECT json_agg(pu.name ORDER BY ep.granted_at)::text
+        SELECT json_agg(ep.user_id::text ORDER BY ep.granted_at)::text
         FROM event_permission ep
-        JOIN users pu ON pu.id = ep.user_id
         WHERE ep.event_id = e.id AND ep.revoked_at IS NULL
-    )                    AS approved_member_names_json
+    )                    AS approved_member_ids_json
 """
 
 _REG_CTE = """
@@ -70,13 +70,28 @@ WITH reg_counts AS (
     SELECT event_id,
            COUNT(*)::int                                                    AS registration_count,
            COALESCE(SUM(ticket_count) FILTER (WHERE status='confirmed'),0)::int AS confirmed_tickets
-    FROM registration
+    FROM registration_svc.registration
     GROUP BY event_id
 )
 """
 
 
-def _to_event_item(row, caller_user_id: Optional[str] = None) -> dict:
+async def _hydrate_event_rows(rows) -> dict:
+    """organizer_id and approved-member ids are FKs into users, which now lives
+    behind user-service's own API (see DB_ISOLATION_PLAN.md) — collect every
+    id across all rows and resolve names in one batch call instead of a JOIN
+    + a per-row correlated subquery."""
+    ids = set()
+    for r in rows:
+        if r.get("organizer_id"):
+            ids.add(r["organizer_id"])
+        raw_am = r.get("approved_member_ids_json")
+        if raw_am:
+            ids.update(json.loads(raw_am))
+    return await get_by_ids(ids)
+
+
+def _to_event_item(row, users: dict, caller_user_id: Optional[str] = None) -> dict:
     d = dict(row)
     capacity  = d.get("capacity")
     remaining = d.get("spots_remaining")
@@ -84,8 +99,10 @@ def _to_event_item(row, caller_user_id: Optional[str] = None) -> dict:
     # Parse ticket types JSON (returned as text from the subquery)
     raw = d.pop("ticket_types_json", None)
     d["ticket_types"] = json.loads(raw) if raw else []
-    raw_am = d.pop("approved_member_names_json", None)
-    d["approved_members"] = json.loads(raw_am) if raw_am else []
+    raw_am = d.pop("approved_member_ids_json", None)
+    approved_ids = json.loads(raw_am) if raw_am else []
+    d["approved_members"] = [users[uid]["name"] for uid in approved_ids if uid in users]
+    d["organizer_name"] = users.get(d.get("organizer_id"), {}).get("name")
     # Only meaningful on `mine=true` list responses — lets the frontend hide organizer-only
     # actions (e.g. managing who else has access) from an approved member who isn't the
     # organizer themselves. Left False when the caller isn't resolved (e.g. get_event).
@@ -165,6 +182,21 @@ async def list_events(
     if status is None and not mine:
         status = "published"
 
+    # Only the fully-anonymous default-browsing view is cacheable: no `claims` means
+    # `caller_user_id` stays None for the whole request, so the WHERE clause below is
+    # 100% deterministic for a given set of query params — no per-user variance to leak.
+    cacheable = claims is None and not mine and status == "published"
+    cache_key = None
+    if cacheable:
+        cache_key = "ev:list:" + json.dumps(
+            {"page": page, "limit": limit, "search": search, "category_id": category_id,
+             "is_free": is_free, "sort": sort},
+            sort_keys=True,
+        )
+        cached = await cache_get_json(cache_key)
+        if cached is not None:
+            return EventListResponse.model_validate(cached)
+
     pool = await get_pool()
 
     is_manager = False
@@ -177,10 +209,9 @@ async def list_events(
     # everyone else can't (drafts aren't "published to everyone" yet, per the isolation model).
     caller_user_id: Optional[str] = None
     if claims:
-        async with pool.acquire() as conn:
-            caller = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
+        caller = await get_by_sub(claims.get("sub", ""))
         if caller:
-            caller_user_id = str(caller["id"])
+            caller_user_id = caller["id"]
 
     if mine:
         if not claims:
@@ -251,7 +282,6 @@ async def list_events(
         f"{_REG_CTE} "
         f"SELECT COUNT(*) FROM event e "
         f"LEFT JOIN event_category ec ON ec.id = e.category_id "
-        f"LEFT JOIN users u ON u.id = e.organizer_id "
         f"LEFT JOIN reg_counts rc ON rc.event_id = e.id "
         f"WHERE {where}"
     )
@@ -259,7 +289,6 @@ async def list_events(
         f"{_REG_CTE} "
         f"SELECT {_EVENT_COLS} FROM event e "
         f"LEFT JOIN event_category ec ON ec.id = e.category_id "
-        f"LEFT JOIN users u ON u.id = e.organizer_id "
         f"LEFT JOIN reg_counts rc ON rc.event_id = e.id "
         f"WHERE {where} "
         f"ORDER BY {order_clause} "
@@ -271,15 +300,19 @@ async def list_events(
         total = await conn.fetchval(count_sql, *params)
         rows  = await conn.fetch(data_sql, *params_page)
 
+    users = await _hydrate_event_rows(rows)
     total = total or 0
     total_pages = max(1, math.ceil(total / limit))
-    return EventListResponse(
-        events=[_to_event_item(r, caller_user_id) for r in rows],
+    response = EventListResponse(
+        events=[_to_event_item(r, users, caller_user_id) for r in rows],
         total=total,
         page=page,
         limit=limit,
         total_pages=total_pages,
     )
+    if cacheable:
+        await cache_set_json(cache_key, response.model_dump(mode="json"))
+    return response
 
 
 # ── GET /events/{event_id} ────────────────────────────────────────────────────
@@ -295,7 +328,6 @@ async def get_event(
             f"{_REG_CTE} "
             f"SELECT {_EVENT_COLS} FROM event e "
             f"LEFT JOIN event_category ec ON ec.id = e.category_id "
-            f"LEFT JOIN users u ON u.id = e.organizer_id "
             f"LEFT JOIN reg_counts rc ON rc.event_id = e.id "
             f"WHERE e.id = $1::uuid AND e.society_id = $2::uuid",
             event_id, _SOCIETY,
@@ -313,8 +345,8 @@ async def get_event(
 
         ann_rows = await conn.fetch(
             "SELECT a.id::text, a.event_id::text, a.author_id::text, "
-            "u.name AS author_name, a.title, a.body, a.sent_at "
-            "FROM announcement a JOIN users u ON u.id = a.author_id "
+            "a.title, a.body, a.sent_at "
+            "FROM announcement a "
             "WHERE a.event_id = $1::uuid ORDER BY a.sent_at DESC",
             event_id,
         )
@@ -326,8 +358,13 @@ async def get_event(
             event_id,
         )
 
-    event_dict = _to_event_item(row)
-    event_dict["announcements"] = [dict(r) for r in ann_rows]
+    users = await _hydrate_event_rows([row])
+    authors = await get_by_ids(r["author_id"] for r in ann_rows)
+
+    event_dict = _to_event_item(row, users)
+    event_dict["announcements"] = [
+        {**dict(r), "author_name": authors.get(r["author_id"], {}).get("name")} for r in ann_rows
+    ]
     event_dict["ticket_types"]  = [dict(r) for r in tt_rows]
     event_dict["has_access"]    = has_access
     return event_dict
@@ -346,14 +383,12 @@ async def create_event(
         raise HTTPException(status_code=422, detail="cancel_freeze_at must be before start_time")
 
     organizer_sub = claims.get("sub")
+    organizer = await get_by_sub(organizer_sub or "")
+    if not organizer:
+        raise HTTPException(status_code=404, detail="Organizer user record not found")
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        organizer = await conn.fetchrow(
-            "SELECT id FROM users WHERE keycloak_sub = $1", organizer_sub
-        )
-        if not organizer:
-            raise HTTPException(status_code=404, detail="Organizer user record not found")
-
         row = await conn.fetchrow(
             "INSERT INTO event (society_id, category_id, organizer_id, title, description, "
             "start_time, end_time, venue, venue_lat, venue_lng, venue_place_id, venue_address, "
@@ -362,7 +397,7 @@ async def create_event(
             "RETURNING id::text",
             _SOCIETY,
             body.category_id,
-            str(organizer["id"]),
+            organizer["id"],
             body.title,
             body.description,
             body.start_time,
@@ -378,6 +413,7 @@ async def create_event(
             body.is_free,
             body.cancel_freeze_at,
         )
+    await cache_delete_pattern("ev:list:*")
     return {"id": row["id"], "status": "draft"}
 
 
@@ -452,12 +488,13 @@ async def update_event(
                     f"\n\nView: {settings.app_public_url}/events"
                 )
                 recipients = await notify_all_users(
-                    conn, event_id, "event_updated", notify_title, notify_message, related_id=event_id,
+                    event_id, "event_updated", notify_title, notify_message, related_id=event_id,
                 )
 
     if recipients:
         background_tasks.add_task(send_channels, recipients, notify_message, notify_title)
 
+    await cache_delete_pattern("ev:list:*")
     return {"id": event_id, "updated": True}
 
 
@@ -489,11 +526,12 @@ async def publish_event(
             f"View: {settings.app_public_url}/events"
         )
         recipients = await notify_all_users(
-            conn, event_id, "event_published", notify_title, notify_message, related_id=event_id,
+            event_id, "event_published", notify_title, notify_message, related_id=event_id,
         )
 
     if recipients:
         background_tasks.add_task(send_channels, recipients, notify_message, notify_title)
+    await cache_delete_pattern("ev:list:*")
     return {"id": event_id, "status": "published"}
 
 
@@ -513,6 +551,7 @@ async def cancel_event(
         )
     if result == "UPDATE 0":
         raise HTTPException(status_code=409, detail="Event not found or not published")
+    await cache_delete_pattern("ev:list:*")
     return {"id": event_id, "status": "cancelled"}
 
 
@@ -532,6 +571,7 @@ async def complete_event(
         )
     if result == "UPDATE 0":
         raise HTTPException(status_code=409, detail="Event not found or not published")
+    await cache_delete_pattern("ev:list:*")
     return {"id": event_id, "status": "completed"}
 
 
@@ -553,6 +593,7 @@ async def delete_event(
     if result == "DELETE 0":
         raise HTTPException(status_code=409,
                              detail="Event not found or not in a deletable state (must be draft or completed)")
+    await cache_delete_pattern("ev:list:*")
 
 
 # ── GET /events/{event_id}/announcements ─────────────────────────────────────
@@ -575,12 +616,15 @@ async def list_announcements(
 
         rows = await conn.fetch(
             "SELECT a.id::text, a.event_id::text, a.author_id::text, "
-            "u.name AS author_name, a.title, a.body, a.sent_at "
-            "FROM announcement a JOIN users u ON u.id = a.author_id "
+            "a.title, a.body, a.sent_at "
+            "FROM announcement a "
             "WHERE a.event_id = $1::uuid ORDER BY a.sent_at DESC",
             event_id,
         )
-    return [dict(r) for r in rows]
+    authors = await get_by_ids(r["author_id"] for r in rows)
+    return [
+        {**dict(r), "author_name": authors.get(r["author_id"], {}).get("name")} for r in rows
+    ]
 
 
 # ── POST /events/{event_id}/announcements ────────────────────────────────────
@@ -595,6 +639,10 @@ async def create_announcement(
     claims:   dict = Depends(require_event_access()),
 ):
     author_sub = claims.get("sub")
+    author = await get_by_sub(author_sub or "")
+    if not author:
+        raise HTTPException(status_code=404, detail="Author user record not found")
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         event = await conn.fetchrow(
@@ -606,17 +654,11 @@ async def create_announcement(
         if event["status"] not in ("published", "completed"):
             raise HTTPException(status_code=409, detail="Announcements only for published or completed events")
 
-        author = await conn.fetchrow(
-            "SELECT id, name FROM users WHERE keycloak_sub = $1", author_sub
-        )
-        if not author:
-            raise HTTPException(status_code=404, detail="Author user record not found")
-
         row = await conn.fetchrow(
             "INSERT INTO announcement (event_id, author_id, title, body) "
             "VALUES ($1::uuid, $2::uuid, $3, $4) "
             "RETURNING id::text, event_id::text, author_id::text, title, body, sent_at",
-            event_id, str(author["id"]), body.title, body.body,
+            event_id, author["id"], body.title, body.body,
         )
     result = dict(row)
     result["author_name"] = author["name"]
@@ -638,6 +680,11 @@ async def list_ticket_types(
     event_id: str,
     _claims: Optional[dict] = Depends(get_optional_claims),
 ):
+    cache_key = f"tt:list:{event_id}"
+    cached = await cache_get_json(cache_key)
+    if cached is not None:
+        return cached
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         exists = await conn.fetchval(
@@ -647,7 +694,9 @@ async def list_ticket_types(
         if not exists:
             raise HTTPException(status_code=404, detail="Event not found")
         rows = await conn.fetch(_TT_SELECT, event_id)
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    await cache_set_json(cache_key, result)
+    return result
 
 
 @router.post("/{event_id}/ticket-types",
@@ -687,6 +736,7 @@ async def create_ticket_type(
             body.price if not body.is_free else 0,
             body.is_free, body.capacity, sort_order, body.is_active,
         )
+    await cache_delete(f"tt:list:{event_id}")
     return dict(row)
 
 
@@ -734,6 +784,7 @@ async def update_ticket_type(
             "RETURNING id::text, name, description, price, is_free, capacity, sort_order, is_active",
             *params,
         )
+    await cache_delete(f"tt:list:{event_id}")
     return dict(row)
 
 
@@ -753,6 +804,7 @@ async def delete_ticket_type(
         )
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Ticket type not found")
+    await cache_delete(f"tt:list:{event_id}")
 
 
 # ── Event permission (approved-member delegation) ─────────────────────────────
@@ -762,12 +814,26 @@ async def delete_ticket_type(
 
 _PERMISSION_SELECT = (
     "SELECT ep.id::text, ep.event_id::text, ep.user_id::text, "
-    "u.name AS user_name, u.email AS user_email, "
-    "ep.granted_by::text, gb.name AS granted_by_name, ep.granted_at "
+    "ep.granted_by::text, ep.granted_at "
     "FROM event_permission ep "
-    "JOIN users u ON u.id = ep.user_id "
-    "JOIN users gb ON gb.id = ep.granted_by "
 )
+
+
+async def _hydrate_permission_rows(rows) -> list[dict]:
+    """user_id/granted_by are FKs into users, which now lives behind
+    user-service's own API (see DB_ISOLATION_PLAN.md) — resolve both in one
+    batch call instead of two JOINs."""
+    ids = {r["user_id"] for r in rows} | {r["granted_by"] for r in rows}
+    users = await get_by_ids(ids)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        u = users.get(d["user_id"], {})
+        d["user_name"] = u.get("name")
+        d["user_email"] = u.get("email")
+        d["granted_by_name"] = users.get(d["granted_by"], {}).get("name")
+        hydrated.append(d)
+    return hydrated
 
 
 @router.get("/{event_id}/permissions", response_model=list[EventPermissionOut],
@@ -783,7 +849,7 @@ async def list_permissions(
             "ORDER BY ep.granted_at DESC",
             event_id,
         )
-    return [dict(r) for r in rows]
+    return await _hydrate_permission_rows(rows)
 
 
 @router.post("/{event_id}/permissions", response_model=EventPermissionOut, status_code=201,
@@ -793,25 +859,25 @@ async def grant_permission(
     body: EventPermissionGrant,
     claims: dict = Depends(require_role_or_organizer()),
 ):
+    target = await get_by_email(body.email)
+    if not target:
+        raise HTTPException(status_code=404, detail="No user found with that email")
+    granter = await get_by_sub(claims.get("sub", ""))
+    if not granter:
+        raise HTTPException(status_code=404, detail="Granter user record not found")
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        target = await conn.fetchrow("SELECT id FROM users WHERE email = $1", body.email)
-        if not target:
-            raise HTTPException(status_code=404, detail="No user found with that email")
-        granter = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
-        if not granter:
-            raise HTTPException(status_code=404, detail="Granter user record not found")
-
         row = await conn.fetchrow(
             "INSERT INTO event_permission (event_id, user_id, granted_by) "
             "VALUES ($1::uuid, $2::uuid, $3::uuid) "
             "ON CONFLICT (event_id, user_id) DO UPDATE SET "
             "  granted_by = EXCLUDED.granted_by, granted_at = now(), revoked_at = NULL "
             "RETURNING id",
-            event_id, str(target["id"]), str(granter["id"]),
+            event_id, target["id"], granter["id"],
         )
         full = await conn.fetchrow(_PERMISSION_SELECT + "WHERE ep.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_permission_rows([full]))[0]
 
 
 @router.delete("/{event_id}/permissions/{user_id}", status_code=204,

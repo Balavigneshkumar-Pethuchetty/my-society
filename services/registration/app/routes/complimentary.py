@@ -1,18 +1,17 @@
 import asyncio
-import uuid
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import require_role
-from app.config import settings
 from app.database import get_pool
 from app.email import send_complimentary_ticket_email
+from app.event_client import get_event
 from app.models import ComplimentaryTicketCreate, ComplimentaryTicketOut, WalkInCreate
+from app.ticket_client import cancel_ticket_by_reg, get_tickets_by_reg_ids, issue_ticket
+from shared.user_client import create_guest, get_by_id, get_by_ids, get_by_sub
 
 router = APIRouter()
-
-_SOCIETY = settings.society_id
 
 _ELIGIBLE_ROLES = {
     "organizer": ("admin", "committee_member"),
@@ -23,24 +22,47 @@ _ELIGIBLE_ROLES = {
 _COMP_QUERY = """
     SELECT
         ct.id::text, ct.event_id::text, ct.inviter_type,
-        ct.invited_by_user_id::text, iu.name AS invited_by_name,
+        ct.invited_by_user_id::text,
         ct.guest_name, ct.guest_email, ct.registration_id::text,
-        t.id::text AS ticket_id, t.status AS ticket_status, t.qr_token,
         ct.ticket_count, ct.notes,
-        ct.created_by::text, cu.name AS created_by_name,
+        ct.created_by::text,
         ct.created_at, ct.cancelled_at, ct.emailed_at
     FROM complimentary_ticket ct
-    LEFT JOIN users iu ON iu.id = ct.invited_by_user_id
-    LEFT JOIN users cu ON cu.id = ct.created_by
-    LEFT JOIN ticket t ON t.reg_id = ct.registration_id
 """
 
 
-async def _get_db_user_id(conn, sub: str) -> str:
-    row = await conn.fetchrow("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-    if not row:
+async def _get_db_user_id(sub: str) -> str:
+    user = await get_by_sub(sub)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return row["id"]
+    return user["id"]
+
+
+async def _hydrate_comp_rows(rows) -> list[dict]:
+    """invited_by_user_id/created_by are FKs into users, which now lives behind
+    user-service's own API (see DB_ISOLATION_PLAN.md) — resolve both ids' names
+    via one batch call instead of two JOINs. ticket_id/ticket_status/qr_token
+    used to come from a LEFT JOIN ticket — ticket now lives in ticket-service's
+    own schema, so batch-fetch those from its internal API instead."""
+    ids = [r["invited_by_user_id"] for r in rows if r["invited_by_user_id"]]
+    ids += [r["created_by"] for r in rows if r["created_by"]]
+    users = await get_by_ids(ids)
+    tickets = await get_tickets_by_reg_ids(r["registration_id"] for r in rows)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        d["invited_by_name"] = users.get(d["invited_by_user_id"], {}).get("name")
+        d["created_by_name"] = users.get(d["created_by"], {}).get("name")
+        t = tickets.get(d["registration_id"], {})
+        d["ticket_id"] = t.get("id")
+        d["ticket_status"] = t.get("status")
+        d["qr_token"] = t.get("qr_token")
+        hydrated.append(d)
+    return hydrated
+
+
+async def _hydrate_comp_row(row) -> dict:
+    return (await _hydrate_comp_rows([row]))[0]
 
 
 def _build_out(row) -> ComplimentaryTicketOut:
@@ -64,56 +86,41 @@ async def create_complimentary_ticket(
     claims: dict = Depends(require_role("admin", "committee_member")),
 ):
     sub = claims.get("sub", "")
+    issuer_id = await _get_db_user_id(sub)
+
+    event = await get_event(body.event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["status"] in ("completed", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Event is {event['status']} — complimentary tickets can no longer be issued")
+
+    if body.inviter_type == "walk_in":
+        # Named walk-in: no specific inviter — the guest just showed up and gave a name.
+        invited_by_user_id = None
+    else:
+        if not body.invited_by_user_id:
+            raise HTTPException(status_code=422, detail="invited_by_user_id is required for this inviter type")
+        inviter = await get_by_id(body.invited_by_user_id)
+        if not inviter:
+            raise HTTPException(status_code=404, detail="Inviter not found")
+        if inviter["role"] not in _ELIGIBLE_ROLES[body.inviter_type]:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Selected inviter must have role: {', '.join(_ELIGIBLE_ROLES[body.inviter_type])}",
+            )
+        invited_by_user_id = body.invited_by_user_id
+
+    # Guests may not have an account — create a lightweight placeholder
+    # (no keycloak_sub, so it can never log in) to satisfy the FK on
+    # registration/ticket, same as any other resident row.
+    guest_id = await create_guest(body.guest_name)
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        issuer_id = await _get_db_user_id(conn, sub)
-
-        event = await conn.fetchrow(
-            "SELECT id, price_currency, status FROM event WHERE id = $1::uuid AND society_id = $2::uuid",
-            body.event_id, _SOCIETY,
-        )
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-        if event["status"] in ("completed", "cancelled"):
-            raise HTTPException(status_code=400, detail=f"Event is {event['status']} — complimentary tickets can no longer be issued")
-
-        if body.inviter_type == "walk_in":
-            # Named walk-in: no specific inviter — the guest just showed up and gave a name.
-            invited_by_user_id = None
-        else:
-            if not body.invited_by_user_id:
-                raise HTTPException(status_code=422, detail="invited_by_user_id is required for this inviter type")
-            inviter = await conn.fetchrow(
-                "SELECT id, role FROM users WHERE id = $1::uuid", body.invited_by_user_id
-            )
-            if not inviter:
-                raise HTTPException(status_code=404, detail="Inviter not found")
-            if inviter["role"] not in _ELIGIBLE_ROLES[body.inviter_type]:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Selected inviter must have role: {', '.join(_ELIGIBLE_ROLES[body.inviter_type])}",
-                )
-            invited_by_user_id = body.invited_by_user_id
-
-        # Guests may not have an account — create a lightweight placeholder
-        # (no keycloak_sub, so it can never log in) to satisfy the FK on
-        # registration/ticket, same as any other resident row.
-        guest_id = await conn.fetchval(
-            "INSERT INTO users (name, role, is_active) VALUES ($1, 'guest', FALSE) RETURNING id::text",
-            body.guest_name,
-        )
-
         reg_id = await conn.fetchval(
             "INSERT INTO registration (event_id, user_id, ticket_count, total_amount, display_currency, status) "
             "VALUES ($1::uuid, $2::uuid, $3, 0, $4, 'confirmed') RETURNING id::text",
             body.event_id, guest_id, body.ticket_count, event["price_currency"],
-        )
-
-        qr_token = str(uuid.uuid4())
-        await conn.execute(
-            "INSERT INTO ticket (reg_id, user_id, event_id, qr_token) "
-            "VALUES ($1::uuid, $2::uuid, $3::uuid, $4)",
-            reg_id, guest_id, body.event_id, qr_token,
         )
 
         comp_id = await conn.fetchval(
@@ -127,7 +134,9 @@ async def create_complimentary_ticket(
         )
 
         row = await conn.fetchrow(_COMP_QUERY + " WHERE ct.id = $1::uuid", comp_id)
-    return _build_out(row)
+
+    await issue_ticket(reg_id, guest_id, body.event_id)
+    return _build_out(await _hydrate_comp_row(row))
 
 
 # ── GET /complimentary/tickets — list for an event ────────────────────────────
@@ -144,7 +153,7 @@ async def list_complimentary_tickets(
             _COMP_QUERY + " WHERE ct.event_id = $1::uuid ORDER BY ct.created_at DESC",
             event_id,
         )
-    return [_build_out(r) for r in rows]
+    return [_build_out(r) for r in await _hydrate_comp_rows(rows)]
 
 
 # ── DELETE /complimentary/tickets/{id} — revoke (soft-cancel, keeps history) ──
@@ -173,9 +182,9 @@ async def cancel_complimentary_ticket(
             await conn.execute(
                 "UPDATE registration SET status = 'cancelled' WHERE id = $1::uuid", row["registration_id"]
             )
-            await conn.execute(
-                "UPDATE ticket SET status = 'cancelled' WHERE reg_id = $1::uuid", row["registration_id"]
-            )
+
+    if row["registration_id"]:
+        await cancel_ticket_by_reg(row["registration_id"])
 
 
 # ── POST /complimentary/tickets/{id}/email — email the QR ticket to the guest ─
@@ -200,10 +209,7 @@ async def email_complimentary_ticket(
         if not row["guest_email"]:
             raise HTTPException(status_code=400, detail="No email address on file for this guest")
 
-        event = await conn.fetchrow(
-            "SELECT title, start_time, venue, venue_lat, venue_lng, venue_address "
-            "FROM event WHERE id = $1::uuid", row["event_id"]
-        )
+        event = await get_event(row["event_id"])
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
@@ -227,7 +233,7 @@ async def email_complimentary_ticket(
             "UPDATE complimentary_ticket SET emailed_at = now() WHERE id = $1::uuid", comp_id
         )
         row = await conn.fetchrow(_COMP_QUERY + " WHERE ct.id = $1::uuid", comp_id)
-    return _build_out(row)
+    return _build_out(await _hydrate_comp_row(row))
 
 
 # ── POST /complimentary/walk-ins — headcount log, no ticket/QR ───────────────
@@ -239,14 +245,10 @@ async def create_walk_in(
     claims: dict = Depends(require_role("admin", "committee_member", "security_guard")),
 ):
     sub = claims.get("sub", "")
+    logger_id = await _get_db_user_id(sub)
     pool = await get_pool()
     async with pool.acquire() as conn:
-        logger_id = await _get_db_user_id(conn, sub)
-
-        event = await conn.fetchrow(
-            "SELECT id, status FROM event WHERE id = $1::uuid AND society_id = $2::uuid",
-            body.event_id, _SOCIETY,
-        )
+        event = await get_event(body.event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         if event["status"] in ("completed", "cancelled"):
@@ -258,4 +260,4 @@ async def create_walk_in(
             body.event_id, body.ticket_count, body.notes, logger_id,
         )
         row = await conn.fetchrow(_COMP_QUERY + " WHERE ct.id = $1::uuid", comp_id)
-    return _build_out(row)
+    return _build_out(await _hydrate_comp_row(row))

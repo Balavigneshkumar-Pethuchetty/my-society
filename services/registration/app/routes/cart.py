@@ -5,25 +5,27 @@ from fastapi.responses import Response
 
 from app.auth import get_current_claims
 from app.database import get_pool
+from app.event_client import get_event
 from app.models import CartIn, CartOut
+from shared.user_client import get_by_sub
 
 router = APIRouter()
 
 
-async def _get_user_id(conn, sub: str) -> str:
-    row = await conn.fetchrow("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-    if not row:
+async def _get_user_id(sub: str) -> str:
+    user = await get_by_sub(sub)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return row["id"]
+    return user["id"]
 
 
 # ── GET /cart ─────────────────────────────────────────────────────────────────
 
 @router.get("/cart", response_model=CartOut, summary="Get the current user's saved cart")
 async def get_cart(claims: dict = Depends(get_current_claims)):
+    user_id = await _get_user_id(claims.get("sub", ""))
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_user_id(conn, claims.get("sub", ""))
         row = await conn.fetchrow(
             "SELECT id::text, event_id::text, event_title, event_venue, event_start, "
             "       currency, tickets, created_at, updated_at "
@@ -49,15 +51,11 @@ async def get_cart(claims: dict = Depends(get_current_claims)):
 
 @router.put("/cart", response_model=CartOut, summary="Save or replace the cart")
 async def upsert_cart(body: CartIn, claims: dict = Depends(get_current_claims)):
+    user_id = await _get_user_id(claims.get("sub", ""))
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_user_id(conn, claims.get("sub", ""))
-
-        event = await conn.fetchrow(
-            "SELECT id FROM event WHERE id = $1::uuid AND status = 'published'",
-            body.event_id,
-        )
-        if not event:
+        event = await get_event(body.event_id)
+        if not event or event["status"] != "published":
             raise HTTPException(status_code=404, detail="Event not found or not published")
 
         tickets_json = json.dumps([t.model_dump() for t in body.tickets])
@@ -96,8 +94,8 @@ async def upsert_cart(body: CartIn, claims: dict = Depends(get_current_claims)):
 
 @router.delete("/cart", status_code=204, summary="Clear the cart")
 async def delete_cart(claims: dict = Depends(get_current_claims)):
+    user_id = await _get_user_id(claims.get("sub", ""))
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_user_id(conn, claims.get("sub", ""))
         await conn.execute("DELETE FROM cart WHERE user_id = $1::uuid", user_id)
     return Response(status_code=204)

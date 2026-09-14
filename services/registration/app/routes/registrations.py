@@ -1,11 +1,9 @@
 import io
-import os
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-import aiofiles
 import qrcode
 import qrcode.image.svg
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile
@@ -14,27 +12,28 @@ from fastapi.responses import Response as FastAPIResponse
 from app.auth import get_current_claims, require_role
 from app.config import settings
 from app.database import get_pool
+from app.event_client import get_event, get_events
+from app.object_storage import upload_bytes
 from app.models import (
     CancelBody, PaymentReviewBody, RegistrationCreate, RegistrationOut, PaymentOut,
 )
 from app.notifications import resolve_and_record, send_channels
+from app.ticket_client import cancel_ticket_by_reg
+from shared.user_client import get_by_ids, get_by_sub
 
 router = APIRouter()
 
-_SOCIETY = settings.society_id
 _ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-async def _get_db_user_id(conn, keycloak_sub: str) -> str:
-    row = await conn.fetchrow(
-        "SELECT id::text FROM users WHERE keycloak_sub = $1", keycloak_sub
-    )
-    if not row:
+async def _get_db_user_id(keycloak_sub: str) -> str:
+    user = await get_by_sub(keycloak_sub)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found in database")
-    return row["id"]
+    return user["id"]
 
 
 def _build_reg_out(row: dict) -> RegistrationOut:
@@ -82,12 +81,6 @@ _REG_QUERY = """
         r.status,
         r.registered_at,
         r.qr_code,
-        e.title        AS event_title,
-        e.start_time   AS event_start_time,
-        e.end_time     AS event_end_time,
-        e.venue        AS event_venue,
-        e.is_free      AS event_is_free,
-        ec.color_hex   AS category_color,
         p.id::text     AS payment_id,
         p.status       AS payment_status,
         p.payment_method,
@@ -95,16 +88,38 @@ _REG_QUERY = """
         p.utr_number,
         p.review_notes,
         p.created_at   AS payment_created_at,
-        p.reviewed_at,
-        u.name         AS user_name,
-        u.email        AS user_email,
-        u.keycloak_sub
+        p.reviewed_at
     FROM registration r
-    JOIN event e        ON e.id = r.event_id
-    LEFT JOIN event_category ec ON ec.id = e.category_id
     LEFT JOIN payment p ON p.registration_id = r.id
-    LEFT JOIN users u   ON u.id = r.user_id
 """
+
+
+async def _hydrate_reg_rows(rows) -> list[dict]:
+    """event/event_category now live in event-service's own schema, and users
+    stays out of registration-service's own DB access entirely (see
+    DB_ISOLATION_PLAN.md) — merge in event + user fields via internal API calls
+    instead of JOINs."""
+    events = await get_events(r["event_id"] for r in rows)
+    users = await get_by_ids(r["user_id"] for r in rows)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        e = events.get(d["event_id"], {})
+        u = users.get(d["user_id"], {})
+        d["event_title"] = e.get("title")
+        d["event_start_time"] = e.get("start_time")
+        d["event_end_time"] = e.get("end_time")
+        d["event_venue"] = e.get("venue")
+        d["event_is_free"] = e.get("is_free")
+        d["category_color"] = e.get("category_color")
+        d["user_name"] = u.get("name")
+        d["user_email"] = u.get("email")
+        hydrated.append(d)
+    return hydrated
+
+
+async def _hydrate_reg_row(row) -> dict:
+    return (await _hydrate_reg_rows([row]))[0]
 
 
 def _generate_qr_svg(token: str) -> bytes:
@@ -130,13 +145,9 @@ async def create_registration(
     recipients: list[dict] = []
     reg_message = ""
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
 
-        event = await conn.fetchrow(
-            "SELECT id, title, ticket_price, price_currency, is_free, status, capacity, end_time "
-            "FROM event WHERE id = $1::uuid AND society_id = $2::uuid",
-            body.event_id, _SOCIETY,
-        )
+        event = await get_event(body.event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         if event["status"] != "published":
@@ -212,14 +223,14 @@ async def create_registration(
                 f"View: {link}"
             )
             recipients = await resolve_and_record(
-                conn, body.event_id, user_id, "event_registration_created",
+                body.event_id, user_id, "event_registration_created",
                 "New registration", reg_message, related_id=reg_id,
             )
 
     if is_free and recipients:
         background_tasks.add_task(send_channels, recipients, reg_message)
 
-    return _build_reg_out(dict(row))
+    return _build_reg_out(await _hydrate_reg_row(row))
 
 
 # ── GET /registrations/my ─────────────────────────────────────────────────────
@@ -230,12 +241,12 @@ async def my_registrations(claims: dict = Depends(get_current_claims)):
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
         rows = await conn.fetch(
             _REG_QUERY + " WHERE r.user_id = $1::uuid ORDER BY r.registered_at DESC",
             user_id,
         )
-    return [_build_reg_out(dict(r)) for r in rows]
+    return [_build_reg_out(r) for r in await _hydrate_reg_rows(rows)]
 
 
 # ── GET /registrations/{id} ───────────────────────────────────────────────────
@@ -252,13 +263,13 @@ async def get_registration(
 
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
         row = await conn.fetchrow(_REG_QUERY + " WHERE r.id = $1::uuid", reg_id)
         if not row:
             raise HTTPException(status_code=404, detail="Registration not found")
         if not is_admin and row["user_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not your registration")
-    return _build_reg_out(dict(row))
+    return _build_reg_out(await _hydrate_reg_row(row))
 
 
 # ── GET /registrations/{id}/payment-qr — UPI QR for paying ──────────────────
@@ -271,11 +282,10 @@ async def get_payment_qr(
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
         row = await conn.fetchrow(
-            "SELECT r.user_id::text, r.total_amount, e.title "
-            "FROM registration r JOIN event e ON e.id = r.event_id "
-            "WHERE r.id = $1::uuid",
+            "SELECT r.user_id::text, r.total_amount, r.event_id::text "
+            "FROM registration r WHERE r.id = $1::uuid",
             reg_id,
         )
         if not row:
@@ -288,8 +298,9 @@ async def get_payment_qr(
     if not upi_id:
         raise HTTPException(status_code=404, detail="UPI not configured")
 
+    event = await get_event(row["event_id"])
     amount = float(row["total_amount"])
-    title  = (row["title"] or "Event")[:50]
+    title  = ((event or {}).get("title") or "Event")[:50]
     upi_link = (
         f"upi://pay?pa={upi_id}&pn={upi_name}&am={amount:.2f}"
         f"&cu=INR&tn=Event+Registration+-+{title.replace(' ', '+')}&tr={reg_id[:8].upper()}"
@@ -315,13 +326,11 @@ async def cancel_registration(
     recipients: list[dict] = []
     refund_recipients: list[dict] = []
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
 
         row = await conn.fetchrow(
-            "SELECT r.id, r.user_id::text, r.status, r.total_amount, "
-            "e.id AS event_id, e.title AS event_title, e.start_time, e.cancel_freeze_at "
-            "FROM registration r JOIN event e ON e.id = r.event_id "
-            "WHERE r.id = $1::uuid",
+            "SELECT r.id, r.user_id::text, r.status, r.total_amount, r.event_id::text "
+            "FROM registration r WHERE r.id = $1::uuid",
             reg_id,
         )
         if not row:
@@ -333,30 +342,29 @@ async def cancel_registration(
         if row["status"] == "cancelled":
             raise HTTPException(status_code=400, detail="Registration already cancelled")
 
+        event = await get_event(row["event_id"])
+
         if not is_admin:
             now = datetime.now(timezone.utc)
-            if row["start_time"].replace(tzinfo=timezone.utc) <= now:
+            if event["start_time"].replace(tzinfo=timezone.utc) <= now:
                 raise HTTPException(status_code=400, detail="Cannot cancel after event has started")
 
             # A confirmed (ticketed) booking can be self-cancelled any time before
             # the event starts, unless the organizer configured an earlier freeze
             # time — in which case it must be cancelled before that.
-            if row["status"] == "confirmed" and row["cancel_freeze_at"] is not None:
-                if row["cancel_freeze_at"].replace(tzinfo=timezone.utc) <= now:
+            if row["status"] == "confirmed" and event["cancel_freeze_at"] is not None:
+                if event["cancel_freeze_at"].replace(tzinfo=timezone.utc) <= now:
                     raise HTTPException(status_code=400, detail="Cancellation window has closed")
 
         await conn.execute(
             "UPDATE registration SET status = 'cancelled' WHERE id = $1::uuid", reg_id
         )
-        await conn.execute(
-            "UPDATE ticket SET status = 'cancelled' WHERE reg_id = $1::uuid", reg_id
-        )
 
-        event_title = row["event_title"] or "an event"
+        event_title = event["title"] or "an event"
         cancel_link = f"{settings.app_public_url}/manage/details/{row['event_id']}?tab=purchases&registration_id={reg_id}"
         cancel_message = f"A resident cancelled their registration for \"{event_title}\". View: {cancel_link}"
         recipients = await resolve_and_record(
-            conn, row["event_id"], user_id, "cancellation_requested",
+            row["event_id"], user_id, "cancellation_requested",
             "Registration cancelled", cancel_message, related_id=reg_id,
         )
 
@@ -364,20 +372,20 @@ async def cancel_registration(
         refund_message = ""
         if row["total_amount"] > 0:
             txn = await conn.fetchrow(
-                "SELECT id::text FROM payment_transaction "
+                "SELECT id::text FROM payment_svc.payment_transaction "
                 "WHERE registration_id = $1::uuid AND status = 'verified'",
                 reg_id,
             )
             if txn:
                 refund_upi_id = (body.refund_upi_id.strip() if body and body.refund_upi_id else None) or None
                 await conn.execute(
-                    "UPDATE payment_transaction SET status = 'refund_requested', "
+                    "UPDATE payment_svc.payment_transaction SET status = 'refund_requested', "
                     "refund_upi_id = COALESCE($2, payer_upi), updated_at = now() "
                     "WHERE id = $1::uuid",
                     txn["id"], refund_upi_id,
                 )
                 await conn.execute(
-                    "INSERT INTO payment_audit_log (txn_id, from_status, to_status, updated_by, note) "
+                    "INSERT INTO payment_svc.payment_audit_log (txn_id, from_status, to_status, updated_by, note) "
                     "VALUES ($1::uuid, 'verified', 'refund_requested', $2, 'Refund requested by resident on ticket cancellation')",
                     txn["id"], sub,
                 )
@@ -388,9 +396,11 @@ async def cancel_registration(
                     f"Process it: {refund_link}"
                 )
                 refund_recipients = await resolve_and_record(
-                    conn, row["event_id"], user_id, "refund_requested",
+                    row["event_id"], user_id, "refund_requested",
                     "Refund requested", refund_message, related_id=txn["id"],
                 )
+
+    await cancel_ticket_by_reg(reg_id)
 
     if recipients:
         background_tasks.add_task(send_channels, recipients, cancel_message)
@@ -420,13 +430,11 @@ async def upload_screenshot(
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await _get_db_user_id(conn, sub)
+        user_id = await _get_db_user_id(sub)
 
         reg = await conn.fetchrow(
-            "SELECT r.id, r.event_id::text, r.user_id::text, r.status, p.id::text AS payment_id, "
-            "e.title AS event_title "
-            "FROM registration r JOIN event e ON e.id = r.event_id "
-            "LEFT JOIN payment p ON p.registration_id = r.id "
+            "SELECT r.id, r.event_id::text, r.user_id::text, r.status, p.id::text AS payment_id "
+            "FROM registration r LEFT JOIN payment p ON p.registration_id = r.id "
             "WHERE r.id = $1::uuid",
             reg_id,
         )
@@ -438,18 +446,17 @@ async def upload_screenshot(
             raise HTTPException(status_code=400, detail=f"Cannot upload screenshot for status: {reg['status']}")
         if not reg["payment_id"]:
             raise HTTPException(status_code=400, detail="No payment record found")
+        event = await get_event(reg["event_id"])
 
         ext = (file.filename or "screenshot.jpg").rsplit(".", 1)[-1].lower()
         filename = f"{uuid.uuid4()}.{ext}"
-        save_dir = os.path.join(settings.uploads_dir, "payment-screenshots")
-        os.makedirs(save_dir, exist_ok=True)
-        async with aiofiles.open(os.path.join(save_dir, filename), "wb") as f:
-            await f.write(content)
+        object_key = f"payment-screenshots/{filename}"
+        await upload_bytes(object_key, content, file.content_type)
 
         await conn.execute(
             "UPDATE payment SET screenshot_path = $1, utr_number = $2, status = 'pending_review' "
             "WHERE id = $3::uuid",
-            f"payment-screenshots/{filename}", utr_number, reg["payment_id"],
+            object_key, utr_number, reg["payment_id"],
         )
 
         row = await conn.fetchrow(_REG_QUERY + " WHERE r.id = $1::uuid", reg_id)
@@ -459,17 +466,17 @@ async def upload_screenshot(
         # for paid registrations).
         screenshot_link = f"{settings.app_public_url}/admin/payments?registration_id={reg_id}"
         screenshot_message = (
-            f"A resident submitted a payment screenshot for \"{reg['event_title']}\" — "
+            f"A resident submitted a payment screenshot for \"{event['title']}\" — "
             f"please review: {screenshot_link}"
         )
         recipients = await resolve_and_record(
-            conn, reg["event_id"], user_id, "payment_screenshot_submitted",
+            reg["event_id"], user_id, "payment_screenshot_submitted",
             "Payment Screenshot Submitted", screenshot_message, related_id=reg_id,
         )
 
     if recipients:
         background_tasks.add_task(send_channels, recipients, screenshot_message)
-    return _build_reg_out(dict(row))
+    return _build_reg_out(await _hydrate_reg_row(row))
 
 
 # ── GET /registrations (admin) ────────────────────────────────────────────────
@@ -482,9 +489,9 @@ async def list_registrations(
     claims: dict = Depends(require_role("admin", "committee_member")),
 ):
     pool = await get_pool()
-    conditions = ["e.society_id = $1::uuid"]
-    params: list = [_SOCIETY]
-    idx = 2
+    conditions = ["1=1"]
+    params: list = []
+    idx = 1
 
     if payment_status:
         conditions.append(f"p.status = ${idx}")
@@ -502,7 +509,7 @@ async def list_registrations(
             _REG_QUERY + where + " ORDER BY r.registered_at DESC",
             *params,
         )
-    return [_build_reg_out(dict(r)) for r in rows]
+    return [_build_reg_out(r) for r in await _hydrate_reg_rows(rows)]
 
 
 # ── PATCH /registrations/{id}/review (admin) ─────────────────────────────────
@@ -517,7 +524,7 @@ async def review_payment(
     sub = claims.get("sub", "")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        reviewer_id = await _get_db_user_id(conn, sub)
+        reviewer_id = await _get_db_user_id(sub)
 
         reg = await conn.fetchrow(
             "SELECT r.id, r.status, p.id::text AS payment_id, p.status AS payment_status "
@@ -557,4 +564,4 @@ async def review_payment(
             )
 
         row = await conn.fetchrow(_REG_QUERY + " WHERE r.id = $1::uuid", reg_id)
-    return _build_reg_out(dict(row))
+    return _build_reg_out(await _hydrate_reg_row(row))

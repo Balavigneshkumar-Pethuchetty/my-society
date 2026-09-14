@@ -14,6 +14,7 @@ from fastapi.responses import Response
 from app.auth import _has_event_access, get_current_claims, require_event_access, require_role
 from app.config import settings
 from app.database import get_pool
+from app.event_client import get_event
 from app.fund_export import build_pdf, build_xlsx, fetch_fund_export_data
 from app.models import (
     DistributionEntryCreate, DistributionEntryOut,
@@ -23,6 +24,7 @@ from app.models import (
     RevenueDistributionCreate, RevenueDistributionOut,
     VendorCreate, VendorOut,
 )
+from shared.user_client import get_by_ids, get_by_sub
 
 router = APIRouter()
 
@@ -32,8 +34,8 @@ _SHARE_LINK_TTL_DAYS = 7
 _EXPENSE_SELECT = (
     "SELECT ex.id::text, ex.event_id::text, ex.description, ex.amount, "
     "ex.currency_code, ex.category, ex.receipt_url, "
-    "ex.created_by::text, u.name AS created_by_name, ex.created_at "
-    "FROM event_expense ex JOIN users u ON u.id = ex.created_by "
+    "ex.created_by::text, ex.created_at "
+    "FROM event_expense ex "
 )
 
 _EVENT_VENDOR_SELECT = (
@@ -47,19 +49,43 @@ _EVENT_VENDOR_SELECT = (
 _DIST_ENTRY_SELECT = (
     "SELECT de.id::text, de.distribution_id::text, de.recipient_type, "
     "de.recipient_user_id::text, de.recipient_sponsor_id::text, "
-    "COALESCE(u.name, s.organization_name) AS recipient_name, "
+    "s.organization_name AS sponsor_org_name, "
     "de.share_percentage, de.amount, de.status, de.paid_at, de.notes "
     "FROM distribution_entry de "
-    "LEFT JOIN users u ON u.id = de.recipient_user_id "
     "LEFT JOIN sponsor s ON s.id = de.recipient_sponsor_id "
 )
 
 
+async def _hydrate_expense_rows(rows) -> list[dict]:
+    """users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md)
+    — resolve the logger's name via a batch call instead of a JOIN."""
+    users = await get_by_ids(r["created_by"] for r in rows)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        d["created_by_name"] = users.get(d["created_by"], {}).get("name")
+        hydrated.append(d)
+    return hydrated
+
+
+async def _hydrate_dist_entries(rows) -> list[dict]:
+    """A distribution-entry recipient is either a user or a sponsor (never both);
+    users now lives behind user-service's own API, sponsor stays a direct
+    lookup (payment-service's own table)."""
+    users = await get_by_ids(r["recipient_user_id"] for r in rows if r["recipient_user_id"])
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        sponsor_name = d.pop("sponsor_org_name")
+        user_name = users.get(d["recipient_user_id"], {}).get("name") if d["recipient_user_id"] else None
+        d["recipient_name"] = user_name or sponsor_name
+        hydrated.append(d)
+    return hydrated
+
+
 async def _require_event(conn, event_id: str) -> None:
-    exists = await conn.fetchval(
-        "SELECT 1 FROM event WHERE id=$1::uuid AND society_id=$2::uuid", event_id, _SOCIETY,
-    )
-    if not exists:
+    event = await get_event(event_id)
+    if not event or event["society_id"] != _SOCIETY:
         raise HTTPException(status_code=404, detail="Event not found")
 
 
@@ -99,7 +125,7 @@ async def list_expenses(
             _EXPENSE_SELECT + "WHERE ex.event_id = $1::uuid ORDER BY ex.created_at DESC",
             event_id,
         )
-    return [dict(r) for r in rows]
+    return await _hydrate_expense_rows(rows)
 
 
 @router.post("/{event_id}/expenses", response_model=ExpenseOut, status_code=201,
@@ -112,7 +138,7 @@ async def create_expense(
     pool = await get_pool()
     async with pool.acquire() as conn:
         await _require_event(conn, event_id)
-        creator = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
+        creator = await get_by_sub(claims.get("sub", ""))
         if not creator:
             raise HTTPException(status_code=404, detail="User record not found")
         row = await conn.fetchrow(
@@ -120,10 +146,10 @@ async def create_expense(
             "category, receipt_url, created_by) "
             "VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::uuid) RETURNING id",
             event_id, body.description, body.amount, body.currency_code,
-            body.category, body.receipt_url, str(creator["id"]),
+            body.category, body.receipt_url, creator["id"],
         )
         full = await conn.fetchrow(_EXPENSE_SELECT + "WHERE ex.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_expense_rows([full]))[0]
 
 
 @router.put("/expenses/{expense_id}", response_model=ExpenseOut,
@@ -155,7 +181,7 @@ async def update_expense(
         params.append(expense_id)
         await conn.execute(f"UPDATE event_expense SET {', '.join(updates)} WHERE id=${idx}::uuid", *params)
         full = await conn.fetchrow(_EXPENSE_SELECT + "WHERE ex.id = $1::uuid", expense_id)
-    return dict(full)
+    return (await _hydrate_expense_rows([full]))[0]
 
 
 @router.delete("/expenses/{expense_id}", status_code=204, summary="Delete an expense")
@@ -317,7 +343,7 @@ async def _full_distribution(conn, distribution_id: str) -> dict:
         distribution_id,
     )
     d = dict(dist)
-    d["entries"] = [dict(e) for e in entries]
+    d["entries"] = await _hydrate_dist_entries(entries)
     return d
 
 
@@ -388,7 +414,7 @@ async def add_distribution_entry(
             body.recipient_sponsor_id, body.share_percentage, body.amount, body.notes,
         )
         full = await conn.fetchrow(_DIST_ENTRY_SELECT + "WHERE de.id = $1::uuid", row["id"])
-    return dict(full)
+    return (await _hydrate_dist_entries([full]))[0]
 
 
 @router.patch("/revenue-distribution/{distribution_id}/approve", response_model=RevenueDistributionOut,
@@ -406,13 +432,13 @@ async def approve_revenue_distribution(
             raise HTTPException(status_code=404, detail="Distribution not found")
         if not await _has_event_access(conn, claims.get("sub"), dist_event_id):
             raise HTTPException(status_code=403, detail="You don't have access to this event")
-        approver = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
+        approver = await get_by_sub(claims.get("sub", ""))
         if not approver:
             raise HTTPException(status_code=404, detail="User record not found")
         result = await conn.execute(
             "UPDATE vendor_revenue_distribution SET status='approved', approved_by=$1::uuid, approved_at=now() "
             "WHERE id=$2::uuid AND status='draft'",
-            str(approver["id"]), distribution_id,
+            approver["id"], distribution_id,
         )
         if result == "UPDATE 0":
             raise HTTPException(status_code=409, detail="Distribution not found or not in draft state")
@@ -494,7 +520,7 @@ async def create_share_link(
     pool = await get_pool()
     async with pool.acquire() as conn:
         await _require_event(conn, event_id)
-        creator = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", claims.get("sub"))
+        creator = await get_by_sub(claims.get("sub", ""))
         if not creator:
             raise HTTPException(status_code=404, detail="User record not found")
 
@@ -503,7 +529,7 @@ async def create_share_link(
         await conn.execute(
             "INSERT INTO fund_export_link (event_id, token, created_by, expires_at) "
             "VALUES ($1::uuid, $2, $3::uuid, $4)",
-            event_id, token, str(creator["id"]), expires_at,
+            event_id, token, creator["id"], expires_at,
         )
     return FundShareLinkOut(token=token, path=f"/api/payments/funds/share/{token}", expires_at=expires_at)
 

@@ -53,6 +53,31 @@ async def _load_event_mailboxes() -> list[dict]:
     return configs
 
 
+# ── Cross-replica / cross-request locking ──────────────────────────────────────
+# No two scans of the SAME event may run concurrently — whether from two
+# payment-service replicas' background loops racing each other, or a manual
+# scan racing the background loop. A Postgres advisory lock (keyed per event,
+# not one global lock) gives that guarantee for free once payment-service is
+# horizontally scaled, and turns replicas that would otherwise sit idle into
+# real parallelism across *different* events. The lock is acquired and released
+# on the SAME held connection for the whole scan — advisory locks are
+# session-scoped, so returning the connection to the pool without unlocking
+# first would leak the lock into whatever request reuses that connection next.
+
+async def _run_scan_locked(event_id: str, cfg: dict, ai_cfg: dict) -> dict:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        lock_key = await conn.fetchval("SELECT hashtextextended($1, 0)", f"payment_reconciliation:{event_id}")
+        acquired = await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock_key)
+        if not acquired:
+            return {"emails_processed": 0, "matched": 0, "unmatched": 0,
+                     "detail": "Reconciliation already in progress for this event", "skipped": True}
+        try:
+            return await _scan_once(event_id, cfg, ai_cfg, conn)
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock($1)", lock_key)
+
+
 # ── Public entry points ───────────────────────────────────────────────────────
 
 async def reconciliation_loop() -> None:
@@ -62,7 +87,7 @@ async def reconciliation_loop() -> None:
         await asyncio.sleep(interval)
         for event_cfg in await _load_event_mailboxes():
             try:
-                await _scan_once(event_cfg["event_id"], event_cfg, ai_cfg)
+                await _run_scan_locked(event_cfg["event_id"], event_cfg, ai_cfg)
             except Exception as exc:
                 print(f"[reconciliation] inbox scan error (event {event_cfg['event_id']}): {exc}")
 
@@ -71,13 +96,19 @@ async def manual_scan() -> dict:
     """Triggered by POST /reconciliation/scan (admin, scans every configured event)."""
     ai_cfg = await _load_ai_settings()
     totals = {"emails_processed": 0, "matched": 0, "unmatched": 0}
+    skipped_events: list[str] = []
     for event_cfg in await _load_event_mailboxes():
         try:
-            result = await _scan_once(event_cfg["event_id"], event_cfg, ai_cfg)
+            result = await _run_scan_locked(event_cfg["event_id"], event_cfg, ai_cfg)
+            if result.get("skipped"):
+                skipped_events.append(event_cfg["event_id"])
+                continue
             for k in totals:
                 totals[k] += result.get(k, 0)
         except Exception as exc:
             print(f"[reconciliation] inbox scan error (event {event_cfg['event_id']}): {exc}")
+    if skipped_events:
+        totals["skipped_events"] = skipped_events
     return totals
 
 
@@ -98,12 +129,12 @@ async def manual_scan_event(event_id: str) -> dict:
         return {"emails_processed": 0, "matched": 0, "unmatched": 0, "detail": "IMAP not configured for this event"}
     cfg = dict(row)
     cfg["imap_password"] = decrypt(cfg["imap_password"])
-    return await _scan_once(event_id, cfg, ai_cfg)
+    return await _run_scan_locked(event_id, cfg, ai_cfg)
 
 
 # ── Core scan ─────────────────────────────────────────────────────────────────
 
-async def _scan_once(event_id: str, cfg: dict, ai_cfg: dict) -> dict:
+async def _scan_once(event_id: str, cfg: dict, ai_cfg: dict, conn) -> dict:
     global _last_run_at, _last_matched_utrs
 
     try:
@@ -144,7 +175,7 @@ async def _scan_once(event_id: str, cfg: dict, ai_cfg: dict) -> dict:
             utr, amount, payer_vpa = extract_all_regex(body)
 
         if utr and amount:
-            ok = await _match_and_verify(utr, amount, payer_vpa, event_id)
+            ok = await _match_and_verify(utr, amount, payer_vpa, event_id, conn)
             if ok:
                 matched += 1
                 new_utrs.append(utr)
@@ -176,62 +207,60 @@ def _extract_body(msg) -> str:
 
 # ── Transaction matching ──────────────────────────────────────────────────────
 
-async def _match_and_verify(utr: str, amount: float, payer_vpa: Optional[str], event_id: str) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        # Idempotency: skip if UTR already recorded
-        exists = await conn.fetchval(
-            "SELECT id FROM payment_transaction WHERE payment_utr = $1", utr
+async def _match_and_verify(utr: str, amount: float, payer_vpa: Optional[str], event_id: str, conn) -> bool:
+    # Idempotency: skip if UTR already recorded
+    exists = await conn.fetchval(
+        "SELECT id FROM payment_transaction WHERE payment_utr = $1", utr
+    )
+    if exists:
+        return False
+
+    # Try precise match first: payer VPA + amount, scoped to this event
+    row = None
+    if payer_vpa:
+        row = await conn.fetchrow(
+            """SELECT id::text, txn_ref, registration_id::text
+               FROM payment_transaction
+               WHERE status = 'pending'
+                 AND event_id = $1::uuid
+                 AND ABS(amount - $2::numeric) < 0.01
+                 AND LOWER(payer_upi) = $3
+               ORDER BY created_at ASC
+               LIMIT 1""",
+            event_id, amount, payer_vpa,
         )
-        if exists:
-            return False
 
-        # Try precise match first: payer VPA + amount, scoped to this event
-        row = None
-        if payer_vpa:
-            row = await conn.fetchrow(
-                """SELECT id::text, txn_ref, registration_id::text
-                   FROM payment_transaction
-                   WHERE status = 'pending'
-                     AND event_id = $1::uuid
-                     AND ABS(amount - $2::numeric) < 0.01
-                     AND LOWER(payer_upi) = $3
-                   ORDER BY created_at ASC
-                   LIMIT 1""",
-                event_id, amount, payer_vpa,
-            )
+    # Fall back to amount-only, still scoped to this event
+    if not row:
+        row = await conn.fetchrow(
+            """SELECT id::text, txn_ref, registration_id::text
+               FROM payment_transaction
+               WHERE status = 'pending'
+                 AND event_id = $1::uuid
+                 AND ABS(amount - $2::numeric) < 0.01
+               ORDER BY created_at ASC
+               LIMIT 1""",
+            event_id, amount,
+        )
 
-        # Fall back to amount-only, still scoped to this event
-        if not row:
-            row = await conn.fetchrow(
-                """SELECT id::text, txn_ref, registration_id::text
-                   FROM payment_transaction
-                   WHERE status = 'pending'
-                     AND event_id = $1::uuid
-                     AND ABS(amount - $2::numeric) < 0.01
-                   ORDER BY created_at ASC
-                   LIMIT 1""",
-                event_id, amount,
-            )
+    if not row:
+        return False
 
-        if not row:
-            return False
-
+    await conn.execute(
+        "UPDATE payment_transaction SET status='verified', payment_utr=$1, updated_at=now() WHERE id=$2::uuid",
+        utr, row["id"],
+    )
+    await conn.execute(
+        """INSERT INTO payment_audit_log (txn_id, from_status, to_status, updated_by, note)
+           VALUES ($1::uuid, 'pending', 'verified', 'system_auto', $2)""",
+        row["id"],
+        f"Auto-matched UTR {utr}" + (f" via VPA {payer_vpa}" if payer_vpa else " via amount-only"),
+    )
+    if row["registration_id"]:
         await conn.execute(
-            "UPDATE payment_transaction SET status='verified', payment_utr=$1, updated_at=now() WHERE id=$2::uuid",
-            utr, row["id"],
+            "UPDATE registration_svc.registration SET status='confirmed' WHERE id=$1::uuid",
+            row["registration_id"],
         )
-        await conn.execute(
-            """INSERT INTO payment_audit_log (txn_id, from_status, to_status, updated_by, note)
-               VALUES ($1::uuid, 'pending', 'verified', 'system_auto', $2)""",
-            row["id"],
-            f"Auto-matched UTR {utr}" + (f" via VPA {payer_vpa}" if payer_vpa else " via amount-only"),
-        )
-        if row["registration_id"]:
-            await conn.execute(
-                "UPDATE registration SET status='confirmed' WHERE id=$1::uuid",
-                row["registration_id"],
-            )
     return True
 
 

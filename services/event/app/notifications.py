@@ -17,6 +17,7 @@ import httpx
 from app.config import settings
 from app.email import send_notification_emails_sequential
 from app.splunk_logger import log_app_error
+from shared.user_client import get_broadcast_targets, post_notification
 
 
 def _mask_phone(phone: str) -> str:
@@ -24,20 +25,16 @@ def _mask_phone(phone: str) -> str:
 
 
 async def notify_all_users(
-    conn, event_id: str, type_: str, title: str, message: str,
+    event_id: str, type_: str, title: str, message: str,
     related_id: str | None = None,
 ) -> list[dict]:
-    rows = await conn.fetch(
-        "SELECT id, phone, email, notify_sms, notify_email, notify_telegram "
-        "FROM users WHERE is_active = TRUE AND role != 'guest'",
-    )
-    for r in rows:
-        await conn.execute(
-            "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
-            "VALUES ($1, $2::uuid, $3, $4, $5, $6)",
-            r["id"], event_id, type_, title, message, related_id,
-        )
-    return [dict(r) for r in rows]
+    """users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md)
+    — resolve broadcast targets and write each in-app notification through it
+    instead of a direct SELECT + INSERT."""
+    users = await get_broadcast_targets()
+    for user in users:
+        await post_notification(user["id"], type_, title, message, related_id=related_id, event_id=event_id)
+    return users
 
 
 async def send_channels(recipients: list[dict], message: str, title: str) -> None:

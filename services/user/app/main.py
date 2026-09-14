@@ -1,12 +1,10 @@
 import asyncio
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import wait_for_db, close_pool, get_pool
@@ -14,7 +12,7 @@ from app.models import SocietyConfig
 from app.routes import users, internal, notifications, logs, building, leave_requests
 from app.middleware.splunk import SplunkLoggingMiddleware
 from app.metrics_collector import collect_metrics
-from app.swagger_theme import themed_swagger_ui_html
+from shared.swagger_theme import themed_swagger_ui_html
 
 # All nginx-prefixed paths (browser-visible via http://host/api/users/...)
 _OPENAPI_URL   = "openapi.json"
@@ -23,7 +21,6 @@ _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs(os.path.join(settings.uploads_dir, "avatars"), exist_ok=True)
     await wait_for_db()
     metrics_task = asyncio.create_task(collect_metrics())
     yield
@@ -92,9 +89,6 @@ app.include_router(internal.router,      prefix="/internal/users",  tags=["inter
 app.include_router(building.router,      prefix="/building",        tags=["building"])
 app.include_router(leave_requests.router, prefix="/leave-requests", tags=["leave-requests"])
 app.include_router(logs.router,          tags=["ops"])
-
-os.makedirs(settings.uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
 
 
 @app.get("/society", response_model=SocietyConfig, tags=["ops"], summary="Society identity config (public)")

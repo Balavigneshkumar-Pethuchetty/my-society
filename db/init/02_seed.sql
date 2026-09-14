@@ -9,16 +9,16 @@
 -- CLEAR ALL DATA  (schema preserved; sequences reset)
 -- ---------------------------------------------------------------------------
 TRUNCATE TABLE
-    registration_item, ticket_type,
-    distribution_entry, vendor_revenue_distribution,
-    event_vendor, vendor,
-    complimentary_ticket, event_expense,
-    sponsorship_refund, event_sponsorship, sponsor,
-    notification, announcement, refund, payment,
-    registration, event, event_category,
-    admin_actions, oauth_session, user_apartments,
-    users, apartment, society,
-    structure_nodes, building_hierarchy_config,
+    registration_svc.registration_item, event_svc.ticket_type,
+    payment_svc.distribution_entry, payment_svc.vendor_revenue_distribution,
+    payment_svc.event_vendor, payment_svc.vendor,
+    registration_svc.complimentary_ticket, payment_svc.event_expense,
+    payment_svc.sponsorship_refund, payment_svc.event_sponsorship, payment_svc.sponsor,
+    notification, event_svc.announcement, registration_svc.refund, registration_svc.payment,
+    registration_svc.registration, event_svc.event, event_svc.event_category,
+    user_svc.admin_actions, oauth_session, user_svc.user_apartments,
+    user_svc.users, user_svc.apartment, society,
+    user_svc.structure_nodes, user_svc.building_hierarchy_config,
     exchange_rate, currency
 RESTART IDENTITY CASCADE;
 
@@ -60,7 +60,7 @@ INSERT INTO society (id, name, address, city, contact_email, base_currency) VALU
 -- BUILDING HIERARCHY CONFIG  (Tower → Wing → Floor → Flat)
 -- Flat is the leaf / billable unit.
 -- ---------------------------------------------------------------------------
-INSERT INTO building_hierarchy_config (level_index, level_name, is_billable) VALUES
+INSERT INTO user_svc.building_hierarchy_config (level_index, level_name, is_billable) VALUES
     (1, 'Tower', FALSE),
     (2, 'Wing',  FALSE),
     (3, 'Floor', FALSE),
@@ -76,19 +76,19 @@ INSERT INTO building_hierarchy_config (level_index, level_name, is_billable) VAL
 -- ---------------------------------------------------------------------------
 
 -- Towers
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('a0000000-0000-0000-0000-000000000001', 'Tower A', 1, NULL),
     ('a0000000-0000-0000-0000-000000000002', 'Tower B', 1, NULL);
 
 -- Wings
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('b0000000-0000-0000-0000-000000000001', 'Wing 1', 2, 'a0000000-0000-0000-0000-000000000001'), -- A › W1
     ('b0000000-0000-0000-0000-000000000002', 'Wing 2', 2, 'a0000000-0000-0000-0000-000000000001'), -- A › W2
     ('b0000000-0000-0000-0000-000000000003', 'Wing 1', 2, 'a0000000-0000-0000-0000-000000000002'), -- B › W1
     ('b0000000-0000-0000-0000-000000000004', 'Wing 2', 2, 'a0000000-0000-0000-0000-000000000002'); -- B › W2
 
 -- Floors
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('c0000000-0000-0000-0000-000000000001', 'Floor 1', 3, 'b0000000-0000-0000-0000-000000000001'), -- A-W1-F1
     ('c0000000-0000-0000-0000-000000000002', 'Floor 2', 3, 'b0000000-0000-0000-0000-000000000001'), -- A-W1-F2
     ('c0000000-0000-0000-0000-000000000003', 'Floor 1', 3, 'b0000000-0000-0000-0000-000000000002'), -- A-W2-F1
@@ -99,28 +99,28 @@ INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
     ('c0000000-0000-0000-0000-000000000008', 'Floor 2', 3, 'b0000000-0000-0000-0000-000000000004'); -- B-W2-F2
 
 -- Flats  (Tower A › Wing 1)
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('d0000000-0000-0000-0000-000000000001', 'Flat 101', 4, 'c0000000-0000-0000-0000-000000000001'), -- A-W1-F1-101
     ('d0000000-0000-0000-0000-000000000002', 'Flat 102', 4, 'c0000000-0000-0000-0000-000000000001'), -- A-W1-F1-102
     ('d0000000-0000-0000-0000-000000000003', 'Flat 201', 4, 'c0000000-0000-0000-0000-000000000002'), -- A-W1-F2-201
     ('d0000000-0000-0000-0000-000000000004', 'Flat 202', 4, 'c0000000-0000-0000-0000-000000000002'); -- A-W1-F2-202
 
 -- Flats  (Tower A › Wing 2)
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('d0000000-0000-0000-0000-000000000005', 'Flat 101', 4, 'c0000000-0000-0000-0000-000000000003'), -- A-W2-F1-101
     ('d0000000-0000-0000-0000-000000000006', 'Flat 102', 4, 'c0000000-0000-0000-0000-000000000003'), -- A-W2-F1-102
     ('d0000000-0000-0000-0000-000000000007', 'Flat 201', 4, 'c0000000-0000-0000-0000-000000000004'), -- A-W2-F2-201
     ('d0000000-0000-0000-0000-000000000008', 'Flat 202', 4, 'c0000000-0000-0000-0000-000000000004'); -- A-W2-F2-202
 
 -- Flats  (Tower B › Wing 1)
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('d0000000-0000-0000-0000-000000000009', 'Flat 101', 4, 'c0000000-0000-0000-0000-000000000005'), -- B-W1-F1-101
     ('d0000000-0000-0000-0000-000000000010', 'Flat 102', 4, 'c0000000-0000-0000-0000-000000000005'), -- B-W1-F1-102
     ('d0000000-0000-0000-0000-000000000011', 'Flat 201', 4, 'c0000000-0000-0000-0000-000000000006'), -- B-W1-F2-201
     ('d0000000-0000-0000-0000-000000000012', 'Flat 202', 4, 'c0000000-0000-0000-0000-000000000006'); -- B-W1-F2-202
 
 -- Flats  (Tower B › Wing 2)
-INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
+INSERT INTO user_svc.structure_nodes (id, name, level_index, parent_id) VALUES
     ('d0000000-0000-0000-0000-000000000013', 'Flat 101', 4, 'c0000000-0000-0000-0000-000000000007'), -- B-W2-F1-101
     ('d0000000-0000-0000-0000-000000000014', 'Flat 102', 4, 'c0000000-0000-0000-0000-000000000007'), -- B-W2-F1-102
     ('d0000000-0000-0000-0000-000000000015', 'Flat 201', 4, 'c0000000-0000-0000-0000-000000000008'), -- B-W2-F2-201
@@ -130,7 +130,7 @@ INSERT INTO structure_nodes (id, name, level_index, parent_id) VALUES
 -- APARTMENT  (legacy table, aligned with structure_nodes flat layout)
 -- block = "Tower X - Wing Y", unit_number = "FZ-NNN"
 -- ---------------------------------------------------------------------------
-INSERT INTO apartment (id, society_id, block, unit_number, type) VALUES
+INSERT INTO user_svc.apartment (id, society_id, block, unit_number, type) VALUES
     ('21100000-0000-0000-0000-000000000001', '11100000-0000-0000-0000-000000000001', 'A-W1', 'F1-101', '2BHK'),
     ('21100000-0000-0000-0000-000000000002', '11100000-0000-0000-0000-000000000001', 'A-W1', 'F1-102', '3BHK'),
     ('21100000-0000-0000-0000-000000000003', '11100000-0000-0000-0000-000000000001', 'A-W1', 'F2-201', '2BHK'),
@@ -158,7 +158,7 @@ INSERT INTO apartment (id, society_id, block, unit_number, type) VALUES
 --   Lakshmi (resident)       → NULL (pending approval)       is_active=FALSE
 --   Ravi   (resident)        → NULL (pending approval)       is_active=FALSE
 -- ---------------------------------------------------------------------------
-INSERT INTO users (id, name, email, phone, role, keycloak_sub, identity_provider, is_active, structure_node_id) VALUES
+INSERT INTO user_svc.users (id, name, email, phone, role, keycloak_sub, identity_provider, is_active, structure_node_id) VALUES
 
     -- ── Active: admin ──────────────────────────────────────────────────────
     ('31100000-0000-0000-0000-000000000001',
@@ -222,7 +222,7 @@ INSERT INTO users (id, name, email, phone, role, keycloak_sub, identity_provider
     -- ── Active: security guard — no flat ──────────────────────────────────
     ('31100000-0000-0000-0000-000000000012',
      'Ramu Kumar', 'ramu.guard@pvh-blr.in', '+91-95432-10101',
-     'security_guard', 'a1000000-0000-0000-0000-000000000009', 'keycloak',
+     'security_guard', 'a1000000-0000-0000-0000-000000000012', 'keycloak',
      TRUE, NULL),   -- security staff, no resident unit
 
     -- ── Pending approval: is_active=FALSE, no flat yet ────────────────────
@@ -239,7 +239,7 @@ INSERT INTO users (id, name, email, phone, role, keycloak_sub, identity_provider
 -- ---------------------------------------------------------------------------
 -- USER_APARTMENTS  (legacy many-to-many; also shows Meera's dual ownership)
 -- ---------------------------------------------------------------------------
-INSERT INTO user_apartments (user_id, apartment_id) VALUES
+INSERT INTO user_svc.user_apartments (user_id, apartment_id) VALUES
     ('31100000-0000-0000-0000-000000000001', '21100000-0000-0000-0000-000000000003'), -- Rajesh  → A-W1-F2-201
     ('31100000-0000-0000-0000-000000000002', '21100000-0000-0000-0000-000000000001'), -- Meera   → A-W1-F1-101 (parents')
     ('31100000-0000-0000-0000-000000000002', '21100000-0000-0000-0000-000000000003'), -- Meera   → A-W1-F2-201 (own, co-owned)
@@ -255,7 +255,7 @@ INSERT INTO user_apartments (user_id, apartment_id) VALUES
 -- ---------------------------------------------------------------------------
 -- ADMIN_ACTIONS  (historical audit log — some past approvals)
 -- ---------------------------------------------------------------------------
-INSERT INTO admin_actions (id, admin_id, admin_name, target_user_id, target_user_name,
+INSERT INTO user_svc.admin_actions (id, admin_id, admin_name, target_user_id, target_user_name,
                             target_user_email, action, role, performed_at) VALUES
     ('aa100000-0000-0000-0000-000000000001',
      '31100000-0000-0000-0000-000000000001', 'Rajesh Iyer',
@@ -315,7 +315,7 @@ INSERT INTO admin_actions (id, admin_id, admin_name, target_user_id, target_user
 -- ---------------------------------------------------------------------------
 -- EVENT CATEGORY
 -- ---------------------------------------------------------------------------
-INSERT INTO event_category (id, society_id, name, icon, color_hex) VALUES
+INSERT INTO event_svc.event_category (id, society_id, name, icon, color_hex) VALUES
     ('41100000-0000-0000-0000-000000000001', '11100000-0000-0000-0000-000000000001', 'Festival',   'sparkles', '#F59E0B'),
     ('41100000-0000-0000-0000-000000000002', '11100000-0000-0000-0000-000000000001', 'Sports',     'trophy',   '#10B981'),
     ('41100000-0000-0000-0000-000000000003', '11100000-0000-0000-0000-000000000001', 'Wellness',   'heart',    '#8B5CF6'),
@@ -325,7 +325,7 @@ INSERT INTO event_category (id, society_id, name, icon, color_hex) VALUES
 -- ---------------------------------------------------------------------------
 -- EVENTS
 -- ---------------------------------------------------------------------------
-INSERT INTO event (id, society_id, category_id, organizer_id, title, description,
+INSERT INTO event_svc.event (id, society_id, category_id, organizer_id, title, description,
                    start_time, end_time, venue, capacity, status,
                    ticket_price, price_currency, is_free) VALUES
 
@@ -377,7 +377,7 @@ INSERT INTO event (id, society_id, category_id, organizer_id, title, description
 -- ---------------------------------------------------------------------------
 -- REGISTRATION
 -- ---------------------------------------------------------------------------
-INSERT INTO registration (id, event_id, user_id, ticket_count, total_amount,
+INSERT INTO registration_svc.registration (id, event_id, user_id, ticket_count, total_amount,
                            display_currency, status, qr_code) VALUES
 
     -- Diwali (free)
@@ -438,7 +438,7 @@ INSERT INTO registration (id, event_id, user_id, ticket_count, total_amount,
 -- ---------------------------------------------------------------------------
 -- PAYMENT
 -- ---------------------------------------------------------------------------
-INSERT INTO payment (id, registration_id, gateway_name,
+INSERT INTO registration_svc.payment (id, registration_id, gateway_name,
                      gateway_order_id, gateway_txn_id,
                      original_amount, original_currency,
                      settled_amount, settled_currency,
@@ -485,7 +485,7 @@ INSERT INTO payment (id, registration_id, gateway_name,
 -- ---------------------------------------------------------------------------
 -- REFUND  (Priya: partial ₹100 for carnival)
 -- ---------------------------------------------------------------------------
-INSERT INTO refund (id, payment_id, initiated_by,
+INSERT INTO registration_svc.refund (id, payment_id, initiated_by,
                     original_refund_amount, original_currency,
                     settled_refund_amount, settled_currency,
                     reason, status, gateway_refund_id) VALUES
@@ -499,7 +499,7 @@ INSERT INTO refund (id, payment_id, initiated_by,
 -- ---------------------------------------------------------------------------
 -- ANNOUNCEMENT
 -- ---------------------------------------------------------------------------
-INSERT INTO announcement (id, event_id, author_id, title, body, sent_at) VALUES
+INSERT INTO event_svc.announcement (id, event_id, author_id, title, body, sent_at) VALUES
     ('a1100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
      '31100000-0000-0000-0000-000000000002',
@@ -585,7 +585,7 @@ INSERT INTO notification (id, user_id, event_id, type, title, message, is_read) 
 -- ---------------------------------------------------------------------------
 -- SPONSOR
 -- ---------------------------------------------------------------------------
-INSERT INTO sponsor (id, user_id, organization_name, organization_type,
+INSERT INTO payment_svc.sponsor (id, user_id, organization_name, organization_type,
                      contact_name, contact_email, contact_phone) VALUES
     ('c1100000-0000-0000-0000-000000000001',
      '31100000-0000-0000-0000-000000000007',
@@ -599,7 +599,7 @@ INSERT INTO sponsor (id, user_id, organization_name, organization_type,
 -- ---------------------------------------------------------------------------
 -- EVENT_SPONSORSHIP
 -- ---------------------------------------------------------------------------
-INSERT INTO event_sponsorship (id, event_id, sponsor_id, amount, currency_code,
+INSERT INTO payment_svc.event_sponsorship (id, event_id, sponsor_id, amount, currency_code,
                                 status, payment_reference, notes) VALUES
     ('d1100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -622,7 +622,7 @@ INSERT INTO event_sponsorship (id, event_id, sponsor_id, amount, currency_code,
 -- ---------------------------------------------------------------------------
 -- SPONSORSHIP_REFUND
 -- ---------------------------------------------------------------------------
-INSERT INTO sponsorship_refund (id, sponsorship_id, requested_by, amount,
+INSERT INTO payment_svc.sponsorship_refund (id, sponsorship_id, requested_by, amount,
                                  currency_code, reason, status) VALUES
     ('e1100000-0000-0000-0000-000000000001',
      'd1100000-0000-0000-0000-000000000003',
@@ -634,7 +634,7 @@ INSERT INTO sponsorship_refund (id, sponsorship_id, requested_by, amount,
 -- ---------------------------------------------------------------------------
 -- EVENT_EXPENSE
 -- ---------------------------------------------------------------------------
-INSERT INTO event_expense (id, event_id, description, amount, currency_code,
+INSERT INTO payment_svc.event_expense (id, event_id, description, amount, currency_code,
                             category, created_by) VALUES
     ('f1100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -669,7 +669,7 @@ INSERT INTO event_expense (id, event_id, description, amount, currency_code,
 -- ---------------------------------------------------------------------------
 -- COMPLIMENTARY_TICKET
 -- ---------------------------------------------------------------------------
-INSERT INTO complimentary_ticket (id, event_id, invited_by_user_id, inviter_type,
+INSERT INTO registration_svc.complimentary_ticket (id, event_id, invited_by_user_id, inviter_type,
                                    ticket_count, notes, created_by) VALUES
     ('0c100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -704,7 +704,7 @@ INSERT INTO complimentary_ticket (id, event_id, invited_by_user_id, inviter_type
 -- ---------------------------------------------------------------------------
 -- VENDOR
 -- ---------------------------------------------------------------------------
-INSERT INTO vendor (id, society_id, name, category,
+INSERT INTO payment_svc.vendor (id, society_id, name, category,
                     contact_name, contact_email, contact_phone) VALUES
     ('0d100000-0000-0000-0000-000000000001',
      '11100000-0000-0000-0000-000000000001',
@@ -722,7 +722,7 @@ INSERT INTO vendor (id, society_id, name, category,
 -- ---------------------------------------------------------------------------
 -- EVENT_VENDOR
 -- ---------------------------------------------------------------------------
-INSERT INTO event_vendor (id, event_id, vendor_id, stall_number, fee_type,
+INSERT INTO payment_svc.event_vendor (id, event_id, vendor_id, stall_number, fee_type,
                            fixed_fee, revenue_share_pct, actual_revenue, status, notes) VALUES
     ('0e100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -745,7 +745,7 @@ INSERT INTO event_vendor (id, event_id, vendor_id, stall_number, fee_type,
 -- ---------------------------------------------------------------------------
 -- VENDOR_REVENUE_DISTRIBUTION
 -- ---------------------------------------------------------------------------
-INSERT INTO vendor_revenue_distribution (id, event_id, total_pool, currency_code,
+INSERT INTO payment_svc.vendor_revenue_distribution (id, event_id, total_pool, currency_code,
                                           status, notes) VALUES
     ('0f100000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -755,7 +755,7 @@ INSERT INTO vendor_revenue_distribution (id, event_id, total_pool, currency_code
 -- ---------------------------------------------------------------------------
 -- DISTRIBUTION_ENTRY
 -- ---------------------------------------------------------------------------
-INSERT INTO distribution_entry (id, distribution_id, recipient_type,
+INSERT INTO payment_svc.distribution_entry (id, distribution_id, recipient_type,
                                   recipient_user_id, recipient_sponsor_id,
                                   share_percentage, amount, status) VALUES
     ('0f200000-0000-0000-0000-000000000001',
@@ -781,7 +781,7 @@ INSERT INTO distribution_entry (id, distribution_id, recipient_type,
 -- ---------------------------------------------------------------------------
 -- TICKET_TYPE
 -- ---------------------------------------------------------------------------
-INSERT INTO ticket_type (id, event_id, name, description, price, is_free,
+INSERT INTO event_svc.ticket_type (id, event_id, name, description, price, is_free,
                           capacity, sort_order) VALUES
     ('0f300000-0000-0000-0000-000000000001',
      '51100000-0000-0000-0000-000000000001',
@@ -812,7 +812,7 @@ INSERT INTO ticket_type (id, event_id, name, description, price, is_free,
 -- ---------------------------------------------------------------------------
 -- REGISTRATION_ITEM
 -- ---------------------------------------------------------------------------
-INSERT INTO registration_item (id, registration_id, ticket_type_id, quantity, unit_price) VALUES
+INSERT INTO registration_svc.registration_item (id, registration_id, ticket_type_id, quantity, unit_price) VALUES
     ('0f400000-0000-0000-0000-000000000001',
      '61100000-0000-0000-0000-000000000004',
      '0f300000-0000-0000-0000-000000000004',

@@ -1,17 +1,15 @@
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import wait_for_db, close_pool, get_pool
 from app.routes import cart, complimentary, registrations
 from app.middleware.splunk import SplunkLoggingMiddleware
-from app.swagger_theme import themed_swagger_ui_html
+from shared.swagger_theme import themed_swagger_ui_html
 
 _OPENAPI_URL     = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
@@ -19,7 +17,6 @@ _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs(os.path.join(settings.uploads_dir, "payment-screenshots"), exist_ok=True)
     await wait_for_db()
     yield
     await close_pool()
@@ -82,10 +79,6 @@ app.add_middleware(SplunkLoggingMiddleware)
 app.include_router(cart.router,          prefix="/registrations", tags=["cart"])
 app.include_router(registrations.router, prefix="/registrations", tags=["registrations"])
 app.include_router(complimentary.router, prefix="/complimentary", tags=["complimentary"])
-
-_uploads_dir = settings.uploads_dir
-os.makedirs(_uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 
 @app.get("/payment-config", tags=["ops"],

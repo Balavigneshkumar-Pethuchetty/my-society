@@ -16,6 +16,8 @@ from app import reconciliation_client
 from app.auth import require_role
 from app.config import settings
 from app.database import get_pool
+from app.event_client import get_event
+from shared.user_client import get_by_id, get_by_role, get_by_sub
 
 router = APIRouter()
 
@@ -64,17 +66,22 @@ async def seed_transaction(
         raise HTTPException(status_code=500, detail=f"Test screenshot not found at {_TEST_SCREENSHOT}")
 
     sub = claims.get("sub", "")
+    caller = await get_by_sub(sub)
+    if not caller:
+        raise HTTPException(status_code=404, detail="Calling user not found")
+    user_id = caller["id"]
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await conn.fetchval("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-        if not user_id:
-            raise HTTPException(status_code=404, detail="Calling user not found")
-
         if body.event_id:
-            event = await conn.fetchrow("SELECT id::text, title FROM event WHERE id = $1::uuid", body.event_id)
+            event = await get_event(body.event_id)
             if not event:
                 raise HTTPException(status_code=404, detail="event_id not found")
         else:
+            # No batch/most-recent lookup on the internal API — this whole router is
+            # gated behind PAYMENT_SERVICE_ENV=testing (never mounted in production, see
+            # app/main.py), so a direct read against event_svc here is acceptable as
+            # long as the operator has granted this role read access for local testing
+            # (see DB_ISOLATION_PLAN.md's rollback-window note).
             event = await conn.fetchrow("SELECT id::text, title FROM event ORDER BY created_at DESC LIMIT 1")
             if not event:
                 raise HTTPException(status_code=400, detail="No events exist to attach the test transaction to")
@@ -158,17 +165,24 @@ async def seed_registration(
     body: SeedRegistrationBody,
     claims: dict = Depends(require_role("admin")),
 ):
+    caller = await get_by_sub(claims.get("sub", ""))
+    if not caller:
+        raise HTTPException(status_code=404, detail="Calling user not found")
+    caller_id = caller["id"]
+
+    target_user_id = body.user_id or caller_id
+    target_user = await get_by_id(target_user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="user_id not found")
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        caller_id = await conn.fetchval("SELECT id::text FROM users WHERE keycloak_sub = $1", claims.get("sub", ""))
-        if not caller_id:
-            raise HTTPException(status_code=404, detail="Calling user not found")
-
-        target_user_id = body.user_id or caller_id
-        target_user = await conn.fetchrow("SELECT id::text, name FROM users WHERE id = $1::uuid", target_user_id)
-        if not target_user:
-            raise HTTPException(status_code=404, detail="user_id not found")
-
+        # Direct reads/writes against event_svc here (rather than the internal API)
+        # are test-tooling only — this whole router is gated behind
+        # PAYMENT_SERVICE_ENV=testing (never mounted in production, see app/main.py) —
+        # and require the operator to have granted this role access to event_svc for
+        # local testing (see DB_ISOLATION_PLAN.md's rollback-window note). Not worth a
+        # dedicated internal write endpoint just for seeding test data.
         event = await conn.fetchrow("SELECT id::text, title FROM event WHERE title = $1", _TEST_EVENT_TITLE)
         if not event:
             event = await conn.fetchrow(
@@ -186,10 +200,8 @@ async def seed_registration(
                 settings.society_id, caller_id, _TEST_EVENT_TITLE, _TEST_AMOUNT,
             )
 
-        collector = await conn.fetchrow(
-            "SELECT id::text FROM users WHERE role = 'committee_member' LIMIT 1"
-        )
-        collector_id = collector["id"] if collector else caller_id
+        committee_members = await get_by_role("committee_member")
+        collector_id = committee_members[0]["id"] if committee_members else caller_id
 
         await conn.execute(
             """

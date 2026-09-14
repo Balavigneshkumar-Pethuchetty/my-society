@@ -14,10 +14,12 @@ from app.auth import get_current_claims, require_role
 from app.config import settings
 from app.crypto import make_action_token
 from app.database import get_pool
+from app.event_client import get_event, get_events, get_ticket_types
 from app.models import InitiateBody, TransactionOut, VerifyBody
 from app.notifications import notify_payment_verdict, resolve_and_record, send_channels
 from app.splunk_logger import log_app_error
 from app.uploads import save_screenshot
+from shared.user_client import get_by_id, get_by_ids, get_by_sub
 
 
 class ApproveBody(BaseModel):
@@ -57,13 +59,31 @@ _TXN_QUERY = """
            pt.screenshot_path, pt.refund_screenshot_path,
            pt.parsed_amount, pt.parsed_upi_ref, pt.parsed_rrn,
            pt.parsed_bank, pt.parsed_timestamp,
-           pt.created_at, pt.updated_at,
-           e.title AS event_title,
-           u.keycloak_sub, u.name AS user_name, u.email AS user_email
+           pt.created_at, pt.updated_at
     FROM payment_transaction pt
-    JOIN event e ON e.id = pt.event_id
-    JOIN users u ON u.id = pt.user_id
 """
+
+
+async def _hydrate_txns(rows) -> list[dict]:
+    """event and users both now live behind their owning service's internal API
+    (see DB_ISOLATION_PLAN.md) — merge in event_title/user fields via batch
+    calls instead of a JOIN."""
+    events = await get_events(r["event_id"] for r in rows)
+    users = await get_by_ids(r["user_id"] for r in rows)
+    hydrated = []
+    for r in rows:
+        d = dict(r)
+        u = users.get(d["user_id"], {})
+        d["event_title"] = events.get(d["event_id"], {}).get("title")
+        d["user_name"] = u.get("name")
+        d["user_email"] = u.get("email")
+        d["keycloak_sub"] = u.get("keycloak_sub")
+        hydrated.append(d)
+    return hydrated
+
+
+async def _hydrate_txn(row) -> dict:
+    return (await _hydrate_txns([row]))[0]
 
 
 def _build_out(row) -> TransactionOut:
@@ -99,13 +119,10 @@ async def initiate(
     claims: dict = Depends(get_current_claims),
 ):
     sub = claims.get("sub", "")
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        user_id = await conn.fetchval(
-            "SELECT id::text FROM users WHERE keycloak_sub = $1", sub
-        )
-    if not user_id:
+    caller = await get_by_sub(sub)
+    if not caller:
         raise HTTPException(status_code=404, detail="User not found")
+    user_id = caller["id"]
 
     idempotency_key = f"{user_id}:{body.event_id}:{body.registration_id or 'none'}"
     processor = get_processor()
@@ -139,12 +156,13 @@ async def upload_payment_screenshot(
     claims: dict = Depends(get_current_claims),
 ):
     sub = claims.get("sub", "")
+    caller = await get_by_sub(sub)
+    if not caller:
+        raise HTTPException(status_code=404, detail="User not found")
+    user_id = caller["id"]
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await conn.fetchval("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-        if not user_id:
-            raise HTTPException(status_code=404, detail="User not found")
-
         row = await conn.fetchrow(
             "SELECT id::text, user_id::text, event_id::text, status, registration_id::text "
             "FROM payment_transaction WHERE txn_ref = $1",
@@ -170,7 +188,7 @@ async def upload_payment_screenshot(
 
         out_row = await conn.fetchrow(_TXN_QUERY + " WHERE pt.txn_ref = $1", txn_ref)
 
-    return _build_out(out_row)
+    return _build_out(await _hydrate_txn(out_row))
 
 
 async def _parse_screenshot_fields(content: bytes, filename: str, content_type: str) -> dict:
@@ -210,12 +228,13 @@ async def confirm_payment_details(
     claims: dict = Depends(get_current_claims),
 ):
     sub = claims.get("sub", "")
+    caller = await get_by_sub(sub)
+    if not caller:
+        raise HTTPException(status_code=404, detail="User not found")
+    user_id = caller["id"]
+
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await conn.fetchval("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-        if not user_id:
-            raise HTTPException(status_code=404, detail="User not found")
-
         row = await conn.fetchrow(
             "SELECT id::text, user_id::text, event_id::text, registration_id::text, status, screenshot_path "
             "FROM payment_transaction WHERE txn_ref = $1",
@@ -236,29 +255,37 @@ async def confirm_payment_details(
             body.amount, body.reference_number, body.transaction_datetime, txn_ref,
         )
 
+        # users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md) —
+        # unit_label is already computed server-side there, so one get_by_id call
+        # replaces the JOIN + user_units/user_apartments subqueries.
         detail = await conn.fetchrow(
-            """SELECT u.name AS user_name, u.phone AS user_phone, u.email AS user_email,
-                      COALESCE(
-                          (SELECT sn.name FROM user_units uu JOIN structure_nodes sn ON sn.id = uu.node_id
-                           WHERE uu.user_id = u.id LIMIT 1),
-                          (SELECT a.block || ' – ' || a.unit_number FROM user_apartments ua
-                           JOIN apartment a ON a.id = ua.apartment_id WHERE ua.user_id = u.id LIMIT 1)
-                      ) AS unit_label,
-                      e.title AS event_title,
-                      pt.amount, pt.currency, pt.parsed_upi_ref, pt.parsed_rrn,
+            """SELECT pt.amount, pt.currency, pt.parsed_upi_ref, pt.parsed_rrn,
                       pt.parsed_bank, pt.parsed_timestamp, pt.screenshot_path
                FROM payment_transaction pt
-               JOIN users u ON u.id = pt.user_id
-               JOIN event e ON e.id = pt.event_id
                WHERE pt.txn_ref = $1""",
             txn_ref,
         )
-        items = await conn.fetch(
-            """SELECT tt.name, ri.quantity, ri.unit_price FROM registration_item ri
-               JOIN ticket_type tt ON tt.id = ri.ticket_type_id
-               WHERE ri.registration_id = $1::uuid""",
+        detail = dict(detail)
+        resident = await get_by_id(user_id) or {}
+        detail["user_name"] = resident.get("name")
+        detail["user_phone"] = resident.get("phone")
+        detail["user_email"] = resident.get("email")
+        detail["unit_label"] = resident.get("unit_label")
+        event = await get_event(row["event_id"])
+        item_rows = await conn.fetch(
+            "SELECT ticket_type_id::text, quantity, unit_price FROM registration_svc.registration_item "
+            "WHERE registration_id = $1::uuid",
             row["registration_id"],
         ) if row["registration_id"] else []
+        ticket_types = await get_ticket_types(r["ticket_type_id"] for r in item_rows)
+        items = [
+            {
+                "name": ticket_types.get(r["ticket_type_id"], {}).get("name", "Ticket"),
+                "quantity": r["quantity"],
+                "unit_price": r["unit_price"],
+            }
+            for r in item_rows
+        ]
 
         ticket_lines = "\n".join(
             f"  • {it['name']} × {it['quantity']} @ {detail['currency']} {float(it['unit_price']):.2f}"
@@ -270,7 +297,7 @@ async def confirm_payment_details(
         )
 
         message_body = (
-            f"A resident submitted a payment screenshot for \"{detail['event_title'] or 'an event'}\" — please review.\n\n"
+            f"A resident submitted a payment screenshot for \"{event['title'] if event else 'an event'}\" — please review.\n\n"
             f"Resident: {detail['user_name']}\n"
             f"Unit: {detail['unit_label'] or 'N/A'}\n"
             f"Phone: {detail['user_phone'] or 'N/A'}\n"
@@ -285,11 +312,11 @@ async def confirm_payment_details(
             f"  Screenshot: {screenshot_url}"
         )
         recipients = await resolve_and_record(
-            conn, row["event_id"], user_id, "payment_verification_requested",
+            row["event_id"], user_id, "payment_verification_requested",
             "Payment verification requested", message_body, related_id=row["id"],
         )
 
-        out_row = await conn.fetchrow(_TXN_QUERY + " WHERE pt.txn_ref = $1", txn_ref)
+        out_row = await _hydrate_txn(await conn.fetchrow(_TXN_QUERY + " WHERE pt.txn_ref = $1", txn_ref))
 
         for r in recipients:
             token = make_action_token({"txn_ref": txn_ref, "recipient_id": r.get("id")})
@@ -732,16 +759,16 @@ async def list_my_transactions(
     claims: dict = Depends(get_current_claims),
 ):
     sub = claims.get("sub", "")
+    caller = await get_by_sub(sub)
+    if not caller:
+        raise HTTPException(status_code=404, detail="User not found")
     pool = await get_pool()
     async with pool.acquire() as conn:
-        user_id = await conn.fetchval("SELECT id::text FROM users WHERE keycloak_sub = $1", sub)
-        if not user_id:
-            raise HTTPException(status_code=404, detail="User not found")
         rows = await conn.fetch(
             _TXN_QUERY + " WHERE pt.user_id = $1::uuid ORDER BY pt.created_at DESC",
-            user_id,
+            caller["id"],
         )
-    return [_build_out(r) for r in rows]
+    return [_build_out(r) for r in await _hydrate_txns(rows)]
 
 
 # ── GET /payments/{txn_ref} ───────────────────────────────────────────────────
@@ -761,9 +788,10 @@ async def get_transaction(
         row = await conn.fetchrow(_TXN_QUERY + " WHERE pt.txn_ref = $1", txn_ref)
     if not row:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    if not is_privileged and row["keycloak_sub"] != sub:
+    hydrated = await _hydrate_txn(row)
+    if not is_privileged and hydrated.get("keycloak_sub") != sub:
         raise HTTPException(status_code=403, detail="Not your transaction")
-    return _build_out(row)
+    return _build_out(hydrated)
 
 
 # ── GET /payments ─────────────────────────────────────────────────────────────
@@ -782,7 +810,7 @@ async def list_transactions(
         await conn.execute("""
             UPDATE payment_transaction pt
             SET status = 'verified', payment_utr = 'APPROVED-VIA-LEGACY', updated_at = now()
-            FROM registration r
+            FROM registration_svc.registration r
             WHERE pt.registration_id = r.id
               AND pt.status = 'pending'
               AND r.status = 'confirmed'
@@ -800,7 +828,7 @@ async def list_transactions(
         rows = await conn.fetch(
             _TXN_QUERY + where + " ORDER BY pt.created_at DESC", *params
         )
-    return [_build_out(r) for r in rows]
+    return [_build_out(r) for r in await _hydrate_txns(rows)]
 
 
 # ── POST /payments/{txn_ref}/verify ──────────────────────────────────────────
@@ -859,7 +887,7 @@ async def apply_payment_verdict(conn, txn_ref: str, verdict: str, actor: str, no
     )
     if verdict == "approve" and row["registration_id"]:
         await conn.execute(
-            "UPDATE registration SET status='confirmed' WHERE id=$1::uuid",
+            "UPDATE registration_svc.registration SET status='confirmed' WHERE id=$1::uuid",
             row["registration_id"],
         )
     return {"ok": True, "status": to_status, "already": False}

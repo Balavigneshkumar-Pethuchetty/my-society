@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 from app.adapters.base import PaymentProcessor
 from app.database import get_pool
+from app.event_client import get_event
+from shared.user_client import get_by_id
 
 
 class ManualUpiAdapter(PaymentProcessor):
@@ -23,11 +25,8 @@ class ManualUpiAdapter(PaymentProcessor):
         async with pool.acquire() as conn:
             # Resolve collector from committee_registry
             collector = await conn.fetchrow(
-                """SELECT cr.upi_id, u.name AS member_name,
-                          e.title, e.ticket_price, e.price_currency
+                """SELECT cr.upi_id, cr.member_id::text
                    FROM committee_registry cr
-                   JOIN users u  ON u.id  = cr.member_id
-                   JOIN event e  ON e.id  = cr.event_id
                    WHERE cr.event_id = $1::uuid""",
                 event_id,
             )
@@ -36,21 +35,23 @@ class ManualUpiAdapter(PaymentProcessor):
                     status_code=400,
                     detail="No collector assigned for this event. Contact an admin.",
                 )
+            event = await get_event(event_id)
+            member = await get_by_id(collector["member_id"])
 
             # If registration supplied, use its total_amount
             if registration_id:
                 reg = await conn.fetchrow(
-                    "SELECT total_amount FROM registration WHERE id = $1::uuid",
+                    "SELECT total_amount FROM registration_svc.registration WHERE id = $1::uuid",
                     registration_id,
                 )
-                amount = float(reg["total_amount"]) if reg else float(collector["ticket_price"] or 0)
+                amount = float(reg["total_amount"]) if reg else float(event["ticket_price"] or 0)
             else:
-                amount = float(collector["ticket_price"] or 0)
+                amount = float(event["ticket_price"] or 0)
 
             payee_upi  = collector["upi_id"]
-            upi_name   = collector["member_name"]
-            event_title = collector["title"]
-            currency   = collector.get("price_currency", "INR")
+            upi_name   = (member or {}).get("name")
+            event_title = event["title"]
+            currency   = event.get("price_currency", "INR")
 
             # Idempotency: return existing pending txn if key matches (skip cancelled)
             existing = await conn.fetchrow(
@@ -139,7 +140,7 @@ class ManualUpiAdapter(PaymentProcessor):
             )
             if row["registration_id"]:
                 await conn.execute(
-                    "UPDATE registration SET status='confirmed' WHERE id=$1::uuid",
+                    "UPDATE registration_svc.registration SET status='confirmed' WHERE id=$1::uuid",
                     row["registration_id"],
                 )
         return {"status": "verified", "utr": utr}

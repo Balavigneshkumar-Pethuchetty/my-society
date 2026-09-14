@@ -17,8 +17,15 @@ class Settings(BaseSettings):
     # App's public URL — used to build a deep link into notification messages.
     app_public_url: str = "http://localhost:8080"
 
+    user_service_internal_url: str = "http://user-service:3001/internal/users"
+
     splunk_hec_url: str = "http://splunk:8088/services/collector/event"
     splunk_hec_token: str = ""
+
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_password: str = ""
+    cache_ttl_seconds: int = 300
 
     # auth-service (~/auth-service) — shared SMS/Telegram transport, same
     # contract as registration-service's organizer notifications.

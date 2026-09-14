@@ -25,7 +25,9 @@ import httpx
 
 from app.config import settings
 from app.email import send_notification_emails_sequential
+from app.event_client import get_event, get_managers
 from app.splunk_logger import log_app_error
+from shared.user_client import get_by_id, get_by_ids, get_by_sub, post_notification
 
 
 def _mask_phone(phone: str) -> str:
@@ -33,27 +35,22 @@ def _mask_phone(phone: str) -> str:
 
 
 async def resolve_and_record(
-    conn, event_id: str, actor_user_id: str, type_: str, title: str, message: str, related_id: str | None = None,
+    event_id: str, actor_user_id: str, type_: str, title: str, message: str, related_id: str | None = None,
 ) -> list[dict]:
-    rows = await conn.fetch(
-        "SELECT u.id, u.phone, u.email, u.notify_sms, u.notify_email, u.notify_telegram FROM users u "
-        "WHERE (u.id = (SELECT organizer_id FROM event WHERE id = $1::uuid) "
-        "   OR u.id IN (SELECT user_id FROM event_permission WHERE event_id = $1::uuid AND revoked_at IS NULL)) "
-        "  AND u.id != $2::uuid",
-        event_id, actor_user_id,
-    )
-    for r in rows:
-        await conn.execute(
-            "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
-            "VALUES ($1, $2::uuid, $3, $4, $5, $6)",
-            r["id"], event_id, type_, title, message, related_id,
-        )
+    managers = await get_managers(event_id)
+    manager_ids = list({managers["organizer_id"], *managers["manager_user_ids"]} - {actor_user_id})
+    if not manager_ids:
+        return []
+    users = await get_by_ids(manager_ids)
+    for user_id in users:
+        await post_notification(user_id, type_, title, message, related_id=related_id, event_id=event_id)
     return [
         {
-            "id": str(r["id"]), "phone": r["phone"], "email": r["email"], "title": title,
-            "notify_sms": r["notify_sms"], "notify_email": r["notify_email"], "notify_telegram": r["notify_telegram"],
+            "id": u["id"], "phone": u.get("phone"), "email": u.get("email"), "title": title,
+            "notify_sms": u.get("notify_sms", True), "notify_email": u.get("notify_email", True),
+            "notify_telegram": u.get("notify_telegram", True),
         }
-        for r in rows
+        for u in users.values()
     ]
 
 
@@ -63,23 +60,22 @@ async def notify_refund_processed(
     row = await conn.fetchrow(
         "SELECT pt.id::text AS txn_id, pt.user_id::text AS user_id, pt.event_id::text AS event_id, "
         "       pt.registration_id::text AS registration_id, "
-        "       pt.amount, pt.currency, e.title AS event_title, u.phone, u.email, "
-        "       u.notify_sms, u.notify_email, u.notify_telegram, "
-        "       (SELECT name FROM users WHERE keycloak_sub = $2) AS actor_name "
+        "       pt.amount, pt.currency "
         "FROM payment_transaction pt "
-        "JOIN event e ON e.id = pt.event_id "
-        "JOIN users u ON u.id = pt.user_id "
         "WHERE pt.txn_ref = $1",
-        txn_ref, actor_sub,
+        txn_ref,
     )
     if not row:
         return None, None
+    event = await get_event(row["event_id"])
+    recipient = await get_by_id(row["user_id"]) or {}
+    actor = await get_by_sub(actor_sub)
 
-    actor_name = row["actor_name"] or "the event organizer"
+    actor_name = (actor or {}).get("name") or "the event organizer"
     link = f"{settings.app_public_url}/payments?txn_ref={txn_ref}"
     message = (
         f"Your refund of {row['currency']} {float(row['amount']):.2f} for "
-        f"\"{row['event_title']}\" has been processed by {actor_name}. Details: {link}"
+        f"\"{event['title']}\" has been processed by {actor_name}. Details: {link}"
     )
     await conn.execute(
         "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
@@ -99,8 +95,9 @@ async def notify_refund_processed(
             row["registration_id"],
         )
     return [{
-        "phone": row["phone"], "email": row["email"], "title": "Refund processed",
-        "notify_sms": row["notify_sms"], "notify_email": row["notify_email"], "notify_telegram": row["notify_telegram"],
+        "phone": recipient.get("phone"), "email": recipient.get("email"), "title": "Refund processed",
+        "notify_sms": recipient.get("notify_sms", True), "notify_email": recipient.get("notify_email", True),
+        "notify_telegram": recipient.get("notify_telegram", True),
     }], message
 
 
@@ -113,23 +110,22 @@ async def notify_payment_verdict(
     row = await conn.fetchrow(
         "SELECT pt.id::text AS txn_id, pt.user_id::text AS user_id, pt.event_id::text AS event_id, "
         "       pt.registration_id::text AS registration_id, "
-        "       pt.amount, pt.currency, e.title AS event_title, u.phone, u.email, "
-        "       u.notify_sms, u.notify_email, u.notify_telegram "
+        "       pt.amount, pt.currency "
         "FROM payment_transaction pt "
-        "JOIN event e ON e.id = pt.event_id "
-        "JOIN users u ON u.id = pt.user_id "
         "WHERE pt.txn_ref = $1",
         txn_ref,
     )
     if not row:
         return None, None
+    event = await get_event(row["event_id"])
+    recipient = await get_by_id(row["user_id"]) or {}
 
     amount_str = f"{row['currency']} {float(row['amount']):.2f}"
     if verdict == "verified":
         type_, title = "payment_success", "Payment verified"
         link = f"{settings.app_public_url}/payments?txn_ref={txn_ref}"
         message = (
-            f"Your payment of {amount_str} for \"{row['event_title']}\" has been "
+            f"Your payment of {amount_str} for \"{event['title']}\" has been "
             f"verified. Your registration is confirmed. Details: {link}"
         )
     else:
@@ -139,7 +135,7 @@ async def notify_payment_verdict(
             if row["registration_id"] else f"{settings.app_public_url}/payments?txn_ref={txn_ref}"
         )
         message = (
-            f"Your payment of {amount_str} for \"{row['event_title']}\" could not be "
+            f"Your payment of {amount_str} for \"{event['title']}\" could not be "
             f"verified against the bank statement. Please re-upload your payment "
             f"screenshot to try again: {link}"
         )
@@ -159,8 +155,9 @@ async def notify_payment_verdict(
         row["txn_id"],
     )
     return [{
-        "phone": row["phone"], "email": row["email"], "title": title,
-        "notify_sms": row["notify_sms"], "notify_email": row["notify_email"], "notify_telegram": row["notify_telegram"],
+        "phone": recipient.get("phone"), "email": recipient.get("email"), "title": title,
+        "notify_sms": recipient.get("notify_sms", True), "notify_email": recipient.get("notify_email", True),
+        "notify_telegram": recipient.get("notify_telegram", True),
     }], message
 
 

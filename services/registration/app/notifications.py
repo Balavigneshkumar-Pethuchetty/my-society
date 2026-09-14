@@ -5,13 +5,13 @@ that cancellation triggers a refund request. See ~/auth-service's
 /api/sms/send and /api/telegram/send for the SMS/Telegram delivery
 transport; email is sent directly via app.email's Gmail SMTP.
 
-Split in two so the outbound HTTP/SMTP fan-out never happens while a pooled
-DB connection is held open (max_size — see database.py):
-  - resolve_and_record() runs inside the caller's existing
-    `async with pool.acquire() as conn:` block.
-  - send_channels() runs after that block exits, via BackgroundTasks, since
-    auth-service's SMS failover chain (and SMTP) can take several seconds
-    worst case and must not sit on the resident's request/response cycle.
+resolve_and_record() no longer needs a DB connection — user lookup and the
+in-app notification write both go through user-service's internal API now
+(see DB_ISOLATION_PLAN.md) — but send_channels() is still split out and run
+via BackgroundTasks after the caller's own `async with pool.acquire() as conn:`
+block exits, since auth-service's SMS failover chain (and SMTP) can take
+several seconds worst case and must not sit on the resident's request/response
+cycle.
 """
 import asyncio
 
@@ -19,7 +19,9 @@ import httpx
 
 from app.config import settings
 from app.email import send_notification_emails_sequential
+from app.event_client import get_managers
 from app.splunk_logger import log_app_error
+from shared.user_client import get_by_ids, post_notification
 
 
 def _mask_phone(phone: str) -> str:
@@ -27,27 +29,22 @@ def _mask_phone(phone: str) -> str:
 
 
 async def resolve_and_record(
-    conn, event_id: str, actor_user_id: str, type_: str, title: str, message: str, related_id: str | None = None,
+    event_id: str, actor_user_id: str, type_: str, title: str, message: str, related_id: str | None = None,
 ) -> list[dict]:
-    rows = await conn.fetch(
-        "SELECT u.id, u.phone, u.email, u.notify_sms, u.notify_email, u.notify_telegram FROM users u "
-        "WHERE (u.id = (SELECT organizer_id FROM event WHERE id = $1::uuid) "
-        "   OR u.id IN (SELECT user_id FROM event_permission WHERE event_id = $1::uuid AND revoked_at IS NULL)) "
-        "  AND u.id != $2::uuid",
-        event_id, actor_user_id,
-    )
-    for r in rows:
-        await conn.execute(
-            "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
-            "VALUES ($1, $2::uuid, $3, $4, $5, $6)",
-            r["id"], event_id, type_, title, message, related_id,
-        )
+    managers = await get_managers(event_id)
+    manager_ids = list({managers["organizer_id"], *managers["manager_user_ids"]} - {actor_user_id})
+    if not manager_ids:
+        return []
+    users = await get_by_ids(manager_ids)
+    for user_id in users:
+        await post_notification(user_id, type_, title, message, related_id=related_id, event_id=event_id)
     return [
         {
-            "id": str(r["id"]), "phone": r["phone"], "email": r["email"], "title": title,
-            "notify_sms": r["notify_sms"], "notify_email": r["notify_email"], "notify_telegram": r["notify_telegram"],
+            "id": u["id"], "phone": u.get("phone"), "email": u.get("email"), "title": title,
+            "notify_sms": u.get("notify_sms", True), "notify_email": u.get("notify_email", True),
+            "notify_telegram": u.get("notify_telegram", True),
         }
-        for r in rows
+        for u in users.values()
     ]
 
 

@@ -16,35 +16,44 @@ from fastapi.responses import HTMLResponse
 
 from app.crypto import read_action_token
 from app.database import get_pool
+from app.event_client import get_event, get_ticket_types
 from app.notifications import notify_payment_verdict, send_channels
 from app.routes.payments import apply_payment_verdict
+from shared.user_client import get_by_id
 
 router = APIRouter()
 
 _TOKEN_TTL_SECONDS = 7 * 24 * 3600  # quick-review links stay valid for a week
 
 _TXN_DETAIL_QUERY = """
-    SELECT pt.status, pt.amount, pt.currency, pt.registration_id::text AS registration_id,
-           pt.parsed_upi_ref, pt.parsed_bank, pt.parsed_timestamp, pt.screenshot_path,
-           e.title AS event_title,
-           u.name AS user_name, u.phone AS user_phone, u.email AS user_email,
-           COALESCE(
-               (SELECT sn.name FROM user_units uu JOIN structure_nodes sn ON sn.id = uu.node_id
-                WHERE uu.user_id = u.id LIMIT 1),
-               (SELECT a.block || ' – ' || a.unit_number FROM user_apartments ua
-                JOIN apartment a ON a.id = ua.apartment_id WHERE ua.user_id = u.id LIMIT 1)
-           ) AS unit_label
+    SELECT pt.event_id::text, pt.user_id::text, pt.status, pt.amount, pt.currency,
+           pt.registration_id::text AS registration_id,
+           pt.parsed_upi_ref, pt.parsed_bank, pt.parsed_timestamp, pt.screenshot_path
     FROM payment_transaction pt
-    JOIN event e ON e.id = pt.event_id
-    JOIN users u ON u.id = pt.user_id
     WHERE pt.txn_ref = $1
 """
 
 _ITEMS_QUERY = """
-    SELECT tt.name, ri.quantity, ri.unit_price FROM registration_item ri
-    JOIN ticket_type tt ON tt.id = ri.ticket_type_id
-    WHERE ri.registration_id = $1::uuid
+    SELECT ticket_type_id::text, quantity, unit_price FROM registration_svc.registration_item
+    WHERE registration_id = $1::uuid
 """
+
+
+async def _resolve_items(conn, registration_id) -> list[dict]:
+    """ticket_type now lives in event-service's own schema (see
+    DB_ISOLATION_PLAN.md) — resolve names via the internal API instead of a JOIN."""
+    if not registration_id:
+        return []
+    item_rows = await conn.fetch(_ITEMS_QUERY, registration_id)
+    ticket_types = await get_ticket_types(r["ticket_type_id"] for r in item_rows)
+    return [
+        {
+            "name": ticket_types.get(r["ticket_type_id"], {}).get("name", "Ticket"),
+            "quantity": r["quantity"],
+            "unit_price": r["unit_price"],
+        }
+        for r in item_rows
+    ]
 
 
 def _page(title: str, body_html: str, status_code: int = 200) -> HTMLResponse:
@@ -120,10 +129,19 @@ async def quick_review_page(token: str, verdict: str = ""):
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(_TXN_DETAIL_QUERY, payload["txn_ref"])
-        items = await conn.fetch(_ITEMS_QUERY, row["registration_id"]) if row and row["registration_id"] else []
+        if row:
+            items = await _resolve_items(conn, row["registration_id"])
 
     if not row:
         return _page("Not found", "<p>This transaction no longer exists.</p>", status_code=404)
+    event = await get_event(row["event_id"])
+    user = await get_by_id(row["user_id"])
+    row = dict(row)
+    row["event_title"] = event["title"] if event else None
+    row["user_name"] = (user or {}).get("name")
+    row["user_phone"] = (user or {}).get("phone")
+    row["user_email"] = (user or {}).get("email")
+    row["unit_label"] = (user or {}).get("unit_label")
     if row["status"] != "pending":
         return _page(
             "Already reviewed",
@@ -143,13 +161,11 @@ async def quick_review_submit(token: str, verdict: str = Form(...), remark: str 
 
     txn_ref = payload["txn_ref"]
     remark = remark.strip()
+    reviewer = await get_by_id(payload["recipient_id"]) if payload.get("recipient_id") else None
+    reviewer_name = reviewer["name"] if reviewer else None
+    actor = f"{reviewer_name} (quick-review link)" if reviewer_name else "quick-review link"
     pool = await get_pool()
     async with pool.acquire() as conn:
-        reviewer_name = (
-            await conn.fetchval("SELECT name FROM users WHERE id = $1::uuid", payload["recipient_id"])
-            if payload.get("recipient_id") else None
-        )
-        actor = f"{reviewer_name} (quick-review link)" if reviewer_name else "quick-review link"
         note = remark or ("Approved via quick-review link" if verdict == "approve" else "Rejected via quick-review link")
 
         result = await apply_payment_verdict(conn, txn_ref, verdict, actor, note)

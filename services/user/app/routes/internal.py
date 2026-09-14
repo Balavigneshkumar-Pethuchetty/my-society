@@ -68,6 +68,78 @@ async def get_by_sub(
 
 
 @router.get(
+    "/by-ids",
+    response_model=list[UserResponse],
+    summary="Batch get users by a list of internal UUIDs",
+)
+async def get_by_ids(
+    ids: str,
+    pool=Depends(get_pool),
+):
+    """Registered ahead of GET /{user_id} — both are single path segments, and
+    FastAPI/Starlette resolve routes in registration order, so this must come
+    first or every /by-ids request would 422 trying to parse "by-ids" as a UUID."""
+    id_list = [i for i in ids.split(",") if i]
+    if not id_list:
+        return []
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT {_USER_COLS} FROM users u WHERE u.id = ANY($1::uuid[])",
+            id_list,
+        )
+        users = []
+        for row in rows:
+            user = _row_to_user(row, await _fetch_user_apartments(conn, row["id"]))
+            user.unit_label = await _fetch_unit_label(conn, row["id"])
+            users.append(user)
+        return users
+
+
+@router.get(
+    "/by-email/{email}",
+    response_model=UserResponse,
+    summary="Resolve email → user row",
+)
+async def get_by_email(
+    email: str,
+    pool=Depends(get_pool),
+):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT {_USER_COLS} FROM users u WHERE u.email = $1",
+            email,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        apartments = await _fetch_user_apartments(conn, row["id"])
+        unit_label = await _fetch_unit_label(conn, row["id"])
+    user = _row_to_user(row, apartments)
+    user.unit_label = unit_label
+    return user
+
+
+@router.get(
+    "/broadcast-targets",
+    response_model=list[UserResponse],
+    summary="All active, non-guest users (for broadcast notifications)",
+)
+async def broadcast_targets(
+    pool=Depends(get_pool),
+):
+    """Registered ahead of GET /{user_id} for the same routing reason as /by-ids."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT {_USER_COLS} FROM users u WHERE u.is_active = TRUE AND u.role != 'guest'",
+        )
+        users = []
+        for row in rows:
+            user = _row_to_user(row, await _fetch_user_apartments(conn, row["id"]))
+            user.unit_label = await _fetch_unit_label(conn, row["id"])
+            users.append(user)
+        return users
+
+
+@router.get(
     "/{user_id}",
     response_model=UserResponse,
     summary="Get user by internal UUID",
@@ -163,6 +235,7 @@ class InternalNotificationBody(BaseModel):
     title: str
     message: str
     related_id: Optional[str] = None
+    event_id: Optional[str] = None
 
 
 @router.post(
@@ -180,8 +253,29 @@ async def create_notification(
         if not exists:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute(
-            "INSERT INTO notification (user_id, type, title, message, related_id) "
-            "VALUES ($1, $2, $3, $4, $5)",
-            user_id, body.type, body.title, body.message,
+            "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
+            user_id, UUID(body.event_id) if body.event_id else None,
+            body.type, body.title, body.message,
             UUID(body.related_id) if body.related_id else None,
         )
+
+
+class GuestCreateBody(BaseModel):
+    name: str
+
+
+@router.post(
+    "/guest",
+    summary="Create a lightweight guest placeholder account (no keycloak_sub, can never log in)",
+)
+async def create_guest(
+    body: GuestCreateBody,
+    pool=Depends(get_pool),
+):
+    async with pool.acquire() as conn:
+        guest_id = await conn.fetchval(
+            "INSERT INTO users (name, role, is_active) VALUES ($1, 'guest', FALSE) RETURNING id::text",
+            body.name,
+        )
+    return {"id": guest_id}

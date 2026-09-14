@@ -1,5 +1,4 @@
 import asyncio
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,14 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import close_pool, get_pool, wait_for_db
 from app.middleware.splunk import SplunkLoggingMiddleware
 from app.reconciliation import inbox as reconciliation_inbox
 from app.routes import audit, funds, payments, quick_review, reconciliation, refunds, registry, settings as recon_settings, sponsors, testing
-from app.swagger_theme import themed_swagger_ui_html
+from shared.swagger_theme import themed_swagger_ui_html
 
 _OPENAPI_URL     = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
@@ -23,9 +21,15 @@ _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await wait_for_db()
-    # Start IMAP reconciliation loop in the background
-    asyncio.create_task(reconciliation_inbox.reconciliation_loop())
+    # Start IMAP reconciliation loop in the background — stored so it can be
+    # cancelled cleanly on shutdown (mirrors visitor-service's main.py pattern).
+    reconciliation_task = asyncio.create_task(reconciliation_inbox.reconciliation_loop())
     yield
+    reconciliation_task.cancel()
+    try:
+        await reconciliation_task
+    except asyncio.CancelledError:
+        pass
     await close_pool()
 
 
@@ -83,10 +87,6 @@ app.include_router(quick_review.router,    prefix="/quick-review",    tags=["qui
 
 if settings.is_testing:
     app.include_router(testing.router, prefix="/test", tags=["testing"])
-
-_uploads_dir = settings.uploads_dir
-os.makedirs(_uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
 
 
 @app.get("/health", tags=["ops"])
