@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     auth_service_api_key: str = ""
 
     uploads_dir: str = "/app/uploads"
+    minio_endpoint: str = "http://minio:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = "uploads"
     overdue_threshold_minutes_default: int = 60
 
     splunk_hec_url: str = "http://splunk:8088/services/collector/event"

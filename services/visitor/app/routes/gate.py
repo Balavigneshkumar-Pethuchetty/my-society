@@ -1,15 +1,14 @@
-import os
 import uuid as uuid_lib
 from datetime import datetime, timezone
 from uuid import UUID
 
-import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response as FastAPIResponse
 
 from app.auth import get_current_claims, require_role
 from app.config import settings
 from app.database import get_pool
+from app.object_storage import upload_bytes
 from app.models import (
     AnonymousCreateRequest, AnonymousOut, AnonymousUpdateRequest, GateTodayOut, PhotoOut, ScanBody, ScanOut,
 )
@@ -350,10 +349,8 @@ async def upload_photo(
 
         ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
         filename = f"{uuid_lib.uuid4()}.{ext}"
-        save_dir = os.path.join(settings.uploads_dir, "visitors")
-        os.makedirs(save_dir, exist_ok=True)
-        async with aiofiles.open(os.path.join(save_dir, filename), "wb") as f:
-            await f.write(content)
+        object_key = f"visitors/{filename}"
+        await upload_bytes(object_key, content, file.content_type)
 
         row = await conn.fetchrow(
             f"""
@@ -361,7 +358,7 @@ async def upload_photo(
             VALUES ($1::uuid, $2, $3, $4::uuid)
             RETURNING id, security_id, security_name, file_path, captured_at
             """,
-            security["id"], security["name"], f"visitors/{filename}", owner_id,
+            security["id"], security["name"], object_key, owner_id,
         )
     return PhotoOut(
         id=str(row["id"]), security_id=str(row["security_id"]), security_name=row["security_name"],
