@@ -59,6 +59,12 @@ services:
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
       PGADMIN_CONFIG_WTF_CSRF_ENABLED:         "False"
       PGADMIN_CONFIG_LOGIN_BANNER:             "'Society Events — DB Admin'"
+      # Tells pgAdmin's own Flask app it's mounted under /pgadmin (sets
+      # APPLICATION_ROOT/SESSION_COOKIE_PATH) so its own generated asset URLs,
+      # redirects, and AJAX calls are correctly prefixed — without this, pgAdmin
+      # emits root-relative paths (e.g. /static/..., /browser/...) that only
+      # work when accessed via the dedicated subdomain, not the /pgadmin/ path.
+      SCRIPT_NAME:                              "/pgadmin"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./db/pgadmin/servers.json:/pgadmin4/servers.json:ro
@@ -67,7 +73,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/misc/ping | grep -q PING"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost/pgadmin/misc/ping | grep -q PING"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -97,20 +103,104 @@ services:
     networks:
       - society_net
 
+  # ─── PgBouncer — connection pooler in front of `postgres` ──────────────────
+  # Fronts only the shared `postgres` container (user/event/registration/ticket/
+  # payment-service) — visitor-service's dedicated `visitor-postgres` has no
+  # connection-count contention with the other 5 and stays direct for now.
+  # Image's built-in entrypoint writes userlist.txt from DB_USER/DB_PASSWORD and
+  # generates pgbouncer.ini from these env vars — no custom command/Dockerfile
+  # needed. `POOL_MODE=transaction` requires asyncpg's statement_cache_size=0
+  # (see shared/db.py) — without it, "prepared statement does not exist" errors
+  # occur under load.
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p0
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_pgbouncer
+    restart: always
+    environment:
+      DB_USER:             ${POSTGRES_USER}
+      DB_PASSWORD:          ${POSTGRES_PASSWORD}
+      DB_HOST:              postgres
+      DB_PORT:              ${POSTGRES_PORT}
+      DB_NAME:              ${POSTGRES_DB:-society_events}
+      LISTEN_PORT:          "6432"
+      AUTH_TYPE:            scram-sha-256
+      POOL_MODE:            transaction
+      MAX_CLIENT_CONN:      "500"
+      DEFAULT_POOL_SIZE:    "25"
+      RESERVE_POOL_SIZE:    "5"
+      ADMIN_USERS:          ${POSTGRES_USER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - society_net
+
+
+  # ─── MinIO — S3-compatible object storage for user/registration/visitor/
+  # payment-service uploads (avatars, payment screenshots, visitor photos) ────
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - society_net
+
+  # One-shot: creates the `uploads` bucket + anonymous-download policy, then exits.
+  # `restart: "no"` — it's meant to run once per fresh MinIO volume, not loop.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_minio_init
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/uploads
+        mc anonymous set download local/uploads
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - society_net
 
   # ─── User Service (port 3001) ─────────────────────────────────────────────
   user-service:
     build:
-      context: ./services/user
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_user_service
+      context: .
+      dockerfile: services/user/Dockerfile
     restart: always
     environment:
-      DB_HOST:           postgres
-      DB_PORT:           ${POSTGRES_PORT}
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
       DB_NAME:           ${POSTGRES_DB:-society_events}
-      DB_USER:           ${POSTGRES_USER}
-      DB_PASSWORD:       ${POSTGRES_PASSWORD}
+      # Own DB role (user_role), not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/035_user_service_schema_isolation.sql.
+      DB_USER:           ${USER_DB_USER}
+      DB_PASSWORD:       ${USER_DB_PASSWORD}
       KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
       KEYCLOAK_REALM:            society-events
       KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
@@ -130,10 +220,16 @@ services:
       OTP_BRIDGE_CLIENT_SECRET:  ${OTP_BRIDGE_CLIENT_SECRET:-}
       GMAIL_SMTP_USER:           ${GMAIL_SMTP_USER:-}
       GMAIL_APP_PASSWORD:        ${GMAIL_APP_PASSWORD:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
     volumes:
       - user_uploads:/app/uploads
     depends_on:
-      postgres:
+      pgbouncer:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
@@ -147,16 +243,21 @@ services:
   # ─── Event Service (port 3002) ───────────────────────────────────────────
   event-service:
     build:
-      context: ./services/event
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_event_service
+      context: .
+      dockerfile: services/event/Dockerfile
     restart: always
     environment:
-      DB_HOST:           postgres
-      DB_PORT:           ${POSTGRES_PORT}
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
       DB_NAME:           ${POSTGRES_DB:-society_events}
-      DB_USER:           ${POSTGRES_USER}
-      DB_PASSWORD:       ${POSTGRES_PASSWORD}
+      # Own DB role (event_role), not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/033_event_service_schema_isolation.sql.
+      # Works transparently through pgbouncer: the [databases] entry's
+      # auth_user=${POSTGRES_USER} plus PgBouncer's default auth_query lets any
+      # Postgres role authenticate without a userlist.txt/pgbouncer config change,
+      # as long as POSTGRES_USER can read pg_shadow (true for the default superuser).
+      DB_USER:           ${EVENT_DB_USER}
+      DB_PASSWORD:       ${EVENT_DB_PASSWORD}
       KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
       KEYCLOAK_REALM:            society-events
       KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
@@ -175,8 +276,13 @@ services:
       AUTH_SERVICE_API_KEY:      ${AUTH_SERVICE_API_KEY:-}
       GMAIL_SMTP_USER:           ${GMAIL_SMTP_USER:-}
       GMAIL_APP_PASSWORD:        ${GMAIL_APP_PASSWORD:-}
+      REDIS_HOST:                redis
+      REDIS_PORT:                ${REDIS_PORT:-6379}
+      REDIS_PASSWORD:            ${REDIS_PASSWORD:-}
     depends_on:
-      postgres:
+      pgbouncer:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3002/health || exit 1"]
@@ -190,16 +296,17 @@ services:
   # ─── Registration Service (port 3005) ──────────────────────────────────────
   registration-service:
     build:
-      context: ./services/registration
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_registration_service
+      context: .
+      dockerfile: services/registration/Dockerfile
     restart: always
     environment:
-      DB_HOST:           postgres
-      DB_PORT:           ${POSTGRES_PORT}
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
       DB_NAME:           ${POSTGRES_DB:-society_events}
-      DB_USER:           ${POSTGRES_USER}
-      DB_PASSWORD:       ${POSTGRES_PASSWORD}
+      # Own DB role (registration_role), not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/037_registration_service_schema_isolation.sql.
+      DB_USER:           ${REGISTRATION_DB_USER}
+      DB_PASSWORD:       ${REGISTRATION_DB_PASSWORD}
       KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
       KEYCLOAK_REALM:            society-events
       KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
@@ -218,10 +325,16 @@ services:
       SOCIETY_BANK_BENEFICIARY:  ${SOCIETY_BANK_BENEFICIARY:-}
       GMAIL_SMTP_USER:           ${GMAIL_SMTP_USER:-}
       GMAIL_APP_PASSWORD:        ${GMAIL_APP_PASSWORD:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
     volumes:
       - registration_uploads:/app/uploads
     depends_on:
-      postgres:
+      pgbouncer:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3005/health || exit 1"]
@@ -235,16 +348,17 @@ services:
   # ─── Ticket Service (port 3006) ──────────────────────────────────────────
   ticket-service:
     build:
-      context: ./services/ticket
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_ticket_service
+      context: .
+      dockerfile: services/ticket/Dockerfile
     restart: always
     environment:
-      DB_HOST:           postgres
-      DB_PORT:           ${POSTGRES_PORT}
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
       DB_NAME:           ${POSTGRES_DB:-society_events}
-      DB_USER:           ${POSTGRES_USER}
-      DB_PASSWORD:       ${POSTGRES_PASSWORD}
+      # Own DB role (ticket_role), not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/034_ticket_service_schema_isolation.sql.
+      DB_USER:           ${TICKET_DB_USER}
+      DB_PASSWORD:       ${TICKET_DB_PASSWORD}
       KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
       KEYCLOAK_REALM:            society-events
       KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
@@ -253,7 +367,7 @@ services:
       SPLUNK_HEC_URL:            http://host.containers.internal:8088/services/collector/event
       SPLUNK_HEC_TOKEN:          ${SPLUNK_HEC_TOKEN:-}
     depends_on:
-      postgres:
+      pgbouncer:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3006/health || exit 1"]
@@ -294,9 +408,8 @@ services:
   # ─── Visitor Service (port 3008) ──────────────────────────────────────────
   visitor-service:
     build:
-      context: ./services/visitor
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_visitor_service
+      context: .
+      dockerfile: services/visitor/Dockerfile
     restart: always
     environment:
       DB_HOST:           visitor-postgres
@@ -315,12 +428,18 @@ services:
       AUTH_SERVICE_API_KEY:      ${AUTH_SERVICE_API_KEY:-}
       SPLUNK_HEC_URL:            http://host.containers.internal:8088/services/collector/event
       SPLUNK_HEC_TOKEN:          ${SPLUNK_HEC_TOKEN:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
     volumes:
       - visitor_uploads:/app/uploads
     depends_on:
       visitor-postgres:
         condition: service_healthy
       user-service:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3008/health || exit 1"]
@@ -334,16 +453,17 @@ services:
   # ─── Payment & Reconciliation Service (port 3007) ────────────────────────
   payment-service:
     build:
-      context: ./services/payment
-      dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-society}_payment_service
+      context: .
+      dockerfile: services/payment/Dockerfile
     restart: always
     environment:
-      DB_HOST:           postgres
-      DB_PORT:           ${POSTGRES_PORT}
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
       DB_NAME:           ${POSTGRES_DB:-society_events}
-      DB_USER:           ${POSTGRES_USER}
-      DB_PASSWORD:       ${POSTGRES_PASSWORD}
+      # Own DB role (payment_role), not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/036_payment_service_schema_isolation.sql.
+      DB_USER:           ${PAYMENT_DB_USER}
+      DB_PASSWORD:       ${PAYMENT_DB_PASSWORD}
       KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
       KEYCLOAK_REALM:            society-events
       KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
@@ -366,10 +486,16 @@ services:
       PAYMENT_SERVICE_ENV:       ${PAYMENT_SERVICE_ENV:-production}
       GMAIL_SMTP_USER:           ${GMAIL_SMTP_USER:-}
       GMAIL_APP_PASSWORD:        ${GMAIL_APP_PASSWORD:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
     volumes:
       - payment_uploads:/app/uploads
     depends_on:
-      postgres:
+      pgbouncer:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3007/health || exit 1"]
@@ -529,6 +655,8 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME:-society}_pgadmin_data
   redis_data:
     name: ${COMPOSE_PROJECT_NAME:-society}_redis_data
+  minio_data:
+    name: ${COMPOSE_PROJECT_NAME:-society}_minio_data
   nginx_logs:
     name: ${COMPOSE_PROJECT_NAME:-society}_nginx_logs
   registration_uploads:

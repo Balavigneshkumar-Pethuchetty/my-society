@@ -12,6 +12,8 @@ from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
 
+from shared.user_client import get_by_ids
+
 
 def _money(v) -> str:
     return f"Rs. {float(v):,.2f}"
@@ -24,13 +26,19 @@ async def fetch_fund_export_data(conn, event_id: str) -> dict:
         "FROM v_event_finance WHERE event_id = $1::uuid",
         event_id,
     )
-    expenses = await conn.fetch(
+    expense_rows = await conn.fetch(
         "SELECT ex.description, ex.category, ex.amount, ex.currency_code, "
-        "u.name AS created_by_name, ex.created_at "
-        "FROM event_expense ex JOIN users u ON u.id = ex.created_by "
-        "WHERE ex.event_id = $1::uuid ORDER BY ex.created_at",
+        "ex.created_by::text AS created_by, ex.created_at "
+        "FROM event_expense ex WHERE ex.event_id = $1::uuid ORDER BY ex.created_at",
         event_id,
     )
+    # users now lives behind user-service's own API (see DB_ISOLATION_PLAN.md) —
+    # resolve the logger's name via a batch call instead of a JOIN.
+    creators = await get_by_ids(r["created_by"] for r in expense_rows)
+    expenses = [
+        {**dict(r), "created_by_name": creators.get(r["created_by"], {}).get("name")}
+        for r in expense_rows
+    ]
     vendors = await conn.fetch(
         "SELECT v.name AS vendor_name, v.category, ev.stall_number, ev.fee_type, "
         "ev.fixed_fee, ev.revenue_share_pct, ev.actual_revenue, ev.status "

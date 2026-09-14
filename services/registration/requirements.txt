@@ -7,4 +7,5 @@ python-jose[cryptography]==3.3.0
 httpx==0.28.1
 python-multipart==0.0.20
 aiofiles==24.1.0
+aioboto3==15.5.0
 qrcode[pil]==8.0

@@ -1,10 +1,9 @@
-import os
+import mimetypes
 import uuid
 
-import aiofiles
 from fastapi import HTTPException
 
-from app.config import settings
+from app.object_storage import upload_bytes
 
 _ALLOWED_EXTS = {"jpg", "jpeg", "png", "webp", "pdf"}
 
@@ -23,9 +22,8 @@ async def save_screenshot(content: bytes, filename: str) -> str:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
     saved_filename = f"{uuid.uuid4()}.{ext}"
-    save_dir = os.path.join(settings.uploads_dir, "payment-screenshots")
-    os.makedirs(save_dir, exist_ok=True)
-    async with aiofiles.open(os.path.join(save_dir, saved_filename), "wb") as f:
-        await f.write(content)
+    object_key = f"payment-screenshots/{saved_filename}"
+    content_type = mimetypes.guess_type(saved_filename)[0] or "application/octet-stream"
+    await upload_bytes(object_key, content, content_type)
 
-    return f"payment-screenshots/{saved_filename}"
+    return object_key
