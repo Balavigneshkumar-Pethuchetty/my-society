@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+# See MAINTAINABILITY_PLAN.md step 6. Each service's tests run as a separate `pytest
+# tests/` invocation from inside services/<name>/ (kept isolated so the `app` module name
+# never collides across services) — pytest discovers this file by searching upward from
+# the invocation directory. Plain function-scoped loops (the default) — each service's
+# tests/conftest.py resets shared.db's module-level pool singleton at the start of every
+# test instead of relying on a shared event loop, since asyncpg connections can't cross
+# event loops and pytest-asyncio's session-loop options proved version-fragile.
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"

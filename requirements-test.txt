@@ -1,0 +1,6 @@
+# Test-only dependencies, shared by every service's pytest suite (see
+# MAINTAINABILITY_PLAN.md step 6). Installed on top of a given service's own
+# requirements.txt — never baked into a Docker image.
+pytest==8.3.4
+pytest-asyncio==0.25.2
+fakeredis==2.26.2

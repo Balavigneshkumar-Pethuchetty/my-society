@@ -1,7 +1,7 @@
 # Third-Party Software Inventory & Licenses
 
 **Project:** Society Events — GM Global Techies Town  
-**Last updated:** 2026-05-30  
+**Last updated:** 2026-08-29  
 **Purpose:** Software audit reference — lists every third-party dependency, its version,
 licence, and any usage restrictions.
 
@@ -23,7 +23,7 @@ licence, and any usage restrictions.
 |-----------|---------|---------|--------|-------|
 | **Python** | 3.12-slim | PSF Licence (MIT-compatible) | ✅ OSS | Base image for User Service and Event Service |
 | **PostgreSQL** | 16-alpine | PostgreSQL Licence (MIT-style) | ✅ OSS | Primary database; owns all application tables |
-| **Redis** | 7-alpine | BSD 3-Clause | ✅ OSS | Session cache, rate limiting, pub/sub messaging |
+| **Redis** | 7-alpine | BSD 3-Clause | ✅ OSS | Provisioned in `docker-compose.yml` (`make shell-redis`); **not currently connected to by any service** — no application code opens a Redis client. Reserved for future session cache / rate limiting. |
 | **nginx** | 1.27-alpine | BSD 2-Clause | ✅ OSS | API Gateway — routing, rate limiting, security headers |
 | **Keycloak** | 25.0 | Apache 2.0 | ✅ OSS | Identity & Access Management; OIDC/OAuth2 provider |
 | **pgAdmin 4** | 8 | PostgreSQL Licence | ✅ OSS | Database GUI; restricted to local network via nginx |

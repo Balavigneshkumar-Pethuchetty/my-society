@@ -1,56 +1,12 @@
-import time
-import httpx
-from fastapi import HTTPException, Security, Depends
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
-from jose import jwt, JWTError
+"""JWT/JWKS validation and require_internal_key live in services/shared/auth_core.py
+(see MAINTAINABILITY_PLAN.md step 5). require_role() stays local: unlike the other five
+services, it falls back to the local `users.role` column when the JWT is sparse or stale
+(e.g. immediately after a Keycloak role assignment) — a deliberate behavioral difference,
+not drift, so it isn't part of the shared base require_role()."""
+from fastapi import Depends, HTTPException
 from asyncpg import Pool
-from app.config import settings
+from shared.auth_core import get_current_claims, require_internal_key  # noqa: F401
 from app.database import get_pool
-
-_oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=(
-        f"{settings.keycloak_public_url}/realms/{settings.keycloak_realm}"
-        "/protocol/openid-connect/token"
-    ),
-)
-_internal_key_header = APIKeyHeader(name="X-Internal-Key", auto_error=False)
-
-# Simple in-process JWKS cache (TTL = 5 min)
-_jwks_cache: dict = {"keys": [], "fetched_at": 0.0}
-_JWKS_TTL = 300
-
-
-async def _fetch_jwks() -> list[dict]:
-    now = time.monotonic()
-    if now - _jwks_cache["fetched_at"] < _JWKS_TTL and _jwks_cache["keys"]:
-        return _jwks_cache["keys"]
-    async with httpx.AsyncClient(timeout=5) as client:
-        resp = await client.get(settings.jwks_uri)
-        resp.raise_for_status()
-    keys = resp.json()["keys"]
-    _jwks_cache["keys"] = keys
-    _jwks_cache["fetched_at"] = now
-    return keys
-
-
-async def get_current_claims(
-    token: str = Security(_oauth2_scheme),
-) -> dict:
-    try:
-        keys = await _fetch_jwks()
-        header = jwt.get_unverified_header(token)
-        key = next((k for k in keys if k.get("kid") == header.get("kid")), None)
-        if not key:
-            raise HTTPException(status_code=401, detail="Unknown signing key")
-        claims = jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
-    return claims
 
 
 def require_role(*roles: str):
@@ -77,9 +33,3 @@ def require_role(*roles: str):
                 return claims
         raise HTTPException(status_code=403, detail="Insufficient role")
     return _check
-
-
-def require_internal_key(key: str | None = Security(_internal_key_header)) -> None:
-    """Gate for inter-service endpoints — checked against X-Internal-Key header."""
-    if key != settings.internal_api_key:
-        raise HTTPException(status_code=403, detail="Internal key required")

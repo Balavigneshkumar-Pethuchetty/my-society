@@ -1,0 +1,14 @@
+# Backend service builds now use the repo root as context (see MAINTAINABILITY_PLAN.md
+# step 5) so services/shared/ is visible to every service's Dockerfile. Keep the upload
+# small by excluding everything a backend image never needs.
+.git/
+frontend/
+db/
+nginx/
+*.md
+.env*
+.claude/
+.github/
+**/__pycache__/
+**/*.pyc
+**/node_modules/

@@ -1,0 +1,149 @@
+name: CI
+
+# Additive safety net (see MAINTAINABILITY_PLAN.md step 3):
+#   - every backend service's Docker image still builds
+#   - every frontend MFE still type-checks + builds (tsc && vite build)
+#   - a conservative Python lint pass (real bugs only, not style)
+# None of this changes running behaviour — it only adds pre-merge checks.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-lint:
+    name: backend lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff==0.6.9
+      # Required gate: syntax errors + undefined names + obvious bugs only.
+      # Deliberately NOT full style enforcement — the codebase predates any linter.
+      - name: ruff (bug-only, required)
+        run: ruff check --select E9,F63,F7,F82 --output-format concise services/
+      # Informational: full default rule set, never fails the build. Tighten over time.
+      - name: ruff (full, informational)
+        continue-on-error: true
+        run: ruff check --output-format concise services/
+
+  backend-build:
+    name: docker build · ${{ matrix.service }}-service
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user, event, registration, ticket, payment, visitor]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provide a .env for compose interpolation
+        run: cp .env.example .env
+      - name: Build image
+        run: docker compose -f docker-compose.yml build ${{ matrix.service }}-service
+
+  backend-test:
+    name: pytest · ${{ matrix.service }}-service
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user, event, registration, ticket, payment, visitor]
+    services:
+      # Plain Postgres containers — not the ENV=test full stack (that needs Keycloak,
+      # which CI doesn't have). Auth in tests goes through FastAPI dependency_overrides
+      # instead (see services/shared/testing.py), so no IdP is needed here. Two
+      # instances because visitor-service has its own standalone database with its own
+      # schema/migrations (see services/visitor/db/init/01_schema.sql's header comment)
+      # — every matrix leg starts both for simplicity, only the relevant one gets used.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: society_events_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d society_events_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      visitor_postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: visitor_service_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d visitor_service_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      # Not every service has a tests/ directory yet (see MAINTAINABILITY_PLAN.md step 6)
+      # — skip cleanly rather than failing the matrix leg for one that doesn't.
+      - name: Check for a test suite
+        id: has_tests
+        run: echo "present=$( [ -d services/${{ matrix.service }}/tests ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        if: steps.has_tests.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+      - name: Load schema + minimal seed + migrations (main database)
+        if: steps.has_tests.outputs.present == 'true' && matrix.service != 'visitor'
+        env:
+          PGPASSWORD: test_pass
+        run: |
+          psql -h localhost -U test_user -d society_events_test -v ON_ERROR_STOP=1 -f db/init/01_schema.sql
+          psql -h localhost -U test_user -d society_events_test -v ON_ERROR_STOP=1 -f services/shared/test_seed.sql
+          for f in db/migrations/*.sql; do
+            psql -h localhost -U test_user -d society_events_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Load schema + migrations (visitor-service's standalone database)
+        if: steps.has_tests.outputs.present == 'true' && matrix.service == 'visitor'
+        env:
+          PGPASSWORD: test_pass
+        run: |
+          psql -h localhost -p 5433 -U test_user -d visitor_service_test -v ON_ERROR_STOP=1 -f services/visitor/db/init/01_schema.sql
+          for f in services/visitor/db/migrations/*.sql; do
+            psql -h localhost -p 5433 -U test_user -d visitor_service_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Install dependencies
+        if: steps.has_tests.outputs.present == 'true'
+        run: pip install -q -r services/${{ matrix.service }}/requirements.txt -r requirements-test.txt
+      - name: pytest
+        if: steps.has_tests.outputs.present == 'true'
+        env:
+          TEST_POSTGRES_PORT: ${{ matrix.service == 'visitor' && '5433' || '5432' }}
+          TEST_POSTGRES_USER: test_user
+          TEST_POSTGRES_PASSWORD: test_pass
+          TEST_POSTGRES_DB: ${{ matrix.service == 'visitor' && 'visitor_service_test' || 'society_events_test' }}
+        run: python -m pytest services/${{ matrix.service }}/tests/ -q
+
+  frontend-build:
+    name: build · ${{ matrix.mfe }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mfe: [shell, mfe-admin, mfe-events, mfe-booking, mfe-payment, mfe-tickets, mfe-visitors]
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.mfe }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/${{ matrix.mfe }}/package-lock.json
+      - run: npm ci
+      - run: npm run build

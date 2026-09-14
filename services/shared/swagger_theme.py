@@ -13,9 +13,9 @@ get_swagger_ui_html() and injects:
   - a floating toggle button (Light/Dark/System) that persists the choice
     and re-resolves live if "system" and the OS preference changes.
 
-Duplicated verbatim into every services/*/app — there is no shared package
-between service containers (see CLAUDE.md), matching how e.g. middleware/
-splunk.py is already duplicated per service rather than imported.
+Lives in services/shared/ (see MAINTAINABILITY_PLAN.md step 5) since this file was
+already byte-identical across every service — unlike middleware/splunk.py or
+email.py, which genuinely differ per service and stay local.
 """
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse

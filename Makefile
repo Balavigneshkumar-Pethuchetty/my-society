@@ -12,8 +12,10 @@
 #   make down ENV=test       # stop test stack
 #   make logs ENV=stage      # follow stage logs
 
-.PHONY: help up down restart free-ports validate-ports check-env logs ps reset seed \
-        shell-db shell-redis shell-visitor-db sync-users setup-google-idp \
+.PHONY: help up down restart mode-local mode-public free-ports validate-ports check-env logs ps reset seed \
+        migrate migrate-status \
+        test test-db-up test-db-down \
+        shell-db shell-redis shell-visitor-db sync-users setup-google-idp sync-keycloak-redirect-uris \
         frontend frontend-install frontend-docker \
         restart-nginx restart-postgres restart-redis \
         restart-pgadmin restart-user-service restart-event-service \
@@ -111,6 +113,7 @@ up: validate-ports ## Start all services (detached). ENV=dev|test|stage|prod
 	$(COMPOSE) --profile frontend up -d --build
 	@echo "  Activating host port bindings…"
 	@$(COMPOSE) restart nginx 2>/dev/null || true
+	@$(MAKE) -s sync-keycloak-redirect-uris ENV=$(ENV)
 	@echo ""
 	@_port=$$(grep -m1 '^NGINX_PORT=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]' || echo 8080); \
 	 _local="http://localhost:$$_port"; \
@@ -222,6 +225,12 @@ test-email: ## Send a test reset email to GMAIL_SMTP_USER (verifies SMTP works)
 
 restart: ## Restart all core services (rebuilds changed images)
 	$(COMPOSE) --profile frontend up -d --build
+
+mode-local: ## Rebuild against local Keycloak (society-dev stack, .env.dev — run `make mode-local` in ~/auth-service too)
+	$(MAKE) --no-print-directory restart ENV=dev
+
+mode-public: ## Rebuild against public Keycloak (society stack, .env — the Cloudflare tunnel)
+	$(MAKE) --no-print-directory restart ENV=prod
 
 ## ── Individual service restarts ─────────────────────────────────────────────
 restart-nginx: ## Rebuild & restart nginx (nginx.conf is baked into the image)
@@ -345,17 +354,119 @@ seed: ## Re-run only the seed script (idempotent — uses ON CONFLICT DO NOTHING
 	  -f /docker-entrypoint-initdb.d/02_seed.sql
 	@echo "Seed complete."
 
-migrate: ## Run pending SQL migrations in db/migrations/ (idempotent)
+migrate: ## Apply not-yet-recorded SQL migrations in db/migrations/ (idempotent; tracked in schema_migrations)
+	@PGUSER=$$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]'); \
+	rec() { $(COMPOSE) exec -T postgres psql -q -v ON_ERROR_STOP=1 -U $$PGUSER -d $(POSTGRES_DB_NAME) "$$@"; }; \
+	rec -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());"; \
+	applied=$$(rec -tAc "SELECT filename FROM schema_migrations"); \
+	for f in db/migrations/*.sql; do \
+	  base=$$(basename $$f); \
+	  if printf '%s\n' "$$applied" | grep -qxF "$$base"; then \
+	    echo "✓ $$base (already applied)"; continue; \
+	  fi; \
+	  echo "→ Applying $$base…"; \
+	  if $(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 \
+	      -U $$PGUSER -d $(POSTGRES_DB_NAME) -f /dev/stdin < $$f; then \
+	    rec -c "INSERT INTO schema_migrations (filename) VALUES ('$$base') ON CONFLICT (filename) DO NOTHING;"; \
+	  else \
+	    echo "✗ $$base FAILED — stopping (nothing recorded for it)."; exit 1; \
+	  fi; \
+	done; \
+	echo "Migrations complete."
+
+migrate-status: ## Show which db/migrations/ files are applied vs still pending
+	@PGUSER=$$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]'); \
+	$(COMPOSE) exec -T postgres psql -q -U $$PGUSER -d $(POSTGRES_DB_NAME) \
+	  -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());" >/dev/null; \
+	applied=$$($(COMPOSE) exec -T postgres psql -tAq -U $$PGUSER -d $(POSTGRES_DB_NAME) -c "SELECT filename FROM schema_migrations"); \
+	pending=0; \
+	for f in db/migrations/*.sql; do \
+	  base=$$(basename $$f); \
+	  if printf '%s\n' "$$applied" | grep -qxF "$$base"; then \
+	    echo "  ✓ $$base"; \
+	  else \
+	    echo "  ✗ $$base  (pending)"; pending=$$((pending + 1)); \
+	  fi; \
+	done; \
+	echo "$$pending migration(s) pending."
+
+## ── Testing (see MAINTAINABILITY_PLAN.md step 6) ───────────────────────────
+# A disposable, bare postgres:16-alpine container — NOT the ENV=test full stack
+# (docker-compose + Keycloak via .env.test/.env.test.example — that's for manual
+# end-to-end testing). Auth in tests goes through FastAPI dependency_overrides
+# instead (see services/shared/testing.py), so no Keycloak is needed here at all.
+TEST_PG_CONTAINER := society_test_postgres
+TEST_PG_PORT       ?= 5434
+TEST_PG_USER       := test_user
+TEST_PG_PASSWORD   := test_pass
+TEST_PG_DB         := society_events_test
+# visitor-service has its own standalone database (no FKs to the main schema — see
+# services/visitor/db/init/01_schema.sql's own header comment) with its own migrations,
+# so it gets a second, separately-schemaed disposable Postgres.
+TEST_VISITOR_PG_CONTAINER := society_test_visitor_postgres
+TEST_VISITOR_PG_PORT       ?= 5436
+TEST_VISITOR_PG_DB         := visitor_service_test
+TEST_SERVICES      := event payment registration ticket user visitor
+
+test-db-up: ## Start disposable test Postgres instances (schema + migrations applied), for `make test`
+	@docker rm -f $(TEST_PG_CONTAINER) $(TEST_VISITOR_PG_CONTAINER) >/dev/null 2>&1 || true
+	docker run -d --name $(TEST_PG_CONTAINER) \
+	  -e POSTGRES_USER=$(TEST_PG_USER) -e POSTGRES_PASSWORD=$(TEST_PG_PASSWORD) -e POSTGRES_DB=$(TEST_PG_DB) \
+	  -p 127.0.0.1:$(TEST_PG_PORT):5432 \
+	  postgres:16-alpine >/dev/null
+	docker run -d --name $(TEST_VISITOR_PG_CONTAINER) \
+	  -e POSTGRES_USER=$(TEST_PG_USER) -e POSTGRES_PASSWORD=$(TEST_PG_PASSWORD) -e POSTGRES_DB=$(TEST_VISITOR_PG_DB) \
+	  -p 127.0.0.1:$(TEST_VISITOR_PG_PORT):5432 \
+	  postgres:16-alpine >/dev/null
+	@echo "$(CYAN)Waiting for test postgres instances…$(RESET)"
+	@until docker exec $(TEST_PG_CONTAINER) pg_isready -U $(TEST_PG_USER) -d $(TEST_PG_DB) -q 2>/dev/null; do sleep 1; done
+	@until docker exec $(TEST_VISITOR_PG_CONTAINER) pg_isready -U $(TEST_PG_USER) -d $(TEST_VISITOR_PG_DB) -q 2>/dev/null; do sleep 1; done
+	docker exec -i $(TEST_PG_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(TEST_PG_USER) -d $(TEST_PG_DB) -f /dev/stdin < db/init/01_schema.sql >/dev/null
+	@# services/shared/test_seed.sql, not db/init/02_seed.sql — the latter seeds far more
+	@# demo data than tests need; only the SOCIETY_ID row + 'INR' currency are required.
+	docker exec -i $(TEST_PG_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(TEST_PG_USER) -d $(TEST_PG_DB) -f /dev/stdin < services/shared/test_seed.sql >/dev/null
 	@for f in db/migrations/*.sql; do \
-	  echo "Running $$f…"; \
-	  $(COMPOSE) exec -T postgres psql \
-	    -U $$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]') \
-	    -d $(POSTGRES_DB_NAME) -f /dev/stdin < $$f; \
+	  docker exec -i $(TEST_PG_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(TEST_PG_USER) -d $(TEST_PG_DB) -f /dev/stdin < $$f >/dev/null \
+	    || { echo "✗ $$f failed"; exit 1; }; \
 	done
-	@echo "Migrations complete."
+	docker exec -i $(TEST_VISITOR_PG_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(TEST_PG_USER) -d $(TEST_VISITOR_PG_DB) -f /dev/stdin < services/visitor/db/init/01_schema.sql >/dev/null
+	@for f in services/visitor/db/migrations/*.sql; do \
+	  docker exec -i $(TEST_VISITOR_PG_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(TEST_PG_USER) -d $(TEST_VISITOR_PG_DB) -f /dev/stdin < $$f >/dev/null \
+	    || { echo "✗ $$f failed"; exit 1; }; \
+	done
+	@echo "$(CYAN)Test postgres ready: main=127.0.0.1:$(TEST_PG_PORT) visitor=127.0.0.1:$(TEST_VISITOR_PG_PORT)$(RESET)"
+
+test-db-down: ## Stop and remove the disposable test Postgres instances
+	docker rm -f $(TEST_PG_CONTAINER) $(TEST_VISITOR_PG_CONTAINER) >/dev/null 2>&1 || true
+
+test: test-db-down test-db-up ## Run every backend service's pytest suite against a fresh test Postgres
+	@set -e; \
+	fail=0; \
+	for s in $(TEST_SERVICES); do \
+	  [ -d services/$$s/tests ] || continue; \
+	  echo "$(CYAN)── pytest: $$s-service ──$(RESET)"; \
+	  if [ "$$s" = "visitor" ]; then \
+	    export TEST_POSTGRES_PORT=$(TEST_VISITOR_PG_PORT) TEST_POSTGRES_DB=$(TEST_VISITOR_PG_DB); \
+	  else \
+	    export TEST_POSTGRES_PORT=$(TEST_PG_PORT) TEST_POSTGRES_DB=$(TEST_PG_DB); \
+	  fi; \
+	  export TEST_POSTGRES_USER=$(TEST_PG_USER) TEST_POSTGRES_PASSWORD=$(TEST_PG_PASSWORD); \
+	  venv=services/$$s/.venv-test; \
+	  if [ ! -d $$venv ]; then \
+	    python3 -m venv $$venv; \
+	    $$venv/bin/pip install -q --upgrade pip; \
+	    $$venv/bin/pip install -q -r services/$$s/requirements.txt -r requirements-test.txt; \
+	  fi; \
+	  $$venv/bin/python -m pytest services/$$s/tests/ -q || fail=1; \
+	done; \
+	$(MAKE) -s test-db-down; \
+	exit $$fail
 
 setup-google-idp: ## Apply Google IDP + first-broker-login flow to the RUNNING Keycloak (idempotent)
 	python3 scripts/setup_google_idp.py
+
+sync-keycloak-redirect-uris: ## Register this stack's NGINX_PORT origin with Keycloak's society-frontend client (idempotent; auto-run by `make up`)
+	@python3 scripts/sync_keycloak_redirect_uris.py $(ENV_FILE)
 
 sync-users: ## Sync users from auth-service realm.json → postgres (inserts only, never overwrites)
 	docker run --rm \
