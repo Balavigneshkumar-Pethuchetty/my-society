@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Standalone per-service compose file for visitor-service. Unlike the other
+# backend services, visitor-service already has its OWN dedicated Postgres
+# (never shared with the main `society_events` database) — so this file
+# bundles that database too and is the closest thing to a genuinely
+# self-contained stack among these per-service files. It still needs the
+# shared `${COMPOSE_PROJECT_NAME:-society}_network` (for user-service's
+# internal API, MinIO, and to be reachable from nginx), so it still assumes
+# `make up` from the repo root has been run at least once.
+#
+# Usage (run from THIS directory):
+#   docker compose --env-file .env up -d --build         # against the default stack
+#   docker compose --env-file .env.test up -d --build    # against the test stack
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  visitor-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER:     ${VISITOR_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${VISITOR_POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${VISITOR_POSTGRES_DB:-visitor_service}
+    volumes:
+      - visitor_postgres_data:/var/lib/postgresql/data
+      - ../../services/visitor/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VISITOR_POSTGRES_USER} -d ${VISITOR_POSTGRES_DB:-visitor_service}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - society_net
+
+  visitor-service:
+    build:
+      context: ../..
+      dockerfile: services/visitor/Dockerfile
+    restart: always
+    environment:
+      DB_HOST:                   visitor-postgres
+      DB_PORT:                   5432
+      DB_NAME:                   ${VISITOR_POSTGRES_DB:-visitor_service}
+      DB_USER:                   ${VISITOR_POSTGRES_USER}
+      DB_PASSWORD:               ${VISITOR_POSTGRES_PASSWORD}
+      KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
+      KEYCLOAK_REALM:            society-events
+      KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
+      INTERNAL_API_KEY:          ${INTERNAL_API_KEY}
+      SOCIETY_ID:                11100000-0000-0000-0000-000000000001
+      SOCIETY_NAME:              ${SOCIETY_NAME:-GM Global Techies Town}
+      USER_SERVICE_INTERNAL_URL: http://user-service:3001/internal/users
+      AUTH_SERVICE_URL:          ${AUTH_SERVICE_URL:-http://host.containers.internal:8000}
+      AUTH_SERVICE_API_KEY:      ${AUTH_SERVICE_API_KEY:-}
+      SPLUNK_HEC_URL:            http://host.containers.internal:8088/services/collector/event
+      SPLUNK_HEC_TOKEN:          ${SPLUNK_HEC_TOKEN:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
+    volumes:
+      - visitor_uploads:/app/uploads
+    # depends_on visitor-postgres omitted from a *condition* since it's in this
+    # same file so it WOULD work — kept anyway for clarity of startup order.
+    depends_on:
+      visitor-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - society_net
+
+volumes:
+  visitor_postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:-society}_visitor_postgres_data
+    external: true
+  visitor_uploads:
+    name: ${COMPOSE_PROJECT_NAME:-society}_visitor_uploads
+    external: true
+
+networks:
+  society_net:
+    name: ${COMPOSE_PROJECT_NAME:-society}_network
+    external: true

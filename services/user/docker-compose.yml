@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Standalone per-service compose file. Lets you build/run/redeploy just this
+# one service without touching the rest of the stack — but it is NOT a
+# self-contained mini-stack: it assumes the shared platform (postgres,
+# pgbouncer, redis, minio, and the `${COMPOSE_PROJECT_NAME:-society}_network` Docker network) is
+# already running, normally via `make up` from the repo root. Attaching to
+# that same external network is what lets this container reach — and be
+# reached by — everything the root docker-compose.yml started.
+#
+# Usage (run from THIS directory):
+#   docker compose --env-file .env up -d --build         # against the default stack
+#   docker compose --env-file .env.test up -d --build    # against the test stack (COMPOSE_PROJECT_NAME=society-test)
+#
+# The root docker-compose.yml remains the normal way to run the whole app —
+# this file is a convenience for focused work on one service.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  user-service:
+    build:
+      context: ../..
+      dockerfile: services/user/Dockerfile
+    restart: always
+    environment:
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
+      DB_NAME:           ${POSTGRES_DB:-society_events}
+      # Own DB role, not the shared POSTGRES_USER — see
+      # DB_ISOLATION_PLAN.md / db/migrations/035_user_service_schema_isolation.sql.
+      DB_USER:           ${USER_DB_USER}
+      DB_PASSWORD:       ${USER_DB_PASSWORD}
+      KEYCLOAK_URL:              ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
+      KEYCLOAK_REALM:            society-events
+      KEYCLOAK_PUBLIC_URL:       ${KEYCLOAK_PUBLIC_URL}
+      INTERNAL_API_KEY:          ${INTERNAL_API_KEY}
+      SOCIETY_ID:                11100000-0000-0000-0000-000000000001
+      APP_PUBLIC_URL:                         ${APP_PUBLIC_URL}
+      KEYCLOAK_ADMIN_USER:                    ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD:                ${KEYCLOAK_ADMIN_PASSWORD}
+      SOCIETY_NAME:                           ${SOCIETY_NAME:-GM Global Techies Town}
+      SOCIETY_SHORT_NAME:                     ${SOCIETY_SHORT_NAME:-GMGT}
+      SOCIETY_CITY:                           ${SOCIETY_CITY:-Bengaluru}
+      SPLUNK_HEC_URL:                         http://host.containers.internal:8088/services/collector/event
+      SPLUNK_HEC_TOKEN:                       ${SPLUNK_HEC_TOKEN:-}
+      AUTH_SERVICE_URL:                       ${AUTH_SERVICE_URL:-http://host.containers.internal:8000}
+      AUTH_SERVICE_API_KEY:                   ${AUTH_SERVICE_API_KEY:-}
+      OTP_BRIDGE_CLIENT_ID:                   ${OTP_BRIDGE_CLIENT_ID:-otp-bridge}
+      OTP_BRIDGE_CLIENT_SECRET:               ${OTP_BRIDGE_CLIENT_SECRET:-}
+      GMAIL_SMTP_USER:                        ${GMAIL_SMTP_USER:-}
+      GMAIL_APP_PASSWORD:                     ${GMAIL_APP_PASSWORD:-}
+      MINIO_ENDPOINT:            http://minio:9000
+      MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET:              uploads
+    volumes:
+      - user_uploads:/app/uploads
+    # No depends_on here — this file assumes the shared platform (pgbouncer,
+    # minio, redis as applicable) from the root docker-compose.yml is already
+    # up and healthy; depends_on can't cross compose projects.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - society_net
+
+volumes:
+  user_uploads:
+    name: ${COMPOSE_PROJECT_NAME:-society}_user_uploads
+    external: true
+
+networks:
+  society_net:
+    name: ${COMPOSE_PROJECT_NAME:-society}_network
+    external: true

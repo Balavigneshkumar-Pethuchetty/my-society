@@ -29,7 +29,8 @@ make logs-nginx | logs-db | logs-user | logs-events | logs-mfe-admin | logs-mfe-
 make shell-db                 # psql in society_events
 make shell-redis              # redis-cli
 make seed                     # re-run seed SQL (idempotent)
-make migrate                  # run all db/migrations/*.sql in order (idempotent)
+make migrate                  # apply not-yet-recorded db/migrations/*.sql in order (idempotent; tracked in schema_migrations)
+make migrate-status           # list which migrations are applied vs still pending
 # A single migration can also be applied by hand:
 docker exec -i society_postgres psql -U <user> -d society_events < db/migrations/0NN_name.sql
 
@@ -44,6 +45,16 @@ There is no test suite in this repository (no pytest, no frontend test scripts) 
 
 Each Python service builds independently: `docker compose build <service-name>` then `docker compose up -d <service-name>`. Each frontend MFE builds via `npm run build` (`tsc && vite build`) inside its own Dockerfile; `docker compose build <mfe-name>` triggers this.
 
+### Per-service compose files (standalone build/redeploy of one service)
+
+Every backend service and frontend app also has its own `docker-compose.yml` + `.env`/`.env.test` (real values, gitignored) + `.env.example`/`.env.test.example` (tracked templates) in its own directory (`services/<name>/`, `frontend/<name>/`). These are **not** a replacement for the root `docker-compose.yml` — they assume the shared platform (postgres, pgbouncer, redis, minio, and the `${COMPOSE_PROJECT_NAME}_network` Docker network) is already up via `make up` from the repo root, and they intentionally have no `depends_on` (impossible across separate compose projects). Because each file's `COMPOSE_PROJECT_NAME` defaults to the same project as the root file (`society`/`society-test`), running one attaches to and transparently redeploys that exact service within the already-running stack — it does not spin up a parallel copy. Backend build contexts point at the repo root (`context: ../..`) since their Dockerfiles `COPY services/shared/`; frontend build contexts are self-contained (`context: .`). `visitor-service`'s file is the one exception that's genuinely self-contained — it bundles its own dedicated `visitor-postgres`, matching its existing architecture (see below).
+
+Usage, from inside the service's own directory:
+```bash
+docker compose --env-file .env up -d --build         # rebuild+redeploy against the default stack
+docker compose --env-file .env.test up -d --build    # same, against the test stack
+```
+
 ## Architecture
 
 ### Single-tenant, shared-database microservices
@@ -53,7 +64,7 @@ Every backend service connects to the **same** PostgreSQL database (`society_eve
 ### Database schema: two-layer, and migrations do NOT auto-apply
 
 - `db/init/01_schema.sql` — the full DDL baseline. Only executes automatically via `docker-entrypoint-initdb.d` when the Postgres data volume is created for the first time. Editing this file has **no effect** on an already-initialized volume.
-- `db/migrations/0NN_*.sql` — incremental, numbered, idempotent (`IF NOT EXISTS` / `DO $$ ... $$` guards) changes. These must be applied manually with `docker exec -i society_postgres psql ... < file` (or `make migrate` for all of them) — they are never run automatically on container restart.
+- `db/migrations/0NN_*.sql` — incremental, numbered, idempotent (`IF NOT EXISTS` / `DO $$ ... $$` guards) changes. These must be applied manually with `docker exec -i society_postgres psql ... < file` (or `make migrate`, which now applies only files not yet recorded in the `schema_migrations` table and records each as it runs; `make migrate-status` shows applied vs pending) — they are never run automatically on container restart.
 - When adding a schema change: write both a new numbered migration file **and** the equivalent change to `01_schema.sql` (so fresh installs match), then apply the migration by hand against the running DB.
 
 ### Backend services (FastAPI, one per bounded context)

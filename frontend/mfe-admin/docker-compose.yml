@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Standalone per-app compose file for the mfe-admin frontend. This is a static
+# Vite build served by nginx inside the container — there's no runtime
+# environment, only build ARGs baked in at image-build time. Still needs to
+# join the shared `${COMPOSE_PROJECT_NAME:-society}_network` so the root
+# nginx (started separately via `make up`) can reach it at its `mfe-admin`
+# hostname.
+#
+# For actual local development, prefer Vite's dev server instead of Docker:
+#   cd frontend/mfe-admin && npm run dev
+#
+# Usage (run from THIS directory):
+#   docker compose --env-file .env up -d --build
+#   docker compose --env-file .env.test up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  mfe-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_MODE: ${VITE_MODE:-production}
+    restart: always
+    # No host port — served by the root nginx at /mfe-admin/
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - society_net
+
+networks:
+  society_net:
+    name: ${COMPOSE_PROJECT_NAME:-society}_network
+    external: true
