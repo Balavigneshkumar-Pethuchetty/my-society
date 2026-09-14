@@ -6,18 +6,21 @@ see [CLAUDE.md](CLAUDE.md) — this file focuses on **what each service/page act
 
 ## Overview
 
-**5 backend microservices** (all Python/FastAPI) + **1 shell + 5 micro-frontends**, behind a
-single nginx gateway. All backend services share one PostgreSQL database (`society_events`);
-see CLAUDE.md's "single-tenant, shared-database" note for why cross-service direct table
-writes are the norm here, not a bug.
+**6 backend microservices** (all Python/FastAPI) + **1 shell + 6 micro-frontends**, behind a
+single nginx gateway. The first five backend services share one PostgreSQL database
+(`society_events`) — see CLAUDE.md's "single-tenant, shared-database" note for why
+cross-service direct table writes are the norm here, not a bug. `visitor-service` is the
+exception: it has its **own** dedicated Postgres container and schema, and never touches
+`society_events`.
 
-| Service | Port | Nginx prefix |
-|---|---|---|
-| user-service | 3001 | `/api/users/` |
-| event-service | 3002 | `/api/events/` |
-| registration-service | 3005 | `/api/registrations/` (includes `/complimentary/*`) |
-| ticket-service | 3006 | `/api/tickets/` |
-| payment-service | 3007 | `/api/payments/` |
+| Service | Port | Nginx prefix | Database |
+|---|---|---|---|
+| user-service | 3001 | `/api/users/` | `society_events` (shared) |
+| event-service | 3002 | `/api/events/` | `society_events` (shared) |
+| registration-service | 3005 | `/api/registrations/` (includes `/complimentary/*`) | `society_events` (shared) |
+| ticket-service | 3006 | `/api/tickets/` | `society_events` (shared) |
+| payment-service | 3007 | `/api/payments/` | `society_events` (shared) |
+| visitor-service | 3008 | `/api/visitors/` | `visitor` (own container) |
 
 ## Backend services
 
@@ -39,7 +42,8 @@ Event lifecycle + content. Does **not** own registrations, tickets, or payments.
 - **Categories**: CRUD.
 - **Announcements**: per-event, reverse-chronological.
 - **Ticket types**: per-event named ticket tiers (price, free/paid, capacity, sort order, active flag).
-- **Dead code**: `app/routes/registrations.py` exists in this service but is **not mounted** in `main.py` (only `events` and `categories` routers are). Don't be misled by its presence — registrations are entirely owned by `registration-service`.
+
+Registrations, tickets, and payments are entirely owned by other services — `event-service` mounts only the `events` and `categories` routers.
 
 ### registration-service (3005)
 
@@ -64,34 +68,43 @@ Ticket issuance, QR display, gate entry.
 
 UPI payment reconciliation and refunds — **not** a Razorpay/card gateway; there is no such integration anywhere in this codebase.
 
-- **Transactions** (`/payments`): initiate, auto-confirm (called by the frontend once a payment is externally verified — see the note below), get/list, manual verify/approve/reject, flag a verified transaction for refund.
-- **Refund queue** (`/refunds`): list transactions in `refund_requested` status; admin/committee log the refund UTR to close it out. `GET /refunds/{txn_ref}/qr` generates a scannable `upi://pay` QR (pre-filled payee UPI ID, amount, reference) so the admin can pay from their own UPI app instead of hand-copying details.
-- **Reconciliation** (`/reconciliation`, `/recon-settings`): this service has its **own** IMAP-polling + Ollama-LLM screenshot-parsing implementation (`app/reconciliation/`, `aioimaplib` dependency) and its own settings UI (IMAP host/creds, Ollama host/model, test-connection endpoints).
-- **Committee registry** (`/registry`): assigns a committee member + UPI ID as the payment collector for a given event; exposes that collector's QR.
+- **Transactions** (`/payments`): `initiate` (builds a local UPI intent/QR), `{txn_ref}/screenshot` (attach the resident's proof screenshot; best-effort AI field extraction to *prefill* the review form — not verification), `{txn_ref}/confirm-details` (resident submits the reviewed details; this is what notifies the organizer), get/list/`my`, manual `verify`/`approve`/`reject` (admin/committee), `refund-request` (flag a verified transaction for refund).
+- **Refund queue** (`/refunds`): list transactions in `refund_requested` status; admin/committee log the refund UTR + transfer screenshot (`{txn_ref}/complete`) to close it out. `GET /refunds/{txn_ref}/qr` generates a scannable `upi://pay` QR (pre-filled payee UPI ID, amount, reference) so the admin can pay from their own UPI app instead of hand-copying details. `{txn_ref}/extract-screenshot` is a read-only AI prefill of the refund UTR from the transfer screenshot.
+- **Reconciliation** (`/reconciliation`, `/recon-settings`): this service has its **own** IMAP-polling + Ollama-LLM screenshot-parsing implementation (`app/reconciliation/`, `aioimaplib` dependency) and its own settings UI (IMAP host/creds, Ollama host/model, test-connection endpoints). Surfaced in `ReconciliationConsole.tsx`.
+- **Committee registry** (`/registry`): assigns a committee member + UPI ID as the payment collector for a given event, plus that event's own IMAP mailbox config for auto-reconciliation. Configured per-event from the **Event Payment Settings** tab inside the Edit Event / Event Details dialogs (there is no standalone collector-registry admin page any more).
 - **Audit** (`/audit`): reconciliation status-change log.
 
-**Important gotcha**: the resident-facing checkout UI (`frontend/mfe-payment/src/PaymentApp.tsx`) does **not** call this service for the live QR/screenshot-verification/SSE flow — it calls an entirely separate, external domain (`https://pay.gm-global-techies-town.club`, hardcoded as `PAY_BASE`), which is the **different, standalone** sibling project `~/payment_reconcilation_service` (see CLAUDE.md). The checkout flow only calls back into *this* repo's payment-service for `auto-confirm` (after the external SSE reports success) and for listing payment history. If you're debugging the live checkout/verification experience, you are very likely debugging the wrong codebase if you're only looking at `services/payment` in this repo.
+**AI-assisted verification is currently disabled** (manual-only payment flow). The endpoints that cross-checked a screenshot against a bank email and auto-completed a payment/refund on a `CONFIRMED` verdict — `POST /payments/verify-screenshot`, `/payments/auto-confirm`, `/payments/parse-screenshot`, `/refunds/{txn_ref}/verify-screenshot` — are commented out in `services/payment/app/routes/{payments,refunds}.py` with `DISABLED (manual-only payment flow)` markers and re-enable notes. The resident checkout (`frontend/mfe-payment/src/PaymentApp.tsx`) calls only **this** repo's payment-service (`/api/payments/payments/initiate` → `/screenshot` → `/confirm-details`); it does **not** call the external `pay.gm-global-techies-town.club` domain or any SSE stream. (The **separate, standalone** sibling project `~/payment_reconcilation_service` still exists and does similar IMAP+LLM work — see CLAUDE.md — but this repo's checkout no longer talks to it.)
+
+### visitor-service (3008)
+
+Visitor / guest gate passes — **isolated from the events system**: its own `visitor-postgres` container, own schema (`services/visitor/db/init/01_schema.sql`), own uploads volume. Shares only Keycloak (same JWTs/roles) and nginx.
+
+- **Passes** (`/passes`): resident creates a pass for an expected visitor (single or group), lists their household's passes, edits/extends/deletes a still-pending pass, gets a raw QR PNG or a full composited shareable pass image, and triggers phone verification (security confirms the code) for the visitor.
+- **Gate** (`/gate`): security previews a pass by QR token (no state change), then `POST /gate/scan` admits or exits the group — **partial admission is allowed** (some of a group in now, the rest later) and entry is **not capped** at the declared group size. Walk-ins with no pass are logged via `/gate/anonymous` (+ vehicle-number correction, exit). `/gate/today` is the live activity feed; `/gate/photos` stores a captured visitor photo.
+- **Ledger & settings** (`/ledger`, `/settings`): filtered visitor history with Excel/PDF export and a photo viewer; notification-rule settings. `/ledger/aadhaar-status` is a **stub** — Aadhaar verification is not implemented, only scaffolded for a future integration.
 
 ## Frontend
 
-`frontend/shell` (host, port 3000) + 5 independently-buildable module-federation remotes: `mfe-events` (4001), `mfe-booking` (4002), `mfe-payment` (4003), `mfe-admin` (4004), `mfe-tickets` (4005). See CLAUDE.md for the federation/routing convention (URL path → `page`/`id` props → remote dispatcher).
+`frontend/shell` (host, port 3000) + 6 independently-buildable module-federation remotes: `mfe-events` (4001), `mfe-booking` (4002), `mfe-payment` (4003), `mfe-admin` (4004), `mfe-tickets` (4005), `mfe-visitors` (4006). See CLAUDE.md for the federation/routing convention (URL path → `page`/`id` props → remote dispatcher).
 
-Resident-facing apps (`mfe-events`, `mfe-booking`, `mfe-payment`, `mfe-tickets`) are all real and backend-wired.
+Resident-facing apps (`mfe-events`, `mfe-booking`, `mfe-payment`, `mfe-tickets`) are all real and backend-wired. `mfe-visitors` (three dashboards — resident, security, admin) is real and backed by `visitor-service`.
 
 ### mfe-admin — reality check
 
-`mfe-admin` exposes three route trees (`ManageRoutes` at `/manage/*`, `AdminRoutes` at `/admin/*`, `SponsorApp` at `/sponsor`) and bundles many admin pages — **several of which have no backend at all** and only render hardcoded local state. Before spending time on one of these, check whether it's actually wired up:
+`mfe-admin` exposes three route trees (`ManageRoutes` at `/manage/*`, `AdminRoutes` at `/admin/*`, `SponsorApp` at `/sponsor`) and bundles the admin pages below. As of 2026-08-29 every page here is backend-wired; the one remaining mock is a **single tab** ("Resident Payment Refunds" inside `SponsorshipRefunds.tsx`, noted below). Still worth confirming against the code before building on a page:
 
 | Page | Status |
 |---|---|
 | `ManageEvents.tsx` | Real — ticket-type CRUD for an event lives inline here, in the `TicketTypesTab` shown inside the Edit Event dialog. |
 | `ComplimentaryTickets.tsx` | Real |
-| `EventDetails.tsx` | Real for all six tabs — Purchases/Attendance/Complimentary (registration-service, ticket-service) and Finance & Expenses / Vendors / Revenue (payment-service's `funds.py`, added below). Also has Download Excel/PDF and Copy Share Link on the Finance tab. |
-| `CollectorRegistry.tsx` | Real |
+| `EventDetails.tsx` | Real — Purchases/Attendance/Complimentary (registration-service, ticket-service), Finance & Expenses / Vendors / Revenue (payment-service's `funds.py`, added below), and an **Event Payment Settings** tab (collector UPI ID + per-event IMAP mailbox via `/registry/{eventId}/settings`). Also has Download Excel/PDF and Copy Share Link on the Finance tab. |
 | `ReconciliationConsole.tsx` | Real |
 | `RefundTasks.tsx` | Real |
 | `PaymentApprovals.tsx` | Real |
 | `UserApproval.tsx` | Real |
+| `LeaveRequests.tsx` | Real — leave-society request review (user-service `/leave-requests`). |
+| `CategoryManagement.tsx` | Real — event-category CRUD (event-service `/categories`). |
 | `BuildingStructure.tsx` | Real |
 | `UnitManagement.tsx` | Real |
 | `SponsorDashboard.tsx` | Real — a sponsor's own view of their sponsorships + refund requests (`payment-service`'s `sponsors.py`). |
@@ -108,7 +121,7 @@ Per-event management and fund/sponsorship data is scoped to **an event's organiz
 
 - `event_permission` table (event_id, user_id, granted_by, granted_at, revoked_at) is the delegation mechanism. `GET/POST /events/{id}/permissions` (list/grant) and `DELETE /events/{id}/permissions/{user_id}` (revoke) are organizer-only — approved members don't get to grant further access. Surfaced as a "Manage Access" dialog in both `ManageEvents.tsx` and `mfe-events`' `MyEvents`.
 - `require_event_access()` (identical dependency duplicated in `event-service` and `payment-service`'s `auth.py`, since payment-service reads `event`/`event_permission` directly from its own DB connection — this repo's established cross-service direct-table-read pattern) replaces the old `require_role_or_organizer("admin","committee_member")` bypass on: all of `events.py`'s management routes (update/publish/cancel/complete/delete/announcements/ticket-types) and every per-event route in `funds.py`/`sponsors.py` (expenses, vendors, revenue-distribution, export, share-link, sponsorship create/update, refund approve/reject/process).
-- **Deliberately left at admin/committee_member** (not per-event data, out of scope): the sponsor *directory* CRUD, `GET /sponsors/{id}/sponsorships` (a sponsor's own cross-event view), `GET /sponsors/refunds` (global queue), and pre-existing cross-event operational consoles (`PaymentApprovals.tsx`, `RefundTasks.tsx`, `ReconciliationConsole.tsx`, `CollectorRegistry.tsx`).
+- **Deliberately left at admin/committee_member** (not per-event data, out of scope): the sponsor *directory* CRUD, `GET /sponsors/{id}/sponsorships` (a sponsor's own cross-event view), `GET /sponsors/refunds` (global queue), and pre-existing cross-event operational consoles (`PaymentApprovals.tsx`, `RefundTasks.tsx`, `ReconciliationConsole.tsx`).
 - **Backfill**: migration `021_event_permission_backfill.sql` granted every admin/committee_member `event_permission` on every event that existed before this shipped, so existing access wasn't suddenly revoked. Events created after that migration are isolated from creation — visible only to their organizer until explicitly shared.
 - **Deletion**: `DELETE /events/{id}` now also allows `completed` (previously draft-only), for the organizer/an approved member. Pre-launch decision (no production data yet): deletion **fully cascades** — registrations, tickets, payment records, expenses, sponsorships, everything tied to the event is removed together (migration `022_event_delete_cascade_payments.sql` changed `payment_transaction.event_id`'s FK from RESTRICT to CASCADE, which was the last thing blocking it).
 - `mfe-events`' `MyEvents` also has a per-event "Funds" view (finance summary, expense log, export/share-link) so an organizer has somewhere to see their own event's money without needing `/manage` access.
