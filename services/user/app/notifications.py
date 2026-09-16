@@ -20,6 +20,7 @@ import httpx
 from app.config import settings
 from app.email import send_notification_emails_sequential
 from app.splunk_logger import log_app_error
+from app import crypto
 
 
 def _mask_phone(phone: str) -> str:
@@ -42,12 +43,12 @@ async def notify_admins(
 
     for r in rows:
         await conn.execute(
-            "INSERT INTO notification (user_id, type, title, message, related_id) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO core.notification (user_id, type, title, message, related_id) VALUES ($1, $2, $3, $4, $5)",
             r["id"], type_, title, message, related_id,
         )
     return [
         {
-            "phone": r["phone"], "email": r["email"], "title": title,
+            "phone": crypto.decrypt(r["phone"]), "email": crypto.decrypt(r["email"]), "title": title,
             "notify_sms": r["notify_sms"], "notify_email": r["notify_email"], "notify_telegram": r["notify_telegram"],
         }
         for r in rows

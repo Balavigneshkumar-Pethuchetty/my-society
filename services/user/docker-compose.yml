@@ -48,6 +48,8 @@ services:
       OTP_BRIDGE_CLIENT_SECRET:               ${OTP_BRIDGE_CLIENT_SECRET:-}
       GMAIL_SMTP_USER:                        ${GMAIL_SMTP_USER:-}
       GMAIL_APP_PASSWORD:                     ${GMAIL_APP_PASSWORD:-}
+      PII_ENCRYPTION_KEY:                     ${PII_ENCRYPTION_KEY}
+      PII_HASH_KEY:                           ${PII_HASH_KEY}
       MINIO_ENDPOINT:            http://minio:9000
       MINIO_ACCESS_KEY:          ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY:          ${MINIO_ROOT_PASSWORD}

@@ -40,7 +40,7 @@ async def mark_all_read(
     async with pool.acquire() as conn:
         user_id = await _get_user_id(claims, conn)
         await conn.execute(
-            "UPDATE notification SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE",
+            "UPDATE core.notification SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE",
             user_id,
         )
 
@@ -67,16 +67,16 @@ async def list_notifications(
         where = " AND ".join(conditions)
 
         unread_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM notification WHERE user_id = $1 AND is_read = FALSE",
+            "SELECT COUNT(*) FROM core.notification WHERE user_id = $1 AND is_read = FALSE",
             user_id,
         )
         total = await conn.fetchval(
-            f"SELECT COUNT(*) FROM notification WHERE {where}", *params
+            f"SELECT COUNT(*) FROM core.notification WHERE {where}", *params
         )
         rows = await conn.fetch(
             f"""
             SELECT id, event_id, type, title, message, is_read, created_at
-            FROM notification
+            FROM core.notification
             WHERE {where}
             ORDER BY created_at DESC
             LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
@@ -100,7 +100,7 @@ async def mark_read(
     async with pool.acquire() as conn:
         user_id = await _get_user_id(claims, conn)
         row = await conn.fetchrow(
-            "UPDATE notification SET is_read = TRUE WHERE id = $1 AND user_id = $2 RETURNING id",
+            "UPDATE core.notification SET is_read = TRUE WHERE id = $1 AND user_id = $2 RETURNING id",
             notification_id, user_id,
         )
         if not row:

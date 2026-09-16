@@ -18,6 +18,7 @@ from app.models import (
 from app.notifications import notify_admins, send_channels
 from app.routes.users import _keycloak_delete_user
 from app.ticket_client import get_ticket_activity
+from app import crypto
 
 router = APIRouter()
 
@@ -83,8 +84,13 @@ async def _to_response(conn, row: dict) -> LeaveRequestResponse:
     has_pending_payment, blockers = (False, [])
     if row["status"] in ("pending", "approved") and row["user_id"]:
         has_pending_payment, blockers = await _leave_blockers(conn, row["user_id"])
+    # leave_request.user_email is a denormalized ciphertext snapshot (same as
+    # users.email — see the INSERT in create_leave_request below) — decrypt
+    # once here since every response path funnels through this helper.
+    data = dict(row)
+    data["user_email"] = crypto.decrypt(data.get("user_email"))
     return LeaveRequestResponse(
-        **dict(row),
+        **data,
         has_pending_payment=has_pending_payment,
         blockers=blockers,
     )
@@ -94,7 +100,7 @@ async def _notify(
     conn, user_id: UUID, type_: str, title: str, message: str, related_id: Optional[UUID] = None
 ) -> None:
     await conn.execute(
-        "INSERT INTO notification (user_id, type, title, message, related_id) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO core.notification (user_id, type, title, message, related_id) VALUES ($1, $2, $3, $4, $5)",
         user_id, type_, title, message, related_id,
     )
 
@@ -206,7 +212,7 @@ async def export_activity(
             user_id,
         )
         notifications = await conn.fetch(
-            "SELECT type, title, message, created_at FROM notification "
+            "SELECT type, title, message, created_at FROM core.notification "
             "WHERE user_id = $1 ORDER BY created_at DESC",
             user_id,
         )
@@ -226,8 +232,14 @@ async def export_activity(
         d["event_title"] = events.get(str(d.pop("event_id")), {}).get("title")
         return d
 
+    profile_dict = None
+    if profile:
+        profile_dict = dict(profile)
+        profile_dict["email"] = crypto.decrypt(profile_dict.get("email"))
+        profile_dict["phone"] = crypto.decrypt(profile_dict.get("phone"))
+
     return {
-        "profile": dict(profile) if profile else None,
+        "profile": profile_dict,
         "apartments": [dict(r) for r in apartments],
         "registrations": [_with_title(r) for r in registrations],
         "tickets": [_with_title(r) for r in tickets],
@@ -269,12 +281,12 @@ async def confirm_leave(
             # requests) can never be resolved once those rows are gone below — clear
             # them now instead of leaving permanently-orphaned cards in the popup.
             await conn.execute(
-                "DELETE FROM notification WHERE type = 'cancellation_requested' "
+                "DELETE FROM core.notification WHERE type = 'cancellation_requested' "
                 "AND related_id IN (SELECT id FROM registration_svc.registration WHERE user_id = $1)",
                 user["id"],
             )
             await conn.execute(
-                "DELETE FROM notification WHERE type IN ('refund_requested', 'payment_verification_requested') "
+                "DELETE FROM core.notification WHERE type IN ('refund_requested', 'payment_verification_requested') "
                 "AND related_id IN (SELECT id FROM payment_svc.payment_transaction WHERE user_id = $1)",
                 user["id"],
             )
@@ -375,7 +387,7 @@ async def approve_leave_request(
             admin["id"], admin["name"], request_id,
         )
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'leave_request_submitted' AND related_id = $1",
+            "DELETE FROM core.notification WHERE type = 'leave_request_submitted' AND related_id = $1",
             request_id,
         )
         message = (
@@ -387,7 +399,10 @@ async def approve_leave_request(
             await _notify(conn, row["user_id"], "leave_request_approved", "Leave Request Approved", message)
             user = await conn.fetchrow("SELECT phone, email FROM users WHERE id = $1", row["user_id"])
             if user:
-                recipients = [{"phone": user["phone"], "email": user["email"], "title": "Leave Request Approved"}]
+                recipients = [{
+                    "phone": crypto.decrypt(user["phone"]), "email": crypto.decrypt(user["email"]),
+                    "title": "Leave Request Approved",
+                }]
 
         response = await _to_response(conn, dict(row))
 
@@ -426,7 +441,7 @@ async def reject_leave_request(
             admin["id"], admin["name"], body.note, request_id,
         )
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'leave_request_submitted' AND related_id = $1",
+            "DELETE FROM core.notification WHERE type = 'leave_request_submitted' AND related_id = $1",
             request_id,
         )
         if row["user_id"]:
@@ -478,7 +493,7 @@ async def revoke_leave_request(
             admin["id"], admin["name"], note, request_id,
         )
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'leave_request_submitted' AND related_id = $1",
+            "DELETE FROM core.notification WHERE type = 'leave_request_submitted' AND related_id = $1",
             request_id,
         )
         await _notify(conn, row["user_id"], "leave_request_revoked", "Leave Request Revoked", note)

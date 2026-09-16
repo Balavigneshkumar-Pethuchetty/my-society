@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     gmail_app_password: str = ""
     smtp_from_name: str = "GM Global Techies Town"
 
+    # PII encryption at rest (users.phone/users.email — see PII_PRIVACY_PLAN.md).
+    # Two independent keys so a leak of one doesn't also break/expose the other:
+    # pii_encryption_key is base64 for exactly 32 raw bytes (AES-256-GCM), e.g.
+    # generated with `python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"`;
+    # pii_hash_key is an arbitrary secret string for the HMAC-SHA256 blind index.
+    # Never reuse either for anything else (JWT signing, internal_api_key, etc.).
+    # No default — required, same as db_password/internal_api_key: fail fast at
+    # startup if unset rather than silently at first phone/email access.
+    pii_encryption_key: str
+    pii_hash_key: str
+
     @property
     def database_url(self) -> str:
         return (

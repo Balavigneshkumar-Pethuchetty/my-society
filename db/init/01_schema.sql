@@ -10,6 +10,12 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";    -- trigram search on event titles
 
 -- ---------------------------------------------------------------------------
+-- CORE SCHEMA  (shared foundational tables: currency, exchange rates, notifications,
+-- oauth sessions — no single service owner, used across the platform)
+-- ---------------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS core;
+
+-- ---------------------------------------------------------------------------
 -- SOCIETY  (top-level tenant; supports multi-society SaaS later)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS society (
@@ -58,8 +64,17 @@ CREATE TABLE IF NOT EXISTS user_svc.users (
     id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     username            VARCHAR(255) UNIQUE,                -- set for phone-registered accounts
     name                VARCHAR(255) NOT NULL,
-    email               VARCHAR(255),                       -- nullable for phone-only accounts
-    phone               VARCHAR(20)  UNIQUE,                -- E.164 format: +91XXXXXXXXXX
+    -- email/phone: AES-256-GCM ciphertext (application-level, see
+    -- PII_PRIVACY_PLAN.md / db/migrations/038_encrypt_phone_email.sql) —
+    -- TEXT because base64 ciphertext is longer than the raw value; nullable
+    -- for phone-only / email-only accounts, same as before encryption.
+    email               TEXT,
+    phone               TEXT,
+    -- Deterministic HMAC-SHA256 blind index of the same value, keyed
+    -- separately from the AES key — lookups query these, never the
+    -- plaintext, so a value never transits through a SQL WHERE clause.
+    email_hash          TEXT,
+    phone_hash          TEXT,
     role                VARCHAR(50) NOT NULL DEFAULT 'resident',
                         -- 'admin' | 'committee_member' | 'resident' | 'security_guard' | 'sponsor'
     keycloak_sub        VARCHAR(255) UNIQUE,  -- Keycloak user UUID (sub claim)
@@ -69,8 +84,13 @@ CREATE TABLE IF NOT EXISTS user_svc.users (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Partial unique index on email (NULL is allowed, uniqueness enforced only when set)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON user_svc.users(email) WHERE email IS NOT NULL;
+-- Uniqueness (and lookup) moved to the hash columns — AES-GCM's random nonce
+-- means ciphertext for the same phone/email differs row to row, so a
+-- constraint on the plaintext columns themselves would no longer mean anything.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_hash_unique ON user_svc.users(phone_hash) WHERE phone_hash IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_hash_unique ON user_svc.users(email_hash) WHERE email_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_phone_hash ON user_svc.users(phone_hash) WHERE phone_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email_hash ON user_svc.users(email_hash) WHERE email_hash IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- USER_APARTMENTS  (many-to-many: a resident can own / be linked to multiple flats)
@@ -94,7 +114,10 @@ CREATE TABLE IF NOT EXISTS user_svc.admin_actions (
     admin_name          VARCHAR(255) NOT NULL,
     target_user_id      UUID        REFERENCES user_svc.users(id) ON DELETE SET NULL,
     target_user_name    VARCHAR(255) NOT NULL,
-    target_user_email   VARCHAR(255) NOT NULL,
+    -- Denormalized snapshot of users.email at action time — same AES-256-GCM
+    -- ciphertext as users.email (copied as-is, not separately encrypted), so
+    -- TEXT and nullable for the same reason (see users table above).
+    target_user_email   TEXT,
     action              VARCHAR(20) NOT NULL
                         CHECK (action IN ('approved','rejected','removed','revoked','role_changed')),
     role                VARCHAR(50),
@@ -109,7 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_actions_performed_at ON user_svc.admin_acti
 -- Enables "log out all devices" and refresh-token reuse detection.
 -- You can skip this and rely solely on Keycloak's session management.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS oauth_session (
+CREATE TABLE IF NOT EXISTS core.oauth_session (
     id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID        NOT NULL REFERENCES user_svc.users(id) ON DELETE CASCADE,
     access_token_jti    VARCHAR(255) NOT NULL UNIQUE,  -- JWT 'jti' claim
@@ -123,7 +146,7 @@ CREATE TABLE IF NOT EXISTS oauth_session (
 -- ---------------------------------------------------------------------------
 -- CURRENCY  (ISO 4217 lookup; seed with INR + common NRI currencies)
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS currency (
+CREATE TABLE IF NOT EXISTS core.currency (
     code        CHAR(3)     PRIMARY KEY,        -- 'INR', 'USD', 'GBP', …
     name        VARCHAR(100) NOT NULL,
     symbol      VARCHAR(10) NOT NULL,
@@ -136,10 +159,10 @@ CREATE TABLE IF NOT EXISTS currency (
 -- Both original and settled amounts on PAYMENT reference the rate locked
 -- at payment time — critical for accounting accuracy.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS exchange_rate (
+CREATE TABLE IF NOT EXISTS core.exchange_rate (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    from_currency   CHAR(3)     NOT NULL REFERENCES currency(code),
-    to_currency     CHAR(3)     NOT NULL REFERENCES currency(code),
+    from_currency   CHAR(3)     NOT NULL REFERENCES core.currency(code),
+    to_currency     CHAR(3)     NOT NULL REFERENCES core.currency(code),
     rate            NUMERIC(18,8) NOT NULL,
     source          VARCHAR(100) NOT NULL DEFAULT 'manual',   -- 'RBI'|'openexchangerates'|'manual'
     valid_from      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -187,7 +210,7 @@ CREATE TABLE IF NOT EXISTS event_svc.event (
     status          VARCHAR(50) NOT NULL DEFAULT 'draft',
                     -- 'draft' | 'published' | 'cancelled' | 'completed'
     ticket_price    NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    price_currency  CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    price_currency  CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     is_free         BOOLEAN     NOT NULL DEFAULT TRUE,
     venue_lat       DOUBLE PRECISION,
     venue_lng       DOUBLE PRECISION,
@@ -220,7 +243,7 @@ CREATE TABLE IF NOT EXISTS registration_svc.registration (
     user_id          UUID        NOT NULL REFERENCES user_svc.users(id),
     ticket_count     INTEGER     NOT NULL DEFAULT 1 CHECK (ticket_count > 0),
     total_amount     NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    display_currency CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    display_currency CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     status           VARCHAR(50) NOT NULL DEFAULT 'pending',
                      -- 'pending' | 'confirmed' | 'cancelled' | 'attended'
     qr_code          TEXT,                              -- base64 QR or short token
@@ -289,11 +312,11 @@ CREATE TABLE IF NOT EXISTS registration_svc.payment (
     gateway_order_id    VARCHAR(255),
     gateway_txn_id      VARCHAR(255) UNIQUE,
     original_amount     NUMERIC(10,2) NOT NULL,         -- amount shown to user
-    original_currency   CHAR(3)     NOT NULL REFERENCES currency(code),
+    original_currency   CHAR(3)     NOT NULL REFERENCES core.currency(code),
     settled_amount      NUMERIC(10,2) NOT NULL,         -- amount credited to bank (INR)
-    settled_currency    CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    settled_currency    CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     exchange_rate_used  NUMERIC(18,8) NOT NULL DEFAULT 1.0,
-    exchange_rate_id    UUID        REFERENCES exchange_rate(id),
+    exchange_rate_id    UUID        REFERENCES core.exchange_rate(id),
     status              VARCHAR(50) NOT NULL DEFAULT 'pending',
                         -- 'pending' | 'success' | 'failed' | 'refunded'
     gateway_response    JSONB,                          -- full webhook payload
@@ -309,9 +332,9 @@ CREATE TABLE IF NOT EXISTS registration_svc.refund (
     payment_id              UUID        NOT NULL REFERENCES registration_svc.payment(id),
     initiated_by            UUID        NOT NULL REFERENCES user_svc.users(id),
     original_refund_amount  NUMERIC(10,2) NOT NULL,
-    original_currency       CHAR(3)     NOT NULL REFERENCES currency(code),
+    original_currency       CHAR(3)     NOT NULL REFERENCES core.currency(code),
     settled_refund_amount   NUMERIC(10,2) NOT NULL,
-    settled_currency        CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    settled_currency        CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     reason                  TEXT,
     status                  VARCHAR(50) NOT NULL DEFAULT 'pending',
                             -- 'pending' | 'processed' | 'failed'
@@ -334,7 +357,7 @@ CREATE TABLE IF NOT EXISTS event_svc.announcement (
 -- ---------------------------------------------------------------------------
 -- NOTIFICATION  (per-user inbox; drives the bell icon in the UI)
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS notification (
+CREATE TABLE IF NOT EXISTS core.notification (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID        NOT NULL REFERENCES user_svc.users(id) ON DELETE CASCADE,
     event_id    UUID        REFERENCES event_svc.event(id) ON DELETE SET NULL,
@@ -350,7 +373,7 @@ CREATE TABLE IF NOT EXISTS notification (
                              -- "pending action" notification once resolved
 );
 
-CREATE INDEX IF NOT EXISTS idx_notification_related_id ON notification(related_id);
+CREATE INDEX IF NOT EXISTS idx_notification_related_id ON core.notification(related_id);
 
 -- ---------------------------------------------------------------------------
 -- LEAVE_REQUEST  (self-service "leave society": resident requests -> admin
@@ -362,7 +385,9 @@ CREATE TABLE IF NOT EXISTS user_svc.leave_request (
     id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id           UUID        REFERENCES user_svc.users(id) ON DELETE SET NULL,
     user_name         VARCHAR(255) NOT NULL,
-    user_email        VARCHAR(255),
+    -- Ciphertext copy of users.email at request time (see PII_PRIVACY_PLAN.md) —
+    -- TEXT for the same reason as users.email itself.
+    user_email        TEXT,
     reason            TEXT,
     status            VARCHAR(20) NOT NULL DEFAULT 'pending'
                       CHECK (status IN ('pending','approved','rejected','revoked','completed')),
@@ -403,8 +428,9 @@ CREATE INDEX IF NOT EXISTS idx_otp_login_sessions_expires_at ON user_svc.otp_log
 
 -- users
 CREATE INDEX IF NOT EXISTS idx_users_keycloak_sub  ON user_svc.users(keycloak_sub);
-CREATE INDEX IF NOT EXISTS idx_users_email         ON user_svc.users(email) WHERE email IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_users_phone         ON user_svc.users(phone) WHERE phone IS NOT NULL;
+-- email/phone lookups now go through email_hash/phone_hash (see the users
+-- table definition above) — a plain index on the ciphertext columns
+-- themselves would be useless, since equality is never queried on them.
 CREATE INDEX IF NOT EXISTS idx_users_username      ON user_svc.users(username) WHERE username IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_role          ON user_svc.users(role);
 
@@ -428,15 +454,15 @@ CREATE INDEX IF NOT EXISTS idx_pay_status           ON registration_svc.payment(
 CREATE INDEX IF NOT EXISTS idx_pay_gateway_txn      ON registration_svc.payment(gateway_txn_id);
 
 -- notification
-CREATE INDEX IF NOT EXISTS idx_notif_user_unread    ON notification(user_id, is_read)
+CREATE INDEX IF NOT EXISTS idx_notif_user_unread    ON core.notification(user_id, is_read)
     WHERE is_read = FALSE;
 
 -- exchange_rate
-CREATE INDEX IF NOT EXISTS idx_exrate_lookup        ON exchange_rate(from_currency, to_currency, valid_from DESC);
+CREATE INDEX IF NOT EXISTS idx_exrate_lookup        ON core.exchange_rate(from_currency, to_currency, valid_from DESC);
 
 -- oauth_session
-CREATE INDEX IF NOT EXISTS idx_session_user         ON oauth_session(user_id);
-CREATE INDEX IF NOT EXISTS idx_session_expires      ON oauth_session(expires_at);
+CREATE INDEX IF NOT EXISTS idx_session_user         ON core.oauth_session(user_id);
+CREATE INDEX IF NOT EXISTS idx_session_expires      ON core.oauth_session(expires_at);
 
 -- =============================================================================
 -- SPONSOR, EVENT_SPONSORSHIP, SPONSORSHIP_REFUND, EVENT_EXPENSE, VENDOR,
@@ -477,7 +503,7 @@ CREATE TABLE IF NOT EXISTS payment_svc.event_sponsorship (
     event_id            UUID        NOT NULL REFERENCES event_svc.event(id) ON DELETE CASCADE,
     sponsor_id          UUID        NOT NULL REFERENCES payment_svc.sponsor(id) ON DELETE CASCADE,
     amount              NUMERIC(12,2) NOT NULL,
-    currency_code       CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    currency_code       CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     status              VARCHAR(50) NOT NULL DEFAULT 'pledged',
                         -- 'pledged' | 'received' | 'refund_requested' | 'refunded'
     payment_reference   VARCHAR(255),
@@ -495,7 +521,7 @@ CREATE TABLE IF NOT EXISTS payment_svc.sponsorship_refund (
     sponsorship_id      UUID        NOT NULL REFERENCES payment_svc.event_sponsorship(id) ON DELETE CASCADE,
     requested_by        UUID        NOT NULL REFERENCES user_svc.users(id),
     amount              NUMERIC(12,2) NOT NULL,
-    currency_code       CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    currency_code       CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     reason              TEXT,
     status              VARCHAR(50) NOT NULL DEFAULT 'pending',
                         -- 'pending' | 'approved' | 'rejected' | 'processed'
@@ -514,7 +540,7 @@ CREATE TABLE IF NOT EXISTS payment_svc.event_expense (
     event_id        UUID        NOT NULL REFERENCES event_svc.event(id) ON DELETE CASCADE,
     description     VARCHAR(255) NOT NULL,
     amount          NUMERIC(10,2) NOT NULL,
-    currency_code   CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    currency_code   CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     category        VARCHAR(50) NOT NULL DEFAULT 'other',
                     -- 'venue' | 'catering' | 'equipment' | 'marketing' | 'staff' | 'other'
     receipt_url     TEXT,
@@ -622,7 +648,7 @@ CREATE TABLE IF NOT EXISTS payment_svc.vendor_revenue_distribution (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id        UUID        NOT NULL REFERENCES event_svc.event(id) ON DELETE CASCADE,
     total_pool      NUMERIC(12,2) NOT NULL DEFAULT 0.00,
-    currency_code   CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES currency(code),
+    currency_code   CHAR(3)     NOT NULL DEFAULT 'INR' REFERENCES core.currency(code),
     status          VARCHAR(50) NOT NULL DEFAULT 'draft',
                     -- 'draft' | 'approved' | 'distributed'
     approved_by     UUID        REFERENCES user_svc.users(id),
@@ -1001,7 +1027,7 @@ END $$;
 
 GRANT USAGE ON SCHEMA event_svc TO event_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA event_svc TO event_role;
-ALTER ROLE event_role SET search_path = event_svc, public;
+ALTER ROLE event_role SET search_path = event_svc, core, public;
 
 -- `users` grant removed (step 3, DB_ISOLATION_PLAN.md): event-service's own
 -- code no longer touches `users` directly (converted to user-service's API
@@ -1010,7 +1036,9 @@ ALTER ROLE event_role SET search_path = event_svc, public;
 -- of migration 037 (table-level GRANT alone isn't reachable without it).
 GRANT USAGE ON SCHEMA registration_svc TO event_role;
 GRANT SELECT ON registration_svc.registration TO event_role;
-GRANT SELECT, INSERT ON notification TO event_role;
+GRANT USAGE ON SCHEMA core TO event_role;
+GRANT SELECT, INSERT ON core.notification TO event_role;
+GRANT SELECT ON core.currency, core.exchange_rate TO event_role;
 
 -- ---------------------------------------------------------------------------
 -- TICKET_ROLE  (see db/migrations/034_ticket_service_schema_isolation.sql and
@@ -1034,7 +1062,7 @@ END $$;
 
 GRANT USAGE ON SCHEMA ticket_svc TO ticket_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ticket_svc TO ticket_role;
-ALTER ROLE ticket_role SET search_path = ticket_svc, public;
+ALTER ROLE ticket_role SET search_path = ticket_svc, core, public;
 
 -- Table-level GRANT alone isn't reachable without USAGE on the table's schema
 -- too (unlike `public`, which every role gets USAGE on by default) — payment_svc
@@ -1045,6 +1073,8 @@ GRANT SELECT ON payment_svc.payment_audit_log, payment_svc.payment_transaction T
 GRANT USAGE ON SCHEMA registration_svc TO ticket_role;
 GRANT SELECT, UPDATE ON registration_svc.registration TO ticket_role;
 GRANT SELECT ON registration_svc.registration_item, registration_svc.payment TO ticket_role;
+GRANT USAGE ON SCHEMA core TO ticket_role;
+GRANT SELECT ON core.currency, core.exchange_rate TO ticket_role;
 
 -- ---------------------------------------------------------------------------
 -- USER_ROLE  (see db/migrations/035_user_service_schema_isolation.sql and
@@ -1070,9 +1100,10 @@ END $$;
 
 GRANT USAGE ON SCHEMA user_svc TO user_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA user_svc TO user_role;
-ALTER ROLE user_role SET search_path = user_svc, public;
+ALTER ROLE user_role SET search_path = user_svc, core, public;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON notification TO user_role;
+GRANT USAGE ON SCHEMA core TO user_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON core.notification TO user_role;
 -- Same USAGE requirement as ticket_role above — new as of migration 036 (payment_svc)
 -- and 037 (registration_svc).
 GRANT USAGE ON SCHEMA payment_svc TO user_role;
@@ -1110,13 +1141,15 @@ END $$;
 
 GRANT USAGE ON SCHEMA payment_svc TO payment_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA payment_svc TO payment_role;
-ALTER ROLE payment_role SET search_path = payment_svc, public;
+ALTER ROLE payment_role SET search_path = payment_svc, core, public;
 
 -- USAGE grant on registration_svc is new as of migration 037.
 GRANT USAGE ON SCHEMA registration_svc TO payment_role;
 GRANT SELECT, UPDATE ON registration_svc.registration TO payment_role;
 GRANT SELECT ON registration_svc.registration_item TO payment_role;
-GRANT INSERT, DELETE ON notification TO payment_role;
+GRANT USAGE ON SCHEMA core TO payment_role;
+GRANT SELECT ON core.currency, core.exchange_rate TO payment_role;
+GRANT INSERT, DELETE ON core.notification TO payment_role;
 GRANT SELECT ON v_event_finance TO payment_role;
 
 -- ---------------------------------------------------------------------------
@@ -1143,8 +1176,10 @@ END $$;
 
 GRANT USAGE ON SCHEMA registration_svc TO registration_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA registration_svc TO registration_role;
-ALTER ROLE registration_role SET search_path = registration_svc, public;
+ALTER ROLE registration_role SET search_path = registration_svc, core, public;
 
 GRANT USAGE ON SCHEMA payment_svc TO registration_role;
 GRANT SELECT, UPDATE ON payment_svc.payment_transaction TO registration_role;
 GRANT INSERT ON payment_svc.payment_audit_log TO registration_role;
+GRANT USAGE ON SCHEMA core TO registration_role;
+GRANT SELECT ON core.currency, core.exchange_rate TO registration_role;

@@ -78,7 +78,7 @@ async def notify_refund_processed(
         f"\"{event['title']}\" has been processed by {actor_name}. Details: {link}"
     )
     await conn.execute(
-        "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
+        "INSERT INTO core.notification (user_id, event_id, type, title, message, related_id) "
         "VALUES ($1::uuid, $2::uuid, 'refund_processed', 'Refund processed', $3, $4::uuid)",
         row["user_id"], row["event_id"], message, row["txn_id"],
     )
@@ -86,12 +86,12 @@ async def notify_refund_processed(
     # cancellation, the paired "Registration cancelled" FYI — are both fully
     # resolved now, so clear them out of the admin/organizer notification popup.
     await conn.execute(
-        "DELETE FROM notification WHERE type = 'refund_requested' AND related_id = $1::uuid",
+        "DELETE FROM core.notification WHERE type = 'refund_requested' AND related_id = $1::uuid",
         row["txn_id"],
     )
     if row["registration_id"]:
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'cancellation_requested' AND related_id = $1::uuid",
+            "DELETE FROM core.notification WHERE type = 'cancellation_requested' AND related_id = $1::uuid",
             row["registration_id"],
         )
     return [{
@@ -144,14 +144,14 @@ async def notify_payment_verdict(
         message += f"\n\nReviewer's comment: {remark}"
 
     await conn.execute(
-        "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
+        "INSERT INTO core.notification (user_id, event_id, type, title, message, related_id) "
         "VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid)",
         row["user_id"], row["event_id"], type_, title, message, row["txn_id"],
     )
     # Verified or rejected — the reviewer's action item is resolved either way,
     # so clear the "Payment verification requested" card from their popup.
     await conn.execute(
-        "DELETE FROM notification WHERE type = 'payment_verification_requested' AND related_id = $1::uuid",
+        "DELETE FROM core.notification WHERE type = 'payment_verification_requested' AND related_id = $1::uuid",
         row["txn_id"],
     )
     return [{

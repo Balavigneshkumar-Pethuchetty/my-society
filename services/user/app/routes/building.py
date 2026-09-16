@@ -5,6 +5,7 @@ from asyncpg import Pool
 
 from app.database import get_pool
 from app.auth import get_current_claims, require_role
+from app import crypto
 from app.models import (
     HierarchyLevel,
     HierarchyConfigRequest,
@@ -271,7 +272,10 @@ async def _build_request_response(conn, row: dict) -> UnitRequestResponse:
         id=row["id"],
         user_id=row["user_id"],
         user_name=row["user_name"],
-        user_email=row.get("user_email"),
+        # Centralized decrypt point — every caller below reads users.email
+        # directly (not via users.py's _row_to_user), so it arrives here
+        # still as ciphertext.
+        user_email=crypto.decrypt(row.get("user_email")),
         node_id=row["node_id"],
         notes=row["notes"],
         type=row.get("type", "add"),

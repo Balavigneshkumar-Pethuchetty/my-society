@@ -12,6 +12,7 @@ import httpx
 from app.database import get_pool
 from app.auth import get_current_claims, require_role
 from app.config import settings
+from app import crypto
 from app.object_storage import delete_object, upload_bytes
 from app.notifications import notify_admins, send_channels
 from app.otp_bridge import get_oidc_token_for_user
@@ -52,11 +53,13 @@ router = APIRouter()
 async def forgot_password(body: ForgotPasswordRequest, pool: Pool = Depends(get_pool)):
     email = body.email.strip().lower()
 
-    # Check local DB for is_active / identity_provider guards
+    # Check local DB for is_active / identity_provider guards. email is user
+    # input here (not read back from a ciphertext column), so only the lookup
+    # needs the blind index — nothing to decrypt.
     async with pool.acquire() as conn:
         db_user = await conn.fetchrow(
-            "SELECT id, is_active, identity_provider FROM users WHERE email = $1",
-            email,
+            "SELECT id, is_active, identity_provider FROM users WHERE email_hash = $1",
+            crypto.blind_index(email),
         )
 
     # If found in local DB, apply guards; otherwise fall through to Keycloak lookup
@@ -180,13 +183,17 @@ async def _fetch_user_units(conn, user_id) -> list:
 
 
 def _row_to_user(row, apartments: list, unit_node_ids: list = []) -> UserResponse:
+    # Single centralized decrypt point — every endpoint that returns a
+    # UserResponse (including internal.py's by-sub/by-ids/by-email, which
+    # import this helper) goes through here, so email/phone come back to
+    # callers as plaintext exactly like before encryption was added.
     return UserResponse(
         id=row["id"],
         apartments=apartments,
         username=row["username"],
         name=row["name"],
-        email=row["email"],
-        phone=row["phone"],
+        email=crypto.decrypt(row["email"]),
+        phone=crypto.decrypt(row["phone"]),
         avatar_url=row["avatar_url"],
         email_verified=row["email_verified"],
         phone_verified=row["phone_verified"],
@@ -228,6 +235,8 @@ async def sync_user(
         raise HTTPException(status_code=400, detail="Token missing 'sub' claim")
 
     email = email or None  # normalise empty string to NULL
+    email_ciphertext = crypto.encrypt(email)
+    email_hash = crypto.blind_index(email)
 
     async with pool.acquire() as conn:
         # Check if this phone-registered user already exists (keycloak_sub match)
@@ -236,15 +245,16 @@ async def sync_user(
         # go stale within the current session between token refreshes (~60s).
         upsert = await conn.fetchrow(
             """
-            INSERT INTO users (name, email, keycloak_sub, role, is_active, identity_provider, email_verified)
-            VALUES ($1, $2, $3, 'resident', FALSE, 'keycloak', $4)
+            INSERT INTO users (name, email, email_hash, keycloak_sub, role, is_active, identity_provider, email_verified)
+            VALUES ($1, $2, $3, $4, 'resident', FALSE, 'keycloak', $5)
             ON CONFLICT (keycloak_sub) DO UPDATE
-                SET name  = EXCLUDED.name,
-                    email = COALESCE(EXCLUDED.email, users.email),
+                SET name       = EXCLUDED.name,
+                    email      = COALESCE(EXCLUDED.email, users.email),
+                    email_hash = COALESCE(EXCLUDED.email_hash, users.email_hash),
                     email_verified = EXCLUDED.email_verified
             RETURNING id, (xmax = 0) AS is_new
             """,
-            name, email, sub, email_verified,
+            name, email_ciphertext, email_hash, sub, email_verified,
         )
         if upsert is None:
             raise HTTPException(status_code=500, detail="Sync upsert returned no row")
@@ -325,10 +335,14 @@ async def update_me(
         raise HTTPException(status_code=400, detail="No fields to update")
 
     async with pool.acquire() as conn:
+        # Computed once from the plaintext value while it's still in hand —
+        # everything below compares/stores the hash, never the plaintext itself.
+        new_phone_hash = crypto.blind_index(updates["phone"]) if "phone" in updates else None
+
         if updates.get("phone"):
             taken = await conn.fetchval(
-                "SELECT 1 FROM users WHERE phone = $1 AND keycloak_sub != $2",
-                updates["phone"], claims["sub"],
+                "SELECT 1 FROM users WHERE phone_hash = $1 AND keycloak_sub != $2",
+                new_phone_hash, claims["sub"],
             )
             if taken:
                 raise HTTPException(status_code=409, detail="Phone number already registered to another user")
@@ -338,10 +352,14 @@ async def update_me(
         # name alone still resends the unchanged phone in the request body).
         if "phone" in updates:
             current = await conn.fetchrow(
-                "SELECT phone FROM users WHERE keycloak_sub = $1", claims["sub"]
+                "SELECT phone_hash FROM users WHERE keycloak_sub = $1", claims["sub"]
             )
-            if current and updates["phone"] != current["phone"]:
+            if current and new_phone_hash != current["phone_hash"]:
                 updates["phone_verified"] = False
+            # Encrypt only now that the plaintext comparisons above are done —
+            # the column write itself is always ciphertext + hash together.
+            updates["phone"] = crypto.encrypt(updates["phone"])
+            updates["phone_hash"] = new_phone_hash
 
         set_parts = [f"{col} = ${i + 2}" for i, col in enumerate(updates)]
         values = list(updates.values())
@@ -604,7 +622,8 @@ async def request_phone_verification(
         )
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if not user["phone"]:
+    phone = crypto.decrypt(user["phone"])
+    if not phone:
         raise HTTPException(status_code=400, detail="No phone number on file")
     if user["phone_verified"]:
         raise HTTPException(status_code=400, detail="Phone already verified")
@@ -613,7 +632,7 @@ async def request_phone_verification(
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
                 f"{settings.auth_service_url}/api/otp/request",
-                json={"phone": user["phone"], "channel": body.channel},
+                json={"phone": phone, "channel": body.channel},
                 headers={"X-API-Key": settings.auth_service_api_key},
             )
     except (httpx.ConnectError, httpx.TimeoutException):
@@ -703,10 +722,10 @@ async def _eligible_login_user(conn, phone: str):
     return await conn.fetchrow(
         """
         SELECT id, keycloak_sub FROM users
-        WHERE phone = $1 AND phone_verified = TRUE AND is_active = TRUE
+        WHERE phone_hash = $1 AND phone_verified = TRUE AND is_active = TRUE
               AND keycloak_sub IS NOT NULL
         """,
-        phone,
+        crypto.blind_index(phone),
     )
 
 
@@ -808,7 +827,10 @@ async def verify_phone_login(body: PhoneLoginVerifyRequest, pool: Pool = Depends
             INSERT INTO otp_login_sessions (session_token_hash, keycloak_sub, phone, expires_at)
             VALUES ($1, $2, $3, $4)
             """,
-            session_hash, user["keycloak_sub"], verified_phone, expires_at,
+            # Encrypted at rest same as users.phone — this table isn't looked
+            # up by phone value (only by session_token_hash), so no blind
+            # index needed here, just the ciphertext.
+            session_hash, user["keycloak_sub"], crypto.encrypt(verified_phone), expires_at,
         )
 
     return PhoneLoginVerifyResponse(
@@ -1142,7 +1164,7 @@ async def get_admin_stats(pool: Pool = Depends(get_pool)):
         ) for r in breakdown],
         recent_actions=[AdminActionResponse(
             id=r["id"], admin_name=r["admin_name"],
-            target_user_name=r["target_user_name"], target_user_email=r["target_user_email"],
+            target_user_name=r["target_user_name"], target_user_email=crypto.decrypt(r["target_user_email"]),
             action=r["action"], role=r["role"], performed_at=r["performed_at"],
         ) for r in recent],
     )
@@ -1197,7 +1219,7 @@ async def resident_directory(pool: Pool = Depends(get_pool)):
             """
         )
     return ResidentDirectoryResponse(items=[
-        ResidentDirectoryEntry(id=r["id"], name=r["name"], phone=r["phone"], unit_label=r["unit_label"])
+        ResidentDirectoryEntry(id=r["id"], name=r["name"], phone=crypto.decrypt(r["phone"]), unit_label=r["unit_label"])
         for r in rows
     ])
 
@@ -1495,7 +1517,7 @@ async def approve_user(
 
         await _record_action(conn, claims, user_id, row["name"], row["email"], "approved", body.role)
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'new_registration' AND related_id = $1", user_id
+            "DELETE FROM core.notification WHERE type = 'new_registration' AND related_id = $1", user_id
         )
 
         full = await conn.fetchrow(
@@ -1525,7 +1547,7 @@ async def reject_user(
         if not user_row:
             raise HTTPException(status_code=404, detail="Pending user not found")
         await conn.execute(
-            "DELETE FROM notification WHERE type = 'new_registration' AND related_id = $1", user_id
+            "DELETE FROM core.notification WHERE type = 'new_registration' AND related_id = $1", user_id
         )
         await conn.execute("DELETE FROM users WHERE id = $1", user_id)
         await _record_action(conn, claims, None, user_row["name"], user_row["email"], "rejected")

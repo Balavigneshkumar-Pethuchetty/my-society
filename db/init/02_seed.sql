@@ -14,18 +14,18 @@ TRUNCATE TABLE
     payment_svc.event_vendor, payment_svc.vendor,
     registration_svc.complimentary_ticket, payment_svc.event_expense,
     payment_svc.sponsorship_refund, payment_svc.event_sponsorship, payment_svc.sponsor,
-    notification, event_svc.announcement, registration_svc.refund, registration_svc.payment,
+    core.notification, event_svc.announcement, registration_svc.refund, registration_svc.payment,
     registration_svc.registration, event_svc.event, event_svc.event_category,
-    user_svc.admin_actions, oauth_session, user_svc.user_apartments,
+    user_svc.admin_actions, core.oauth_session, user_svc.user_apartments,
     user_svc.users, user_svc.apartment, society,
     user_svc.structure_nodes, user_svc.building_hierarchy_config,
-    exchange_rate, currency
+    core.exchange_rate, core.currency
 RESTART IDENTITY CASCADE;
 
 -- ---------------------------------------------------------------------------
 -- CURRENCY
 -- ---------------------------------------------------------------------------
-INSERT INTO currency (code, name, symbol, is_active, is_base) VALUES
+INSERT INTO core.currency (code, name, symbol, is_active, is_base) VALUES
     ('INR', 'Indian Rupee',     '₹',   TRUE, TRUE),
     ('USD', 'US Dollar',        '$',   TRUE, FALSE),
     ('GBP', 'British Pound',    '£',   TRUE, FALSE),
@@ -36,7 +36,7 @@ INSERT INTO currency (code, name, symbol, is_active, is_base) VALUES
 -- ---------------------------------------------------------------------------
 -- EXCHANGE RATE
 -- ---------------------------------------------------------------------------
-INSERT INTO exchange_rate (id, from_currency, to_currency, rate, source, valid_from) VALUES
+INSERT INTO core.exchange_rate (id, from_currency, to_currency, rate, source, valid_from) VALUES
     ('71100000-0000-0000-0000-000000000001', 'USD', 'INR', 83.50000000, 'manual', NOW()),
     ('71100000-0000-0000-0000-000000000002', 'GBP', 'INR', 106.2000000, 'manual', NOW()),
     ('71100000-0000-0000-0000-000000000003', 'EUR', 'INR', 91.30000000, 'manual', NOW()),

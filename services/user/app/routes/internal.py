@@ -16,6 +16,7 @@ from app.database import get_pool
 from app.auth import require_internal_key
 from app.models import UserResponse
 from app.routes.users import _USER_COLS, _row_to_user, _fetch_user_apartments
+from app import crypto
 
 router = APIRouter(dependencies=[Depends(require_internal_key)])
 
@@ -106,8 +107,8 @@ async def get_by_email(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.email = $1",
-            email,
+            f"SELECT {_USER_COLS} FROM users u WHERE u.email_hash = $1",
+            crypto.blind_index(email),
         )
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
@@ -253,7 +254,7 @@ async def create_notification(
         if not exists:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute(
-            "INSERT INTO notification (user_id, event_id, type, title, message, related_id) "
+            "INSERT INTO core.notification (user_id, event_id, type, title, message, related_id) "
             "VALUES ($1, $2, $3, $4, $5, $6)",
             user_id, UUID(body.event_id) if body.event_id else None,
             body.type, body.title, body.message,
