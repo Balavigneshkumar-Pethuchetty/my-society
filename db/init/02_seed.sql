@@ -164,54 +164,54 @@ INSERT INTO user_svc.users (id, name, email, phone, role, keycloak_sub, identity
     ('31100000-0000-0000-0000-000000000001',
      'Rajesh Iyer', 'rajesh.iyer@pvh-blr.in', '+91-98450-11111',
      'admin', 'a1000000-0000-0000-0000-000000000001', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000003'),  -- A-W1-F2-201
+     TRUE, NULL),  -- A-W1-F2-201 (structure_nodes created via migrations)
 
     -- ── Active: committee ─────────────────────────────────────────────────
     ('31100000-0000-0000-0000-000000000002',
      'Meera Krishnan', 'meera.krishnan@gmail.com', '+91-99001-22222',
      'committee_member', 'a1000000-0000-0000-0000-000000000002', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000001'),  -- A-W1-F1-101 (primary; also owns 202 via user_apartments)
+     TRUE, NULL),  -- A-W1-F1-101 (structure_nodes created via migrations)
 
     -- ── Active: residents ─────────────────────────────────────────────────
     ('31100000-0000-0000-0000-000000000003',
      'Arjun Sharma', 'arjun.sharma@gmail.com', '+91-98765-33333',
      'resident', 'a1000000-0000-0000-0000-000000000003', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000002'),  -- A-W1-F1-102
+     TRUE, NULL),  -- A-W1-F1-102
 
     ('31100000-0000-0000-0000-000000000004',
      'Priya Sharma', 'priya.nair@gmail.com', '+91-97789-44444',
      'resident', 'a1000000-0000-0000-0000-000000000004', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000002'),  -- A-W1-F1-102 (Arjun's wife, same flat)
+     TRUE, NULL),  -- A-W1-F1-102 (Arjun's wife, same flat)
 
     ('31100000-0000-0000-0000-000000000005',
      'Sanjay Mehta', 'sanjay.mehta@outlook.com', '+91-90001-55555',
      'resident', 'a1000000-0000-0000-0000-000000000005', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000005'),  -- A-W2-F1-101
+     TRUE, NULL),  -- A-W2-F1-101
 
     ('31100000-0000-0000-0000-000000000006',
      'Vikram Patel', 'vikram.patel@gmail.com', '+1-415-999-6666',
      'resident', 'a1000000-0000-0000-0000-000000000006', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000009'),  -- B-W1-F1-101 (NRI owner)
+     TRUE, NULL),  -- B-W1-F1-101 (NRI owner)
 
     ('31100000-0000-0000-0000-000000000008',
      'Balavigneshkumar Pethuchetty', 'balavigneskumar@gmail.com', NULL,
      'admin', 'a1000000-0000-0000-0000-000000000008', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000007'),  -- A-W2-F2-201
+     TRUE, NULL),  -- A-W2-F2-201
 
     ('31100000-0000-0000-0000-000000000009',
      'Suresh Menon', 'suresh.menon@gmail.com', '+91-98123-77777',
      'resident', 'a1000000-0000-0000-0000-000000000009', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000007'),  -- A-W2-F2-201 (Deepa's husband, same flat)
+     TRUE, NULL),  -- A-W2-F2-201 (Deepa's husband, same flat)
 
     ('31100000-0000-0000-0000-000000000010',
      'Ananya Krishnaswamy', 'ananya.k@gmail.com', '+91-97654-88888',
      'resident', 'a1000000-0000-0000-0000-000000000010', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000011'),  -- B-W1-F2-201
+     TRUE, NULL),  -- B-W1-F2-201
 
     ('31100000-0000-0000-0000-000000000011',
      'Kiran Rao', 'kiran.rao@gmail.com', '+91-96543-99999',
      'resident', 'a1000000-0000-0000-0000-000000000011', 'keycloak',
-     TRUE, 'd0000000-0000-0000-0000-000000000013'),  -- B-W2-F1-101
+     TRUE, NULL),  -- B-W2-F1-101
 
     -- ── Active: sponsor — no flat ──────────────────────────────────────────
     ('31100000-0000-0000-0000-000000000007',
@@ -524,7 +524,7 @@ INSERT INTO event_svc.announcement (id, event_id, author_id, title, body, sent_a
 -- ---------------------------------------------------------------------------
 -- NOTIFICATION
 -- ---------------------------------------------------------------------------
-INSERT INTO notification (id, user_id, event_id, type, title, message, is_read) VALUES
+INSERT INTO core.notification (id, user_id, event_id, type, title, message, is_read) VALUES
 
     ('b1100000-0000-0000-0000-000000000001',
      '31100000-0000-0000-0000-000000000003',
@@ -836,7 +836,7 @@ INSERT INTO registration_svc.registration_item (id, registration_id, ticket_type
 -- ---------------------------------------------------------------------------
 -- Sponsor notification
 -- ---------------------------------------------------------------------------
-INSERT INTO notification (id, user_id, event_id, type, title, message, is_read) VALUES
+INSERT INTO core.notification (id, user_id, event_id, type, title, message, is_read) VALUES
     ('b1100000-0000-0000-0000-000000000009',
      '31100000-0000-0000-0000-000000000007',
      '51100000-0000-0000-0000-000000000001',
