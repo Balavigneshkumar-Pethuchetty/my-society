@@ -53,6 +53,7 @@ interface StructureNode {
 interface DbUser {
   id: string;
   name: string;
+  username: string | null;
   email: string | null;
   phone: string | null;
   role: string;
@@ -65,6 +66,7 @@ interface UnitRequest {
   id: string;
   user_id: string;
   user_name: string;
+  user_username: string | null;
   user_email: string | null;
   node_id: string;
   notes: string | null;
@@ -332,7 +334,7 @@ function MembersTab({ token, nodes, nodesLoading }: MembersTabProps) {
                 </Avatar>
                 <Box sx={{ flex: 1 }}>
                   <Typography fontWeight={600} fontSize={14}>{u.name}</Typography>
-                  <Typography fontSize={12} color="text.secondary">{u.email}</Typography>
+                  <Typography fontSize={12} color="text.secondary">@{u.username || 'user'}</Typography>
                 </Box>
                 <Chip label={ROLE_LABEL[u.role] ?? u.role} size="small"
                   sx={{ bgcolor: ROLE_COLOR[u.role] ?? '#64748b', color: '#fff', fontWeight: 600, fontSize: 11 }} />
@@ -384,7 +386,7 @@ function MembersTab({ token, nodes, nodesLoading }: MembersTabProps) {
                       </Avatar>
                       <Box>
                         <Typography fontSize={13} fontWeight={600}>{u.name}</Typography>
-                        <Typography fontSize={11} color="text.secondary">{u.email}</Typography>
+                        <Typography fontSize={11} color="text.secondary">@{u.username || 'user'}</Typography>
                       </Box>
                     </Box>
                   </TableCell>
@@ -542,7 +544,7 @@ function RequestsTab({ token, nodes, nodesLoading }: RequestsTabProps) {
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
                   <Box>
                     <Typography fontWeight={600} fontSize={14}>{req.user_name}</Typography>
-                    <Typography fontSize={12} color="text.secondary">{req.user_email}</Typography>
+                    <Typography fontSize={12} color="text.secondary">@{req.user_username || 'user'}</Typography>
                   </Box>
                   <StatusChip status={req.status} />
                 </Box>
@@ -598,7 +600,7 @@ function RequestsTab({ token, nodes, nodesLoading }: RequestsTabProps) {
                   <TableRow key={req.id} hover>
                     <TableCell>
                       <Typography fontSize={13} fontWeight={600}>{req.user_name}</Typography>
-                      <Typography fontSize={11} color="text.secondary">{req.user_email}</Typography>
+                      <Typography fontSize={11} color="text.secondary">@{req.user_username || 'user'}</Typography>
                     </TableCell>
                     <TableCell>
                       <TypeChip type={req.type ?? 'add'} />

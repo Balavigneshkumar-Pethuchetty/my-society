@@ -21,7 +21,7 @@ import { AdminSidebar } from '../components/AdminSidebar';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface DbUser {
-  id: string; name: string; email: string;
+  id: string; name: string; username: string | null; email: string;
   role: string; is_active: boolean; created_at: string;
 }
 
@@ -32,7 +32,7 @@ interface AdminBreakdown {
 
 interface AdminAction {
   id: string; admin_name: string;
-  target_user_name: string; target_user_email: string;
+  target_user_name: string; target_user_username: string | null; target_user_email: string;
   action: string; role?: string; performed_at: string;
 }
 
@@ -124,7 +124,7 @@ function PendingUserCard({ u, busy, roleValue, onRoleChange, onApprove, onReject
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography fontWeight={700} fontSize={15}>{u.name}</Typography>
-          <Typography fontSize={12} color="text.secondary" noWrap>{u.email}</Typography>
+          <Typography fontSize={12} color="text.secondary" noWrap>@{u.username || 'user'}</Typography>
           <Typography fontSize={11} color="warning.main" mt={0.25}>
             {new Date(u.created_at).toLocaleDateString()}
           </Typography>
@@ -177,7 +177,7 @@ function ActiveUserCard({ u, busy, pendingRole, onRoleChange, onSaveRole, onRevo
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography fontWeight={700} fontSize={15}>{u.name}</Typography>
-          <Typography fontSize={12} color="text.secondary" noWrap>{u.email}</Typography>
+          <Typography fontSize={12} color="text.secondary" noWrap>@{u.username || 'user'}</Typography>
           <Typography fontSize={11} color="text.secondary" mt={0.25}>
             {t('userApproval.since', { date: new Date(u.created_at).toLocaleDateString() })}
           </Typography>
@@ -521,7 +521,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                   <Typography fontWeight={600} fontSize={14}>{u.name}</Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell><Typography fontSize={13} color="text.secondary">{u.email}</Typography></TableCell>
+                              <TableCell><Typography fontSize={13} color="text.secondary">@{u.username || 'user'}</Typography></TableCell>
                               <TableCell><Typography fontSize={13} color="text.secondary">{new Date(u.created_at).toLocaleString()}</Typography></TableCell>
                               <TableCell>
                                 <Select size="small" displayEmpty value={roleMap[u.id] ?? ''}
@@ -617,7 +617,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                   <Typography fontWeight={600} fontSize={14}>{u.name}</Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell><Typography fontSize={13} color="text.secondary">{u.email}</Typography></TableCell>
+                              <TableCell><Typography fontSize={13} color="text.secondary">@{u.username || 'user'}</Typography></TableCell>
                               <TableCell>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <Select size="small" value={roleChangeMap[u.id] ?? u.role}
@@ -756,7 +756,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.75, gap: 1 }}>
                       <Box sx={{ minWidth: 0 }}>
                         <Typography fontWeight={700} fontSize={13} noWrap>{a.target_user_name}</Typography>
-                        <Typography fontSize={11} color="text.secondary" noWrap>{a.target_user_email}</Typography>
+                        <Typography fontSize={11} color="text.secondary" noWrap>@{a.target_user_username || 'user'}</Typography>
                       </Box>
                       <Chip size="small" label={a.action} sx={{ bgcolor: c.bg, color: c.color, fontWeight: 600, flexShrink: 0 }} />
                     </Box>
@@ -788,7 +788,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     return (
                       <TableRow key={a.id} sx={{ '&:last-child td': { borderBottom: 0 } }}>
                         <TableCell><Typography fontSize={13} fontWeight={600}>{a.target_user_name}</Typography></TableCell>
-                        <TableCell><Typography fontSize={13} color="text.secondary">{a.target_user_email}</Typography></TableCell>
+                        <TableCell><Typography fontSize={13} color="text.secondary">@{a.target_user_username || 'user'}</Typography></TableCell>
                         <TableCell><Chip size="small" label={a.action} sx={{ bgcolor: c.bg, color: c.color, fontWeight: 600 }} /></TableCell>
                         <TableCell>
                           {a.role
