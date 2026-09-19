@@ -239,23 +239,54 @@ async def sync_user(
     email_hash = crypto.blind_index(email)
 
     async with pool.acquire() as conn:
-        # Check if this phone-registered user already exists (keycloak_sub match)
-        # If so, just refresh name/email without touching phone or username.
-        # email_verified mirrors Keycloak's own flag on every login — it can only
-        # go stale within the current session between token refreshes (~60s).
-        upsert = await conn.fetchrow(
-            """
-            INSERT INTO users (name, email, email_hash, keycloak_sub, role, is_active, identity_provider, email_verified)
-            VALUES ($1, $2, $3, $4, 'resident', FALSE, 'keycloak', $5)
-            ON CONFLICT (keycloak_sub) DO UPDATE
-                SET name       = EXCLUDED.name,
-                    email      = COALESCE(EXCLUDED.email, users.email),
-                    email_hash = COALESCE(EXCLUDED.email_hash, users.email_hash),
-                    email_verified = EXCLUDED.email_verified
-            RETURNING id, (xmax = 0) AS is_new
-            """,
-            name, email_ciphertext, email_hash, sub, email_verified,
+        # Check if this email is already registered (by email_hash, the unique constraint).
+        # If so, this is a new Keycloak user trying to use an existing email — link them
+        # by keycloak_sub and update their name/verified status without touching email/phone.
+        existing_by_email = await conn.fetchval(
+            "SELECT id FROM users WHERE email_hash = $1",
+            email_hash,
         )
+
+        # Check if this keycloak_sub already exists (same user logging in again).
+        existing_by_sub = await conn.fetchval(
+            "SELECT id FROM users WHERE keycloak_sub = $1",
+            sub,
+        )
+
+        if existing_by_sub:
+            # Same Keycloak user logging in again — refresh name and email_verified only.
+            upsert = await conn.fetchrow(
+                """
+                UPDATE users
+                SET name = $1, email_verified = $2
+                WHERE keycloak_sub = $3
+                RETURNING id, false AS is_new
+                """,
+                name, email_verified, sub,
+            )
+        elif existing_by_email:
+            # Different Keycloak user claiming an email already in the system.
+            # Link them by keycloak_sub (assign this sub to the existing user).
+            upsert = await conn.fetchrow(
+                """
+                UPDATE users
+                SET keycloak_sub = $1, name = $2, email_verified = $3
+                WHERE id = $4
+                RETURNING id, false AS is_new
+                """,
+                sub, name, email_verified, existing_by_email,
+            )
+        else:
+            # Brand new user — create the row.
+            upsert = await conn.fetchrow(
+                """
+                INSERT INTO users (name, email, email_hash, keycloak_sub, role, is_active, identity_provider, email_verified)
+                VALUES ($1, $2, $3, $4, 'resident', FALSE, 'keycloak', $5)
+                RETURNING id, true AS is_new
+                """,
+                name, email_ciphertext, email_hash, sub, email_verified,
+            )
+
         if upsert is None:
             raise HTTPException(status_code=500, detail="Sync upsert returned no row")
 
