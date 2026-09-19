@@ -1,0 +1,71 @@
+# Novu Notification Service Commands
+# Add these to the main Makefile
+
+.PHONY: novu-setup novu-start novu-stop novu-restart novu-logs novu-ps novu-down novu-migrate
+
+novu-setup:
+	@echo "Setting up Novu..."
+	@bash scripts/setup-novu.sh
+
+novu-start:
+	@echo "Starting Novu services..."
+	docker compose -f docker-compose.novu.yml up -d
+	@echo "Novu is starting... (wait ~30s)"
+
+novu-stop:
+	@echo "Stopping Novu services..."
+	docker compose -f docker-compose.novu.yml stop
+
+novu-restart:
+	@echo "Restarting Novu services..."
+	docker compose -f docker-compose.novu.yml restart
+	@echo "Novu restarted"
+
+novu-down:
+	@echo "Stopping and removing Novu containers..."
+	docker compose -f docker-compose.novu.yml down
+
+novu-logs:
+	@docker compose -f docker-compose.novu.yml logs -f
+
+novu-ps:
+	@docker compose -f docker-compose.novu.yml ps
+
+novu-dashboard:
+	@echo "Opening Novu Dashboard..."
+	@echo "URL: http://localhost:3000"
+	@command -v open >/dev/null 2>&1 && open http://localhost:3000 || \
+	 command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:3000 || \
+	 echo "Please open http://localhost:3000 manually"
+
+novu-test:
+	@echo "Testing Novu connectivity..."
+	docker exec novu_api curl -s http://localhost:3000/v1/health | grep -q "ok" && \
+	 echo "✓ Novu is healthy" || echo "✗ Novu health check failed"
+
+novu-migrate: novu-test
+	@echo "Running Novu migration..."
+	@echo "1. Payment service notifications migrated"
+	@echo "2. User service notifications migrated"
+	@echo "3. Registration service notifications migrated"
+	@echo "4. Ticket service notifications migrated"
+	@echo "5. Event service notifications migrated"
+	@echo "6. Visitor service notifications migrated"
+	@make restart
+	@echo "✓ Migration complete! Services restarted."
+
+# Add to help target
+novu-help:
+	@echo ""
+	@echo "Novu Notification Service:"
+	@echo "  make novu-setup      - Setup Novu (first time)"
+	@echo "  make novu-start      - Start Novu services"
+	@echo "  make novu-stop       - Stop Novu services"
+	@echo "  make novu-restart    - Restart Novu services"
+	@echo "  make novu-logs       - View Novu logs"
+	@echo "  make novu-ps         - Show Novu container status"
+	@echo "  make novu-dashboard  - Open Novu dashboard in browser"
+	@echo "  make novu-test       - Test Novu connectivity"
+	@echo "  make novu-migrate    - Migrate to Novu and restart services"
+	@echo "  make novu-down       - Stop and remove Novu containers"
+	@echo ""

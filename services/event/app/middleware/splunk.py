@@ -32,10 +32,8 @@ def _extract_user(request: Request) -> dict:
         roles  = claims.get("realm_access", {}).get("roles", [])
         role   = next((r for r in roles if r in _KNOWN_ROLES), "unknown")
         return {
-            "user_id":  claims.get("sub"),
-            "username": claims.get("preferred_username"),
-            "email":    claims.get("email"),
-            "role":     role,
+            "user_id": claims.get("sub"),
+            "role": role,
         }
     except Exception as exc:
         logger.debug("Could not decode JWT for logging: %s", exc)

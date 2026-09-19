@@ -28,8 +28,6 @@ def _extract_user(request: Request) -> dict:
         role   = next((r for r in roles if r in _KNOWN_ROLES), "unknown")
         return {
             "user_id":  claims.get("sub"),
-            "username": claims.get("preferred_username"),
-            "email":    claims.get("email"),
             "role":     role,
         }
     except Exception as exc:

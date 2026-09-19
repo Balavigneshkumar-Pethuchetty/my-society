@@ -1221,6 +1221,22 @@ async def list_users(
     )
 
 
+# ── public / must be before /{user_id} ──
+
+@router.get(
+    "/society",
+    summary="Society identity config (public)"
+)
+async def get_society():
+    from app.config import settings
+    from app.models import SocietyConfig
+    return SocietyConfig(
+        name=settings.society_name,
+        shortName=settings.society_short_name,
+        city=settings.society_city,
+    )
+
+
 # ── admin stats (must be before /{user_id} to avoid UUID match on "admin-stats") ──
 
 @router.get(

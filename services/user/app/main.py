@@ -91,16 +91,6 @@ app.include_router(leave_requests.router, prefix="/leave-requests", tags=["leave
 app.include_router(logs.router,          tags=["ops"])
 
 
-@app.get("/society", response_model=SocietyConfig, tags=["ops"], summary="Society identity config (public)")
-async def get_society():
-    from app.config import settings
-    return SocietyConfig(
-        name=settings.society_name,
-        shortName=settings.society_short_name,
-        city=settings.society_city,
-    )
-
-
 @app.get("/health", tags=["ops"], summary="Liveness + DB ping")
 async def health():
     pool = await get_pool()

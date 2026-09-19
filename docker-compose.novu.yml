@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Novu API & Dashboard
+  novu-api:
+    image: novu/novu:0.25.0
+    container_name: novu_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mongodb://novu-mongo:27017/novu
+      REDIS_URL: redis://novu-redis:6379
+      JWT_SECRET: ${NOVU_JWT_SECRET:-your-secret-key-change-me}
+      STORE_ENCRYPTION_KEY: ${NOVU_ENCRYPTION_KEY:-your-encryption-key-change-me}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - novu-mongo
+      - novu-redis
+    networks:
+      - novu-net
+      - society_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Novu Worker (processes jobs)
+  novu-worker:
+    image: novu/novu:0.25.0
+    container_name: novu_worker
+    restart: unless-stopped
+    command: npm run start:worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mongodb://novu-mongo:27017/novu
+      REDIS_URL: redis://novu-redis:6379
+      JWT_SECRET: ${NOVU_JWT_SECRET:-your-secret-key-change-me}
+      STORE_ENCRYPTION_KEY: ${NOVU_ENCRYPTION_KEY:-your-encryption-key-change-me}
+    depends_on:
+      - novu-mongo
+      - novu-redis
+    networks:
+      - novu-net
+
+  # MongoDB for Novu
+  novu-mongo:
+    image: mongo:6
+    container_name: novu_mongo
+    restart: unless-stopped
+    volumes:
+      - novu_mongo_data:/data/db
+    networks:
+      - novu-net
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/novu --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Novu
+  novu-redis:
+    image: redis:7-alpine
+    container_name: novu_redis
+    restart: unless-stopped
+    volumes:
+      - novu_redis_data:/data
+    networks:
+      - novu-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  novu_mongo_data:
+    driver: local
+  novu_redis_data:
+    driver: local
+
+networks:
+  novu-net:
+    driver: bridge
+  society_network:
+    external: true

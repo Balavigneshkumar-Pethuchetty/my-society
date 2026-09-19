@@ -41,7 +41,7 @@ _KNOWN_ROLES    = {"admin", "committee_member", "resident", "security_guard", "s
 def _extract_user(request: Request) -> dict:
     """
     Decode the Bearer JWT (no signature verification — logging only) and return
-    identifying fields.  Falls back gracefully for unauthenticated requests.
+    identifying fields (UUID-based, no PII). Falls back gracefully for unauthenticated requests.
     """
     auth = request.headers.get("authorization", "")
     if not auth.lower().startswith("bearer "):
@@ -53,13 +53,7 @@ def _extract_user(request: Request) -> dict:
         roles  = claims.get("realm_access", {}).get("roles", [])
         role   = next((r for r in roles if r in _KNOWN_ROLES), "unknown")
         return {
-            "user_id":  claims.get("sub"),
-            "username": claims.get("preferred_username"),
-            "email":    claims.get("email"),
-            "name":     (
-                " ".join(filter(None, [claims.get("given_name"), claims.get("family_name")]))
-                or claims.get("preferred_username")
-            ),
+            "user_id": claims.get("sub"),
             "role": role,
         }
     except Exception as exc:
