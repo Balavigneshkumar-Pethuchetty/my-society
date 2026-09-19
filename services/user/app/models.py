@@ -206,6 +206,7 @@ class AdminActionResponse(BaseModel):
     id: UUID
     admin_name: str
     target_user_name: str
+    target_user_username: Optional[str] = None
     target_user_email: str
     action: str
     role: Optional[str] = None
@@ -287,6 +288,7 @@ class UnitRequestResponse(BaseModel):
     id: UUID
     user_id: UUID
     user_name: str
+    user_username: Optional[str] = None
     user_email: Optional[str]
     node_id: UUID
     notes: Optional[str]

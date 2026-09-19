@@ -1234,8 +1234,11 @@ async def get_admin_stats(pool: Pool = Depends(get_pool)):
         )
         recent = await conn.fetch(
             """
-            SELECT id, admin_name, target_user_name, target_user_email, action, role, performed_at
-            FROM admin_actions ORDER BY performed_at DESC LIMIT 20
+            SELECT a.id, a.admin_name, a.target_user_name, a.target_user_email, a.action, a.role, a.performed_at,
+                   u.username
+            FROM admin_actions a
+            LEFT JOIN users u ON a.target_user_id = u.id
+            ORDER BY a.performed_at DESC LIMIT 20
             """
         )
     return AdminStatsResponse(
@@ -1251,7 +1254,8 @@ async def get_admin_stats(pool: Pool = Depends(get_pool)):
         ) for r in breakdown],
         recent_actions=[AdminActionResponse(
             id=r["id"], admin_name=r["admin_name"],
-            target_user_name=r["target_user_name"], target_user_email=crypto.decrypt(r["target_user_email"]),
+            target_user_name=r["target_user_name"], target_user_username=r["username"],
+            target_user_email=crypto.decrypt(r["target_user_email"]),
             action=r["action"], role=r["role"], performed_at=r["performed_at"],
         ) for r in recent],
     )

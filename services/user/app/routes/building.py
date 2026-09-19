@@ -272,6 +272,7 @@ async def _build_request_response(conn, row: dict) -> UnitRequestResponse:
         id=row["id"],
         user_id=row["user_id"],
         user_name=row["user_name"],
+        user_username=row.get("user_username"),
         # Centralized decrypt point — every caller below reads users.email
         # directly (not via users.py's _row_to_user), so it arrives here
         # still as ciphertext.
@@ -333,6 +334,7 @@ async def create_unit_request(
         )
         result = dict(row)
         result["user_name"] = user["name"]
+        result["user_username"] = user.get("username")
         result["user_email"] = user["email"]
         return await _build_request_response(conn, result)
 
@@ -456,9 +458,10 @@ async def review_unit_request(
                     )
 
         user = await conn.fetchrow(
-            "SELECT name, email FROM users WHERE id = $1", row["user_id"]
+            "SELECT name, username, email FROM users WHERE id = $1", row["user_id"]
         )
         result = dict(row)
         result["user_name"] = user["name"] if user else "Unknown"
+        result["user_username"] = user["username"] if user else None
         result["user_email"] = user["email"] if user else None
         return await _build_request_response(conn, result)
