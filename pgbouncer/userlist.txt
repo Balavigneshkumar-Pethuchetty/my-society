@@ -1,0 +1,6 @@
+"society_user" "S0c!etyP@ss2025"
+"user_role" "St1D8RRBr9PO6CdO5SD4CIqk"
+"event_role" "8jEcD86LsJbSM3iyJQyG7oi1"
+"ticket_role" "oAkqn10c6nczoZ9gUSV60wuB"
+"payment_role" "I2ySbGBaCFmeWOBvxHlgN4DM"
+"registration_role" "5P9CcvMYM1tkZddSiwAveKgR"

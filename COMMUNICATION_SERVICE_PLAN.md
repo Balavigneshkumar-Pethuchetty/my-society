@@ -2,15 +2,63 @@
 
 Status: **planned, not yet implemented**. Split out from `PII_PRIVACY_PLAN.md` §4/§5a into its own file because it's a standalone service, not just a PII-encryption concern — this tracks its architecture, deployment, and rollout independently so it can be picked up and implemented on its own schedule.
 
+**Companion service**: [[DIRECTORY_SERVICE_PLAN.md]] — a read-only user/flat directory (alias + role + flat number only, no PII) that lets residents discover who to reach out to, then connect via this communication service. The two services are loosely coupled but work together for the full "find & contact" workflow.
+
 **Relationship to PII_PRIVACY_PLAN.md**: that plan's §1–3/5 (encrypting phone/email/Aadhaar at rest, alias names, time-boxed PII-sharing grants) are a hard prerequisite for this service to be worth building — there's no point hiding phone numbers behind a chat app if the alias/encryption work isn't done first. See [[project_...]]-style cross-references throughout.
 
 ---
 
 ## Goal
 
-Security can voice/video/text-call the concerned resident to verify a visitor; admin/committee/event organizer can create a purpose-scoped group (e.g. festival organizing) and close it later; admin/committee/organizer can 1:1 text/voice/video/voice-message/video-message a resident — all **without either party seeing the other's phone number or email**, with **alias name + flat number** as the only identity shown, **history survives a member leaving the society**, and it's a **separate, independently deployable service** — self-hosted in Docker, maintained by us, **loosely coupled** to `auth-service`/`user-service` rather than sharing their DB.
+**Primary use case (general communication)**: Any registered resident can create a named group/space for communication, and only registered/approved residents can join. Members can text/voice/video/voice-message/video-message each other — all **without any party seeing the other's phone number or email**, with **alias name + flat number** as the only identity shown.
 
-Open scope question to resolve before implementing (not yet decided): is this admin/committee/security/organizer ↔ resident only, or also resident ↔ resident (e.g. one neighbor reaching another without knowing their number)? The architecture below supports either; it changes only the adapter's room-creation authorization logic.
+**Secondary use cases**: Security can voice/video/text-call the concerned resident to verify a visitor; admin/committee/event organizer can create a purpose-scoped group (e.g. festival organizing) and close it later; admin/committee/organizer can 1:1 text/voice/video/voice-message/video-message a resident.
+
+**All use cases share**: **history survives a member leaving the society**, and it's a **separate, independently deployable service** — self-hosted in Docker, maintained by us, **loosely coupled** to `auth-service`/`user-service` rather than sharing their DB.
+
+**Scope**: Resident-to-resident groups + admin/security one-way initiatives (verification, coordination). Architecture supports both; authorization logic in the adapter controls who can create what type of group.
+
+---
+
+## Group Creation & Authorization
+
+### Service-wide access requirement: APPROVED USERS ONLY
+**No unapproved user can access ANY part of this service** — not the chat UI, not group creation, not joining existing groups, not making calls. This is a hard gate:
+
+1. **At Synapse login (OIDC)**: Keycloak's JWT must carry `realm_access.roles: ["resident"]` (or admin/organizer roles). Unapproved users do not get this role in Keycloak — approval is a prerequisite.
+2. **At adapter layer (all endpoints)**: Every endpoint requires `users.is_active = true` (checked against user-service API). Any request from a user with `is_active: false` is rejected immediately.
+3. **At adapter provisioning**: Synapse Matrix accounts are created **only and immediately** at approval time (proactive), not at registration time. An unapproved user physically has no Matrix account to log in with.
+
+**Who can create groups:**
+- Any registered and approved resident can create a named group/space via a dedicated UI endpoint or frontend action
+- Admin/committee/security/event-organizer accounts can also create groups via the same mechanism, used for coordination or resident verification
+
+**Group creation flow (adapter responsibility):**
+1. Resident/admin calls `POST /communication/groups` with `{group_name, description}` (via frontend or shell UI to be built)
+2. Adapter verifies:
+   - User's JWT carries an approval role (`resident`, `admin`, `organizer`, etc.)
+   - `users.is_active = true` via user-service API (reject if false)
+3. Adapter creates a Matrix space with `name=group_name`, `visibility: private`, E2EE enabled
+4. Adapter stores mapping: `{internal_group_id, matrix_room_id, created_by, status: 'active', created_at}`
+5. Returns the Matrix room ID and Element Web deep-link to the frontend
+
+**Group membership:**
+- Creator is the group admin (power level 100 in Matrix, can invite/remove/close the group)
+- Only approved, active residents (`is_active = true`) can be invited or join
+- Adapter validates every invitation against `users.is_active` before sending room invites
+- Attempting to invite an unapproved user is rejected with an error
+- Member list is visible only to members (private space, no public directory listing)
+
+**Group admin controls:**
+- Add/remove members (via invite link or direct invite) — removed members are ejected from the room, history is preserved
+- Change group name/description
+- Close the group (raise power levels to prevent new messages, preserve history)
+- Leave the group (normal Matrix behavior, history stays for others)
+
+**Access control enforcement (three layers):**
+1. **Keycloak OIDC**: No role = no JWT token at all
+2. **Synapse login gate**: JWT without approval role rejected by OIDC provider config
+3. **Adapter**: Every group operation checks `is_active` via user-service — if user is removed/un-approved mid-session, they're locked out on their next API call
 
 ---
 
@@ -25,6 +73,7 @@ Open scope question to resolve before implementing (not yet decided): is this ad
 ## Decoupling mechanism: delegate identity to Keycloak, don't duplicate it
 
 - Synapse supports **OIDC delegation** (`oidc_providers` config) — point it at the existing `society-events` Keycloak realm. Synapse never stores a password, never touches the `users` table, never needs a DB-level relationship with user-service. This is the loose-coupling boundary.
+- **Approval gate at Keycloak**: Configure Synapse's OIDC provider to require `realm_access.roles` contains one of `["resident", "admin", "organizer", "security_guard"]` (or any other approval role). Users without an approval role get no JWT token at all — Keycloak's OIDC provider rejects them. This ensures only approved users can even attempt to log in to Synapse.
 - Keycloak's JWT already carries a `sub` claim — an opaque UUID, no PII. Synapse's `user_mapping_provider.localpart_template` derives the **permanent Matrix ID** from `sub` (e.g. `@<sub>:yourdomain.com`). This ID is what's permanently recorded in every room-creation event, membership event, and message `sender` field — forever, and it was never derived from anything sensitive.
 - The mutable **alias name** (PII_PRIVACY_PLAN.md §2/§3) is layered on top as the Matrix **profile displayname**, set/updated via the Synapse admin API whenever the resident's alias changes. Changing the alias never changes the underlying permanent ID or breaks historical event references.
 - **Flat number**: not part of the current PII plan's Matrix wiring — needs to be added so security/admins immediately see e.g. "Alice — 4B" in a DM header without a separate directory lookup. Push `flat_number` into the Matrix profile as a custom field (or into the room's initial state at creation), synced by the same adapter that syncs the alias. Flat number is not PII per PII_PRIVACY_PLAN.md §3 (access-controlled, not encrypted), so no additional crypto work is needed to expose it here — only the sync step.
@@ -48,18 +97,42 @@ Following the convention in `CLAUDE.md` ("Per-service compose files"), this is *
 - **`element-web`** (official `vectorim/element-web` image) — the chat client, served behind the existing nginx at a new path (e.g. `/chat/`). Served as a standalone third-party SPA, **not** a `@originjs/vite-plugin-federation` remote like `mfe-admin`/`mfe-booking`/etc. — Element Web isn't built to be federated. A thin `mfe-communication` wrapper (just enough React to embed/deep-link into Element Web from the shell's nav) is a possible **phase 2**, not needed for launch.
 - **`coturn`** — TURN/STUN, required for calls to connect across real-world NATs.
 
-**The adapter's own storage** (the `{internal_group_id, matrix_room_id, status, created_by}` mapping table — see below): default recommendation is a **dedicated schema + role in the shared `society_events` Postgres**, consistent with the now-standard per-service-schema pattern (shipped 2026-09-14, see memory: DB Isolation Plan) — the adapter's own data is small (a mapping table, not a bounded domain the way visitor-service's is), so a whole extra Postgres container isn't obviously worth it. Flag as a decision to confirm at implementation time, not settled here.
+**The adapter's own storage (metadata ONLY — NO message persistence):**
+- **Does NOT store messages**: Chat messages, call history, or conversation data are **Synapse's responsibility only**. The adapter is stateless for message flow.
+- **Messages in Synapse are E2EE encrypted** — even Synapse's DB can't read content; residents are the only ones with decryption keys.
+- **What the adapter DOES store** (minimal): `{internal_group_id, matrix_room_id, status, created_by, created_at}` (group lifecycle), plus user provisioning mappings.
+- **Storage location**: dedicated schema + role in shared `society_events` Postgres (consistent with per-service-schema pattern, shipped 2026-09-14). The adapter's own data is small (a mapping table), so no extra Postgres container is needed.
+- **Temporary buffers only**: If the adapter queues a notification SMS/Telegram, it holds it in memory until sent, then discards it — no logging of message content, only delivery metadata (success/failure).
+
+### Service dependencies
+**This service depends only on**:
+- `keycloak` (for JWT validation via OIDC, no direct DB access)
+- `user-service` (for checking `is_active` status, alias name, flat number; API-only, not DB direct access)
+- `PostgreSQL` (for the adapter's internal group mapping table; Synapse gets its own dedicated Postgres)
+
+**Does NOT depend on**: event-service, registration-service, ticket-service, payment-service, or visitor-service. This ensures loose coupling and lets the communication service operate independently.
+
+### Adapter endpoints exposed
+| Endpoint | Method | Purpose | Requires |
+|---|---|---|---|
+| `/communication/groups` | POST | Create a new group with a name | Resident role + `is_active=true` |
+| `/communication/groups` | GET | List groups the user is a member of | Resident role + `is_active=true` |
+| `/communication/groups/{group_id}` | PATCH | Update group name/description | Group creator/admin |
+| `/communication/groups/{group_id}/members` | POST | Invite a member to the group | Group admin |
+| `/communication/groups/{group_id}/members/{member_id}` | DELETE | Remove a member | Group admin |
+| `/communication/groups/{group_id}/close` | POST | Close the group (prevent new messages, keep history) | Group creator/admin |
+| (user-service integration) | webhook | Deactivate Matrix account on user removal | user-service approval flow |
 
 ### New deployment surface
 - Root `docker-compose.yml`: add `communication`, `synapse`, `synapse-postgres`, `element-web`, `coturn` services.
 - `services/communication/docker-compose.yml` + `.env`/`.env.test` — standalone build/redeploy, same pattern as every other service (assumes the shared platform is already up via `make up`).
 - `Makefile`: `restart-communication`, `logs-communication` targets (matching `restart-user-service` etc.).
-- `nginx.conf`: route `/_matrix/client`, `/_matrix/media`, `/.well-known/matrix/*` → Synapse; `/chat/` → Element Web; keep the Synapse **Admin API off the public ingress entirely** (internal Docker network only).
+- `nginx.conf`: route `/_matrix/client`, `/_matrix/media`, `/.well-known/matrix/*` → Synapse; `/chat/` → Element Web; route `/api/communication/` → adapter; keep the Synapse **Admin API off the public ingress entirely** (internal Docker network only).
 - `ARCHITECTURE.md`: add a row for `communication-service` to the per-service endpoint table once built.
 
 | Component | Port (internal) | Nginx prefix | Notes |
 |---|---|---|---|
-| `communication` (adapter) | TBD, e.g. 3009 | none (internal only — called by user-service's approval hook, not by the frontend directly) | FastAPI, own DB schema/role |
+| `communication` (adapter) | TBD, e.g. 3009 | `/api/communication/` | FastAPI, own DB schema/role, called by frontend for group management |
 | `synapse` | 8008 (Matrix default) | `/_matrix/*`, `/.well-known/matrix/*` | Admin API (`/_synapse/admin/*`) must **not** be proxied publicly |
 | `element-web` | 80 (static) | `/chat/` | third-party SPA, no build step of ours |
 | `coturn` | 3478/5349 + relay range | n/a (UDP/TCP, not HTTP) | needs its own port range opened, not just nginx |
@@ -149,23 +222,54 @@ This service intentionally does **not** carry blood group / Aadhaar / family-con
 
 ## Implementation steps (not started)
 
+### Core Infrastructure
 - [ ] Scaffold `services/communication/` (Dockerfile, `docker-compose.yml` + `.env`/`.env.test`/`.env.example`, `app/` skeleton) matching existing service conventions
 - [ ] Add `synapse`, `synapse-postgres`, `element-web`, `coturn`, `communication` to the root `docker-compose.yml`
 - [ ] Decide adapter's own storage: dedicated schema/role in shared `society_events` Postgres (default) vs. its own dedicated Postgres like `services/visitor`
-- [ ] Stand up Synapse: federation disabled, native registration disabled, `oidc_providers` configured against the existing Keycloak realm, `localpart_template` derived from `sub`
-- [ ] Verify/close the pre-approval login gap (open item above)
-- [ ] Build the adapter: proactive provisioning at approval, alias + flat-number sync, removal → deactivate `erase:false`, nightly bidirectional reconciliation
-- [ ] Enable E2EE by default on every room the adapter creates
-- [ ] Lock down the Synapse Admin API to the internal Docker network only; secret-managed token; call logging
+- [ ] Stand up Synapse with approval gate:
+  - [ ] Federation disabled (`federation_domain_whitelist: []`)
+  - [ ] Native registration disabled (`enable_registration: false`, `password_config.enabled: false`)
+  - [ ] OIDC provider configured against Keycloak, requiring approval role in `realm_access.roles` (e.g., `["resident", "admin", "organizer"]`)
+  - [ ] `localpart_template` derives Matrix ID from `sub` (opaque UUID, not email/username)
+  - [ ] Account creation gates on Keycloak approval role — unapproved users cannot log in at all
+
+### Adapter Core (User & Account Management)
+- [ ] Build user provisioning: proactive account creation at approval, alias + flat-number sync, removal → deactivate `erase:false`
+- [ ] Nightly bidirectional reconciliation job (users in Synapse vs. `users.is_active` via user-service API)
+- [ ] JWT validation + role-based access control (require `resident`/`admin`/`organizer` roles from Keycloak)
+- [ ] Validate all requests against `users.is_active` from user-service before allowing group operations
+
+### Adapter Group Management API
+- [ ] Build `POST /communication/groups` — create a new group, validate group name, validate creator is active resident
+- [ ] Build `GET /communication/groups` — list groups user is a member of (via Matrix room query)
+- [ ] Build `PATCH /communication/groups/{group_id}` — update group name/description (creator/admin only)
+- [ ] Build `POST /communication/groups/{group_id}/members` — invite a member (admin only, validate target is active resident)
+- [ ] Build `DELETE /communication/groups/{group_id}/members/{member_id}` — remove member (admin only)
+- [ ] Build `POST /communication/groups/{group_id}/close` — close the group for new messages (admin only)
+
+### Matrix Security & E2EE
+- [ ] Enable E2EE by default on every group/room the adapter creates (`m.room.encryption`)
+- [ ] Lock down Synapse Admin API to internal Docker network only; secret-managed token; call logging
+- [ ] Disable native Synapse registration (`enable_registration: false`, `password_config.enabled: false`)
+
+### TURN & Calling
 - [ ] Configure `turn_shared_secret` for coturn (time-boxed credentials, not static)
-- [ ] Wire the SMS/Telegram parallel-notification hook for calls and group-adds (extend `services/user/app/notifications.py`'s pattern, or a local copy in `services/communication`)
-- [ ] Nginx routing: `/_matrix/client`, `/_matrix/media`, `/.well-known/matrix/*` → Synapse; `/chat/` → Element Web; Admin API stays unrouted
+- [ ] Wire optional SMS/Telegram parallel-notification hook for incoming calls and group invites (extend `services/user/app/notifications.py`'s pattern, or a local copy in `services/communication`)
+- [ ] Confirm Element Web/Element X voice-message and video-message support; size `max_upload_size` in Synapse config accordingly
+
+### Deployment & Operations
+- [ ] Nginx routing: `/_matrix/client`, `/_matrix/media`, `/.well-known/matrix/*` → Synapse; `/chat/` → Element Web; `/api/communication/` → adapter; Admin API stays unrouted
 - [ ] Container restart policies + healthchecks + Postgres backup schedule for Synapse's dedicated DB
 - [ ] `Makefile` targets: `restart-communication`, `logs-communication`
-- [ ] Confirm Element Web/Element X voice-message and video-message support; size `max_upload_size` in Synapse config
-- [ ] Confirm resident-to-resident scope question (see Goal section) before finalizing the adapter's room-creation authorization logic
-- [ ] Wire the "share emergency info" in-chat action to PII_PRIVACY_PLAN.md §5c's `POST /users/me/pii-shares` (posts a link into the room, never raw values)
+- [ ] Wire the `users` service approval hook to call communication-service's provisioning endpoint (proactive account creation)
+
+### Documentation & Testing
 - [ ] Update `ARCHITECTURE.md` with the new service's endpoint table
+- [ ] Document the group creation / member-invite flow in README or API docs
+- [ ] Test end-to-end: resident creates group → invites another resident → both can chat/call without seeing phone numbers
+
+### Future Phases
+- [ ] Wire the "share emergency info" in-chat action to PII_PRIVACY_PLAN.md §5c's `POST /users/me/pii-shares` (posts a link into the room, never raw values)
 - [ ] Phase 2 (deferred): Element Call/LiveKit stack for group video conferencing; `mfe-communication` shell-embedded wrapper around Element Web
 
 ---
@@ -173,3 +277,6 @@ This service intentionally does **not** carry blood group / Aadhaar / family-con
 ## Open items for later
 - Rotation strategy for the Synapse Admin API token and `turn_shared_secret` — not required for v1.
 - Whether a lightweight `mfe-communication` shell integration (deep-link/embed from shell nav into `/chat/`) ships alongside v1 or is deferred to phase 2 with group video.
+- Group member discovery: should residents see a global directory of other residents to invite to groups? Currently scoped to "invite specific residents by knowing their ID/flat number" — directory search is a phase-2 feature.
+- Rate-limiting on group creation and invitations to prevent spam — deferred pending v1 scale experience.
+- Group size limits (no explicit limit in Synapse, but degradation past ~50 concurrent video participants) — add soft limits and UX warnings in phase 2 if real groups grow large.

@@ -129,6 +129,8 @@ services:
       DEFAULT_POOL_SIZE:    "25"
       RESERVE_POOL_SIZE:    "5"
       ADMIN_USERS:          ${POSTGRES_USER}
+    volumes:
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,7 +147,7 @@ services:
   # ─── MinIO — S3-compatible object storage for user/registration/visitor/
   # payment-service uploads (avatars, payment screenshots, visitor photos) ────
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: ${COMPOSE_PROJECT_NAME:-society}_minio
     restart: always
     command: server /data --console-address ":9001"
@@ -168,7 +170,7 @@ services:
   # One-shot: creates the `uploads` bucket + anonymous-download policy, then exits.
   # `restart: "no"` — it's meant to run once per fresh MinIO volume, not loop.
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: ${COMPOSE_PROJECT_NAME:-society}_minio_init
     restart: "no"
     entrypoint: ["sh", "-c"]

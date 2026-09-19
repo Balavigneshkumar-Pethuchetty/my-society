@@ -23,7 +23,7 @@ import { UsernameEditDialog } from './UsernameEditDialog';
 export function UserMenu() {
   const { t } = useTranslation('shell');
   const { user, logout, token }   = useAuth();
-  const { dbUser, refreshUser }         = useUserService();
+  const { dbUser, refreshProfile }         = useUserService();
   const navigate           = useNavigate();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
@@ -153,7 +153,7 @@ export function UserMenu() {
           token={token}
           onSave={() => {
             setUsernameDialogOpen(false);
-            refreshUser();
+            refreshProfile();
           }}
         />
       )}
