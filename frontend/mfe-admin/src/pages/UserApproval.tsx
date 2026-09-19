@@ -91,8 +91,8 @@ const changeUserRole = (t: string, id: string, role: string) =>
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 
 type SortDir = 'asc' | 'desc';
-type PendingSortKey = 'name' | 'email' | 'created_at';
-type ActiveSortKey  = 'name' | 'email' | 'role' | 'created_at';
+type PendingSortKey = 'name' | 'created_at';
+type ActiveSortKey  = 'name' | 'role' | 'created_at';
 
 function sortUsers(list: DbUser[], key: keyof DbUser, dir: SortDir): DbUser[] {
   return [...list].sort((a, b) => {
@@ -499,10 +499,10 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     <Table sx={{ minWidth: 600 }}>
                       <TableHead>
                         <TableRow sx={{ bgcolor: 'action.hover' }}>
-                          {(['name', 'email', 'created_at'] as PendingSortKey[]).map((k, i) => (
+                          {(['name', 'created_at'] as PendingSortKey[]).map((k, i) => (
                             <TableCell key={k} sx={{ fontWeight: 600, fontSize: 12 }}>
                               <TableSortLabel active={pendingSort === k} direction={pendingSort === k ? pendingSortDir : 'asc'} onClick={() => togglePendingSort(k)}>
-                                {[t('userApproval.table.name'), t('userApproval.table.email'), t('userApproval.table.registered')][i]}
+                                {[t('userApproval.table.name'), t('userApproval.table.registered')][i]}
                               </TableSortLabel>
                             </TableCell>
                           ))}
@@ -521,7 +521,6 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                   <Typography fontWeight={600} fontSize={14}>{u.name}</Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell><Typography fontSize={13} color="text.secondary">@{u.username || 'user'}</Typography></TableCell>
                               <TableCell><Typography fontSize={13} color="text.secondary">{new Date(u.created_at).toLocaleString()}</Typography></TableCell>
                               <TableCell>
                                 <Select size="small" displayEmpty value={roleMap[u.id] ?? ''}
@@ -596,10 +595,10 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     <Table sx={{ minWidth: 700 }}>
                       <TableHead>
                         <TableRow sx={{ bgcolor: 'action.hover' }}>
-                          {(['name', 'email', 'role', 'created_at'] as ActiveSortKey[]).map((k, i) => (
+                          {(['name', 'role', 'created_at'] as ActiveSortKey[]).map((k, i) => (
                             <TableCell key={k} sx={{ fontWeight: 600, fontSize: 12, ...(k === 'role' ? { width: 230 } : {}) }}>
                               <TableSortLabel active={activeSort === k} direction={activeSort === k ? activeSortDir : 'asc'} onClick={() => toggleActiveSort(k)}>
-                                {[t('userApproval.table.name'), t('userApproval.table.email'), t('userApproval.table.role'), t('userApproval.table.registered')][i]}
+                                {[t('userApproval.table.name'), t('userApproval.table.role'), t('userApproval.table.registered')][i]}
                               </TableSortLabel>
                             </TableCell>
                           ))}
@@ -617,7 +616,6 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                                   <Typography fontWeight={600} fontSize={14}>{u.name}</Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell><Typography fontSize={13} color="text.secondary">@{u.username || 'user'}</Typography></TableCell>
                               <TableCell>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <Select size="small" value={roleChangeMap[u.id] ?? u.role}
@@ -777,7 +775,7 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
               <Table size="small" sx={{ minWidth: 560 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'action.hover' }}>
-                    {[t('userApproval.activityTable.user'), t('userApproval.activityTable.email'), t('userApproval.activityTable.action'), t('userApproval.activityTable.role'), t('userApproval.activityTable.byAdmin'), t('userApproval.activityTable.time')].map(h => (
+                    {[t('userApproval.activityTable.user'), t('userApproval.activityTable.action'), t('userApproval.activityTable.role'), t('userApproval.activityTable.byAdmin'), t('userApproval.activityTable.time')].map(h => (
                       <TableCell key={h} sx={{ fontWeight: 600, fontSize: 12 }}>{h}</TableCell>
                     ))}
                   </TableRow>
@@ -788,7 +786,6 @@ export function UserApproval({ token, onLogin }: UserApprovalProps) {
                     return (
                       <TableRow key={a.id} sx={{ '&:last-child td': { borderBottom: 0 } }}>
                         <TableCell><Typography fontSize={13} fontWeight={600}>{a.target_user_name}</Typography></TableCell>
-                        <TableCell><Typography fontSize={13} color="text.secondary">@{a.target_user_username || 'user'}</Typography></TableCell>
                         <TableCell><Chip size="small" label={a.action} sx={{ bgcolor: c.bg, color: c.color, fontWeight: 600 }} /></TableCell>
                         <TableCell>
                           {a.role
