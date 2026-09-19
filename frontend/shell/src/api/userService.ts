@@ -57,6 +57,7 @@ export interface Apartment extends ApartmentBrief {
 export interface DbUser {
   id: string;
   apartments: ApartmentBrief[];
+  username: string | null;
   name: string;
   email: string;
   phone: string | null;
@@ -221,13 +222,23 @@ export const userService = {
   // phone: null explicitly clears the number on file (frees it up for another resident to
   // register with) — omitting the key entirely leaves it untouched.
   update: (token: string, data: {
-    name?: string; phone?: string | null;
+    name?: string; username?: string | null; phone?: string | null;
     theme?: 'light' | 'dark' | 'system'; locale?: string;
     notify_sms?: boolean; notify_email?: boolean; notify_telegram?: boolean;
   }) =>
     apiFetch<DbUser>('/me', token, {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+
+  checkUsername: (token: string, username: string) =>
+    apiFetch<{
+      available: boolean;
+      username: string;
+      suggestions: string[];
+    }>('/me/check-username', token, {
+      method: 'POST',
+      body: JSON.stringify({ username }),
     }),
 
   uploadAvatar: (token: string, file: File) => {

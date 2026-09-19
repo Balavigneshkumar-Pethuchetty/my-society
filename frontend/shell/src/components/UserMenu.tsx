@@ -13,17 +13,20 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import BadgeIcon from '@mui/icons-material/Badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserService } from '../contexts/UserServiceContext';
 import { avatarUrl } from '../api/userService';
 import { ROLE_COLORS, ROLE_LABELS } from '../theme';
+import { UsernameEditDialog } from './UsernameEditDialog';
 
 export function UserMenu() {
   const { t } = useTranslation('shell');
-  const { user, logout }   = useAuth();
-  const { dbUser }         = useUserService();
+  const { user, logout, token }   = useAuth();
+  const { dbUser, refreshUser }         = useUserService();
   const navigate           = useNavigate();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
 
   if (!user) return null;
 
@@ -73,6 +76,11 @@ export function UserMenu() {
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={600} fontSize={14} noWrap>{user.name}</Typography>
+            {dbUser?.username && (
+              <Typography fontSize={11} color="primary" noWrap sx={{ fontStyle: 'italic' }}>
+                @{dbUser.username}
+              </Typography>
+            )}
             <Typography fontSize={12} color="text.secondary" noWrap>{user.email}</Typography>
             {apt && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
@@ -100,6 +108,11 @@ export function UserMenu() {
         <MenuItem dense onClick={() => navigate('/profile')} sx={{ gap: 1.25, py: 1.25 }}>
           <ListItemIcon sx={{ minWidth: 0 }}><AccountCircleIcon fontSize="small" /></ListItemIcon>
           {t('userMenu.myProfile')}
+        </MenuItem>
+
+        <MenuItem dense onClick={() => setUsernameDialogOpen(true)} sx={{ gap: 1.25, py: 1.25 }}>
+          <ListItemIcon sx={{ minWidth: 0 }}><BadgeIcon fontSize="small" /></ListItemIcon>
+          Set Alias Name
         </MenuItem>
 
         <MenuItem dense onClick={() => navigate('/settings')} sx={{ gap: 1.25, py: 1.25 }}>
@@ -131,6 +144,19 @@ export function UserMenu() {
           {t('userMenu.signOut')}
         </MenuItem>
       </Menu>
+
+      {token && (
+        <UsernameEditDialog
+          open={usernameDialogOpen}
+          onClose={() => setUsernameDialogOpen(false)}
+          currentUsername={dbUser?.username || null}
+          token={token}
+          onSave={() => {
+            setUsernameDialogOpen(false);
+            refreshUser();
+          }}
+        />
+      )}
     </>
   );
 }

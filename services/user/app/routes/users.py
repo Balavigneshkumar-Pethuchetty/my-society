@@ -345,6 +345,8 @@ async def update_me(
     updates: dict = {}
     if body.name is not None:
         updates["name"] = body.name
+    if body.username is not None:
+        updates["username"] = body.username.strip() if body.username else None
     if "phone" in body.model_fields_set:
         # "" (or explicit null) clears the phone number entirely — frees it up for another
         # resident to register with — distinct from the field being omitted from the request
@@ -369,6 +371,14 @@ async def update_me(
         # Computed once from the plaintext value while it's still in hand —
         # everything below compares/stores the hash, never the plaintext itself.
         new_phone_hash = crypto.blind_index(updates["phone"]) if "phone" in updates else None
+
+        if updates.get("username"):
+            taken = await conn.fetchval(
+                "SELECT 1 FROM users WHERE username = $1 AND keycloak_sub != $2",
+                updates["username"], claims["sub"],
+            )
+            if taken:
+                raise HTTPException(status_code=409, detail=f"Alias name '{updates['username']}' is already taken")
 
         if updates.get("phone"):
             taken = await conn.fetchval(
@@ -413,6 +423,52 @@ async def update_me(
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
     return _row_to_user(row, apartments, units)
+
+
+# ── check username availability ──────────────────────────────────────────────
+
+@router.post("/me/check-username", summary="Check if alias name is available and get suggestions")
+async def check_username(
+    body: dict,
+    claims: dict = Depends(get_current_claims),
+    pool: Pool = Depends(get_pool),
+):
+    """
+    Check if a proposed username is available. If taken, suggest alternatives
+    by appending numbers (e.g., john → john1, john2, ...). Returns the first
+    available variation found.
+    """
+    proposed = body.get("username", "").strip()
+    if not proposed:
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+
+    async with pool.acquire() as conn:
+        # Check if exact username is available
+        taken = await conn.fetchval(
+            "SELECT 1 FROM users WHERE username = $1 AND keycloak_sub != $2",
+            proposed, claims["sub"],
+        )
+        if not taken:
+            return {"available": True, "username": proposed, "suggestions": []}
+
+        # Generate suggestions by appending numbers
+        suggestions = []
+        for i in range(1, 11):  # Try up to 10 suggestions
+            candidate = f"{proposed}{i}"
+            available = await conn.fetchval(
+                "SELECT 1 FROM users WHERE username = $1",
+                candidate,
+            )
+            if not available:
+                suggestions.append(candidate)
+                if len(suggestions) >= 3:  # Suggest top 3
+                    break
+
+    return {
+        "available": False,
+        "username": proposed,
+        "suggestions": suggestions,
+    }
 
 
 @router.post("/me/avatar", response_model=UserResponse, summary="Upload own profile picture")

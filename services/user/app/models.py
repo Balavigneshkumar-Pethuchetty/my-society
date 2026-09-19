@@ -43,6 +43,7 @@ class UserResponse(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     name: Optional[str] = None
+    username: Optional[str] = None
     phone: Optional[str] = None
     theme: Optional[Literal["light", "dark", "system"]] = None
     locale: Optional[str] = None
