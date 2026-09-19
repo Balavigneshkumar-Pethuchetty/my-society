@@ -7,14 +7,18 @@ sending plaintext into a SQL WHERE clause. Both keys live only in this
 service's env/secret, never in Postgres — not a config table, not a function
 body, not a query literal."""
 import base64
+import binascii
 import hashlib
 import hmac
+import logging
 import os
 from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _NONCE_LEN = 12  # bytes — standard AES-GCM nonce size
 
@@ -37,12 +41,22 @@ def encrypt(plaintext: Optional[str]) -> Optional[str]:
 
 
 def decrypt(ciphertext: Optional[str]) -> Optional[str]:
-    """Reverse of encrypt(); None in, None out."""
+    """Reverse of encrypt(); None in, None out.
+
+    If decryption fails (e.g., old plaintext data or corruption), returns the
+    original ciphertext as a fallback so callers get something rather than crashing.
+    """
     if not ciphertext:
         return None
-    raw = base64.b64decode(ciphertext)
-    nonce, ct = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
-    return AESGCM(_aes_key()).decrypt(nonce, ct, None).decode()
+    try:
+        raw = base64.b64decode(ciphertext)
+        nonce, ct = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
+        return AESGCM(_aes_key()).decrypt(nonce, ct, None).decode()
+    except (ValueError, binascii.Error, Exception) as e:
+        # Likely plaintext data from before encryption, corrupted data, or wrong key.
+        # Return the original value so API doesn't crash; callers see something.
+        logger.warning(f"Decryption failed for value: {type(e).__name__}: {e}. Returning ciphertext as-is.")
+        return ciphertext
 
 
 def blind_index(value: Optional[str]) -> Optional[str]:
