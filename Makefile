@@ -24,7 +24,8 @@
         logs-nginx logs-db logs-user logs-events logs-visitor logs-visitor-db \
         logs-mfe-admin logs-mfe-events logs-mfe-booking logs-mfe-payment logs-mfe-visitors \
         logs-splunk logs-fluent-bit \
-        splunk-up splunk-down
+        splunk-up splunk-down \
+        clean-docker clean-build clean-cache clean-all prepare up-clean
 
 ## ── Environment ─────────────────────────────────────────────────────────────
 # ENV=prod   → docker-compose.yml + docker-compose.prod.yml
@@ -59,6 +60,32 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-26s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+
+## ── Build cleanup & preparation ─────────────────────────────────────────────
+clean-build: ## Remove all build artifacts (dist folders, node_modules caches)
+	@echo "  Cleaning build artifacts…"
+	@find frontend -type d -name dist -exec rm -rf {} + 2>/dev/null || true
+	@find frontend -type d -name .vite -exec rm -rf {} + 2>/dev/null || true
+	@find services -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@find services -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	@echo "  ✓ Build artifacts cleaned"
+
+clean-cache: ## Remove docker build cache (saves space, forces full rebuild)
+	@echo "  Pruning docker build cache…"
+	@docker builder prune --force --all -q 2>/dev/null || podman system prune --force --all 2>/dev/null || true
+	@echo "  ✓ Docker cache pruned"
+
+clean-all: clean-build clean-cache ## Remove ALL build artifacts and docker cache
+	@echo "  ✓ All build artifacts and cache cleaned"
+
+prepare: check-env ## Prepare for build: ensure env and clean old artifacts
+	@echo "  $(CYAN)Preparing for build…$(RESET)"
+	@echo "  ✓ Environment file checked"
+	@echo "  Tip: Run 'make up-clean' to do a fresh build after this"
+
+up-clean: clean-build ## Clean build artifacts then start services (recommended after code changes)
+	@echo "  $(CYAN)Starting fresh build…$(RESET)"
+	@$(MAKE) -s up ENV=$(ENV)
 
 ## ── Core lifecycle ──────────────────────────────────────────────────────────
 check-env: ## Ensure the active env file exists (auto-creates from example if available)
@@ -353,6 +380,14 @@ seed: ## Re-run only the seed script (idempotent — uses ON CONFLICT DO NOTHING
 	  psql -U $$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]') -d $(POSTGRES_DB_NAME) \
 	  -f /docker-entrypoint-initdb.d/02_seed.sql
 	@echo "Seed complete."
+
+clean-docker: ## Force-kill stuck containers and prune Docker state (use before `make up` if containers fail to stop)
+	@echo "$(CYAN)Force-killing all project containers…$(RESET)"
+	@docker ps -a --filter "label=com.docker.compose.project=$(COMPOSE_PROJECT)" --format '{{.ID}}' | xargs -r docker kill 2>/dev/null || true
+	@docker ps -a --filter "label=com.docker.compose.project=$(COMPOSE_PROJECT)" --format '{{.ID}}' | xargs -r docker rm -f 2>/dev/null || true
+	@echo "$(CYAN)Pruning unused networks…$(RESET)"
+	@docker network prune -f 2>/dev/null || true
+	@echo "$(CYAN)Docker state cleared. Run 'make up' to restart.$(RESET)"
 
 migrate: ## Apply not-yet-recorded SQL migrations in db/migrations/ (idempotent; tracked in schema_migrations)
 	@PGUSER=$$(grep -m1 '^POSTGRES_USER=' $(ENV_FILE) | cut -d= -f2 | tr -d '"[:space:]'); \
