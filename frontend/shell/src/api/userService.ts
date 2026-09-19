@@ -213,10 +213,10 @@ export interface NotificationListResponse {
 export const userService = {
   /** Upsert local DB row from JWT on first login. */
   sync: (token: string) =>
-    apiFetch<DbUser>('/users/sync', token, { method: 'POST' }),
+    apiFetch<DbUser>('/sync', token, { method: 'POST' }),
 
   me: (token: string) =>
-    apiFetch<DbUser>('/users/me', token),
+    apiFetch<DbUser>('/me', token),
 
   // phone: null explicitly clears the number on file (frees it up for another resident to
   // register with) — omitting the key entirely leaves it untouched.
@@ -225,7 +225,7 @@ export const userService = {
     theme?: 'light' | 'dark' | 'system'; locale?: string;
     notify_sms?: boolean; notify_email?: boolean; notify_telegram?: boolean;
   }) =>
-    apiFetch<DbUser>('/users/me', token, {
+    apiFetch<DbUser>('/me', token, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
@@ -233,27 +233,27 @@ export const userService = {
   uploadAvatar: (token: string, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return apiFetchForm<DbUser>('/users/me/avatar', token, fd, 'POST');
+    return apiFetchForm<DbUser>('/me/avatar', token, fd, 'POST');
   },
 
   removeAvatar: (token: string) =>
-    apiFetch<DbUser>('/users/me/avatar', token, { method: 'DELETE' }),
+    apiFetch<DbUser>('/me/avatar', token, { method: 'DELETE' }),
 
   verifyEmail: {
     send: (token: string) =>
-      apiFetch<void>('/users/me/verify-email/send', token, { method: 'POST' }),
+      apiFetch<void>('/me/verify-email/send', token, { method: 'POST' }),
     check: (token: string) =>
-      apiFetch<DbUser>('/users/me/verify-email/check', token, { method: 'POST' }),
+      apiFetch<DbUser>('/me/verify-email/check', token, { method: 'POST' }),
   },
 
   verifyPhone: {
     request: (token: string, channel?: OtpChannel) =>
-      apiFetch<PhoneVerifyRequestResponse>('/users/me/phone/verify/request', token, {
+      apiFetch<PhoneVerifyRequestResponse>('/me/phone/verify/request', token, {
         method: 'POST',
         body: JSON.stringify({ channel: channel ?? null }),
       }),
     confirm: (token: string, request_id: string, code: string) =>
-      apiFetch<PhoneVerifyConfirmResponse>('/users/me/phone/verify/confirm', token, {
+      apiFetch<PhoneVerifyConfirmResponse>('/me/phone/verify/confirm', token, {
         method: 'POST',
         body: JSON.stringify({ request_id, code }),
       }),
@@ -263,32 +263,32 @@ export const userService = {
   // only — no bearer token exists yet, so these go through publicPost.
   phoneLogin: {
     request: (phone: string, channel?: OtpChannel) =>
-      publicPost<PhoneLoginRequestResponse>('/users/auth/phone-login/request', { phone, channel: channel ?? null }),
+      publicPost<PhoneLoginRequestResponse>('/auth/phone-login/request', { phone, channel: channel ?? null }),
     verify: (request_id: string, code: string) =>
-      publicPost<PhoneLoginVerifyResponse>('/users/auth/phone-login/verify', { request_id, code }),
+      publicPost<PhoneLoginVerifyResponse>('/auth/phone-login/verify', { request_id, code }),
     refresh: (session_token: string) =>
-      publicPost<PhoneLoginRefreshResponse>('/users/auth/phone-login/refresh', { session_token }),
+      publicPost<PhoneLoginRefreshResponse>('/auth/phone-login/refresh', { session_token }),
     logout: (session_token: string) =>
-      publicPost('/users/auth/phone-login/logout', { session_token }),
+      publicPost('/auth/phone-login/logout', { session_token }),
   },
 
   // Unauthenticated — same trust level as a phone number, not a secret.
   telegram: {
     linkStatus: (phone: string) =>
-      publicGet<TelegramLinkStatusResponse>(`/users/telegram/link-status?phone=${encodeURIComponent(phone)}`),
+      publicGet<TelegramLinkStatusResponse>(`/telegram/link-status?phone=${encodeURIComponent(phone)}`),
   },
 
   addApartment: (token: string, apartment_id: string) =>
-    apiFetch<DbUser>('/users/me/apartments', token, {
+    apiFetch<DbUser>('/me/apartments', token, {
       method: 'POST',
       body: JSON.stringify({ apartment_id }),
     }),
 
   removeApartment: (token: string, apartment_id: string) =>
-    apiFetch<DbUser>(`/users/me/apartments/${apartment_id}`, token, { method: 'DELETE' }),
+    apiFetch<DbUser>(`/me/apartments/${apartment_id}`, token, { method: 'DELETE' }),
 
   listApartments: (token: string) =>
-    apiFetch<Apartment[]>('/users/apartments/list', token),
+    apiFetch<Apartment[]>('/apartments/list', token),
 
   listUsers: (token: string, params?: { active?: boolean; role?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
@@ -297,20 +297,20 @@ export const userService = {
     if (params?.limit)  qs.set('limit', String(params.limit));
     if (params?.offset) qs.set('offset', String(params.offset));
     const query = qs.toString() ? `?${qs.toString()}` : '';
-    return apiFetch<UserListResponse>(`/users${query}`, token);
+    return apiFetch<UserListResponse>(`${query}`, token);
   },
 
   approveUser: (token: string, userId: string, role: string) =>
-    apiFetch<DbUser>(`/users/${userId}/approve`, token, {
+    apiFetch<DbUser>(`/${userId}/approve`, token, {
       method: 'POST',
       body: JSON.stringify({ role }),
     }),
 
   rejectUser: (token: string, userId: string) =>
-    apiFetch<void>(`/users/${userId}/reject`, token, { method: 'DELETE' }),
+    apiFetch<void>(`/${userId}/reject`, token, { method: 'DELETE' }),
 
   forgotPassword: (email: string) =>
-    publicPost('/users/forgot-password', { email }),
+    publicPost('/forgot-password', { email }),
 
   notifications: {
     list: (token: string, params?: { unread?: boolean; limit?: number; offset?: number }) => {
@@ -333,12 +333,12 @@ export const userService = {
   /** Self-service: add or remove own flats directly (no approval needed) */
   units: {
     add: (token: string, node_id: string) =>
-      apiFetch<DbUser>('/users/me/units', token, {
+      apiFetch<DbUser>('/me/units', token, {
         method: 'POST',
         body: JSON.stringify({ node_id }),
       }),
     remove: (token: string, node_id: string) =>
-      apiFetch<DbUser>(`/users/me/units/${node_id}`, token, { method: 'DELETE' }),
+      apiFetch<DbUser>(`/me/units/${node_id}`, token, { method: 'DELETE' }),
   },
 
   unitRequests: {
