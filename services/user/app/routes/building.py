@@ -368,7 +368,7 @@ async def list_unit_requests(
 
         if is_privileged:
             query = """
-                SELECT r.id, r.user_id, u.name AS user_name, u.email AS user_email,
+                SELECT r.id, r.user_id, u.name AS user_name, u.username AS user_username, u.email AS user_email,
                        r.node_id, r.notes, r.type, r.status, r.reviewed_by, r.reviewed_at, r.created_at
                 FROM unit_assignment_requests r
                 JOIN users u ON u.id = r.user_id
@@ -386,7 +386,7 @@ async def list_unit_requests(
             if not user:
                 return []
             query = """
-                SELECT r.id, r.user_id, u.name AS user_name, u.email AS user_email,
+                SELECT r.id, r.user_id, u.name AS user_name, u.username AS user_username, u.email AS user_email,
                        r.node_id, r.notes, r.type, r.status, r.reviewed_by, r.reviewed_at, r.created_at
                 FROM unit_assignment_requests r
                 JOIN users u ON u.id = r.user_id
