@@ -1026,6 +1026,23 @@ async def remove_my_apartment(
     return _row_to_user(row, apartments, units)
 
 
+@router.get(
+    "/apartments/list",
+    response_model=list[dict],
+    summary="List all available apartments in society",
+)
+async def list_apartments(
+    _: dict = Depends(get_current_claims),
+    pool: Pool = Depends(get_pool),
+):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, block, unit_number, type FROM user_svc.apartment WHERE society_id = $1 ORDER BY block, unit_number",
+            UUID(settings.society_id),
+        )
+    return [dict(r) for r in rows]
+
+
 # ── self-service unit management ─────────────────────────────────────────────
 # Privileged callers (admin / committee_member) mutate user_units directly.
 # Non-privileged callers get a pending request created instead, keeping the
