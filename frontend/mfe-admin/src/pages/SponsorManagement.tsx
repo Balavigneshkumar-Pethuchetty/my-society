@@ -94,7 +94,7 @@ export function SponsorManagement({ token = null }: { token?: string | null }) {
     setLoading(true); setError(null);
     Promise.all([
       apiFetch<Sponsor[]>('payments', '/sponsors', token),
-      apiFetch<{ events: { id: string; title: string }[] }>('events', '/events?status=&limit=100', token),
+      apiFetch<{ events: { id: string; title: string }[] }>('events', '?status=&limit=100', token),
     ])
       .then(([s, ev]) => { setSponsors(s); setEvents(ev.events.map(e => ({ id: e.id, title: e.title }))); })
       .catch((e: Error) => setError(e.message))

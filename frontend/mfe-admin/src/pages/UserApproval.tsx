@@ -74,19 +74,19 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
   return res.json() as Promise<T>;
 }
 
-const listPending    = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('/users?active=false', t);
-const listActive     = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('/users?active=true', t);
-const getAdminStats  = (t: string) => apiFetch<AdminStats>('/users/admin-stats', t);
+const listPending    = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('?active=false', t);
+const listActive     = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('?active=true', t);
+const getAdminStats  = (t: string) => apiFetch<AdminStats>('/admin-stats', t);
 const approveUser    = (t: string, id: string, role: string) =>
-  apiFetch<DbUser>(`/users/${id}/approve`, t, { method: 'POST', body: JSON.stringify({ role }) });
+  apiFetch<DbUser>(`/${id}/approve`, t, { method: 'POST', body: JSON.stringify({ role }) });
 const rejectUser     = (t: string, id: string) =>
-  apiFetch<void>(`/users/${id}/reject`, t, { method: 'DELETE' });
+  apiFetch<void>(`/${id}/reject`, t, { method: 'DELETE' });
 const revokeUser     = (t: string, id: string) =>
-  apiFetch<DbUser>(`/users/${id}/revoke`, t, { method: 'PATCH' });
+  apiFetch<DbUser>(`/${id}/revoke`, t, { method: 'PATCH' });
 const removeUser     = (t: string, id: string) =>
-  apiFetch<void>(`/users/${id}`, t, { method: 'DELETE' });
+  apiFetch<void>(`/${id}`, t, { method: 'DELETE' });
 const changeUserRole = (t: string, id: string, role: string) =>
-  apiFetch<DbUser>(`/users/${id}/role`, t, { method: 'PATCH', body: JSON.stringify({ role }) });
+  apiFetch<DbUser>(`/${id}/role`, t, { method: 'PATCH', body: JSON.stringify({ role }) });
 
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 
