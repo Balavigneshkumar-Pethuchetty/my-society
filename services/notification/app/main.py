@@ -2,8 +2,10 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Header
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Header, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from fastapi.openapi.utils import get_openapi
 
 from app.config import settings
 from app.models import (
@@ -23,8 +25,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# API Key for Swagger UI authentication
+api_key_header = APIKeyHeader(
+    name="X-Api-Key",
+    description="Internal API Key for service-to-service authentication",
+    scheme_name="APIKeyHeader"
+)
 
-def verify_internal_api_key(x_api_key: str = Header(...)) -> str:
+
+def verify_internal_api_key(x_api_key: str = Security(api_key_header)) -> str:
     """Verify internal service API key."""
     if not settings.internal_api_key or x_api_key != settings.internal_api_key:
         raise HTTPException(status_code=403, detail="Invalid API key")
@@ -49,6 +58,41 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+
+def custom_openapi():
+    """Custom OpenAPI schema with API Key security scheme."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title="Notification Service",
+        version="1.0.0",
+        description="Unified notification service with Novu and legacy fallback",
+        routes=app.routes,
+    )
+
+    # Add API Key security scheme
+    openapi_schema["components"]["securitySchemes"] = {
+        "APIKeyHeader": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Api-Key",
+            "description": "Internal API Key for authentication. Ask your administrator for this key.",
+        }
+    }
+
+    # Apply security to all endpoints
+    for path in openapi_schema["paths"].values():
+        for operation in path.values():
+            if isinstance(operation, dict) and "security" not in operation:
+                operation["security"] = [{"APIKeyHeader": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 @app.get("/health")
