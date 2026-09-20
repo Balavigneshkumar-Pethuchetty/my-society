@@ -26,6 +26,7 @@
         logs-splunk logs-fluent-bit \
         logs-novu logs-novu-api logs-novu-worker \
         novu-up novu-down novu-restart novu-status \
+        novu-health novu-smoke-test novu-pre-deploy-check \
         splunk-up splunk-down \
         clean-docker clean-build clean-cache clean-all prepare up-clean
 
@@ -424,6 +425,19 @@ novu-status: ## Check Novu services health status
 	  echo "  ✗ Novu API is unreachable (check if containers are running)"; \
 	fi
 	@echo ""
+
+## ── Novu Testing & CI/CD ────────────────────────────────────────────────────
+novu-health: ## Run Novu health check (container + API + DB health)
+	@./scripts/novu-health-check.sh
+
+novu-health-verbose: ## Run Novu health check with detailed debugging output
+	@./scripts/novu-health-check.sh detailed
+
+novu-smoke-test: ## Run smoke test (verify end-to-end notification delivery)
+	@./scripts/novu-smoke-test.sh
+
+novu-pre-deploy-check: ## Pre-deployment verification (config, security, resources)
+	@./scripts/pre-deployment-check.sh
 
 ## ── Database ────────────────────────────────────────────────────────────────
 shell-db: ## Open psql in the active environment's database
