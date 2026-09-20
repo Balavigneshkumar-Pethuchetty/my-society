@@ -12,7 +12,7 @@
 #   make down ENV=test       # stop test stack
 #   make logs ENV=stage      # follow stage logs
 
-.PHONY: help up down restart mode-local mode-public free-ports validate-ports check-env logs ps reset seed \
+.PHONY: help up down restart mode-local mode-public free-ports validate-ports check-env logs ps status reset seed \
         migrate migrate-status \
         test test-db-up test-db-down \
         shell-db shell-redis shell-visitor-db sync-users setup-google-idp sync-keycloak-redirect-uris \
@@ -330,6 +330,50 @@ splunk-down: ## Stop centralized Splunk + Fluent Bit (~/splunk-service)
 ## ── Status ──────────────────────────────────────────────────────────────────
 ps: ## Show service status and health
 	$(COMPOSE) ps
+
+status: ## Show comprehensive service status with endpoints
+	@echo ""
+	@echo "  $(CYAN)Service Status & Health$(RESET)"
+	@echo "  ─────────────────────────────────────────"
+	@$(COMPOSE) ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"
+	@echo ""
+	@echo "  $(CYAN)Notification Service$(RESET)"
+	@echo "  ─────────────────────────────────────────"
+	@_notification=$$($(COMPOSE) ps notification-service -q 2>/dev/null); \
+	if [ -n "$$_notification" ]; then \
+	  _health=$$(docker inspect $$_notification -f '{{.State.Health.Status}}' 2>/dev/null || echo "running"); \
+	  echo "  Status              → ✔ $$_health"; \
+	  echo "  Health Check        → http://localhost:3009/health"; \
+	  echo "  API Endpoint        → http://localhost:3009/api/notifications/"; \
+	  echo "  API Docs            → http://localhost:3009/docs"; \
+	  echo "  View Logs           → make logs-notification"; \
+	else \
+	  echo "  Status              → ✗ Not running"; \
+	fi
+	@echo ""
+	@echo "  $(CYAN)Backend Services$(RESET)"
+	@echo "  ─────────────────────────────────────────"
+	@echo "  User Service        → http://localhost:8080/api/users/docs"
+	@echo "  Event Service       → http://localhost:8080/api/events/docs"
+	@echo "  Registration        → http://localhost:8080/api/registrations/docs"
+	@echo "  Ticket Service      → http://localhost:8080/api/tickets/docs"
+	@echo "  Payment Service     → http://localhost:8080/api/payments/docs"
+	@echo "  Notification Service → http://localhost:8080/api/notifications/docs"
+	@echo ""
+	@echo "  $(CYAN)Frontend / Admin$(RESET)"
+	@echo "  ─────────────────────────────────────────"
+	@echo "  App Home            → https://gm-global-techies-town.club/"
+	@echo "  Admin Panel         → https://gm-global-techies-town.club/admin"
+	@echo "  Event Manager       → https://gm-global-techies-town.club/manage"
+	@echo "  Payments            → https://gm-global-techies-town.club/payments"
+	@echo ""
+	@echo "  $(CYAN)Useful Commands$(RESET)"
+	@echo "  ─────────────────────────────────────────"
+	@echo "  View all logs       → make logs"
+	@echo "  View notification   → make logs-notification"
+	@echo "  Restart notification → make restart-notification-service"
+	@echo "  Restart all         → make restart"
+	@echo ""
 
 ## ── Logs ────────────────────────────────────────────────────────────────────
 logs: ## Follow logs for all running services
