@@ -43,6 +43,9 @@ app = FastAPI(
     title="Notification Service",
     description="Unified notification service with Novu and legacy fallback",
     version="1.0.0",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
