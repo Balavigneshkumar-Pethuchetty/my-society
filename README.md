@@ -25,8 +25,8 @@ under five minutes.
 
 ```bash
 # 1. Clone / copy the project
-git clone <repo-url> society-events
-cd society-events
+git clone <repo-url> my-society
+cd my-society
 
 # 2. Create env file from the example
 cp .env.example .env

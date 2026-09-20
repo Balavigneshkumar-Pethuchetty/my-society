@@ -83,6 +83,16 @@ app.add_middleware(
 )
 app.add_middleware(SplunkLoggingMiddleware)
 
+
+@app.get("/society", tags=["ops"], summary="Society identity config (public)")
+async def get_society():
+    return SocietyConfig(
+        name=settings.society_name,
+        shortName=settings.society_short_name,
+        city=settings.society_city,
+    )
+
+
 app.include_router(users.router,         prefix="/users",          tags=["users"])
 app.include_router(notifications.router, prefix="/notifications",   tags=["notifications"])
 app.include_router(internal.router,      prefix="/internal/users",  tags=["internal"])

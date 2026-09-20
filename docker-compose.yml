@@ -654,6 +654,7 @@ services:
 
   # ─── Novu Notification Orchestration ──────────────────────────────────────
   novu-mongo:
+    profiles: ["novu"]
     image: mongo:6
     container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_mongo
     restart: unless-stopped
@@ -668,6 +669,7 @@ services:
       - society_net
 
   novu-redis:
+    profiles: ["novu"]
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_redis
     restart: unless-stopped
@@ -682,6 +684,7 @@ services:
       - society_net
 
   novu-api:
+    profiles: ["novu"]
     image: novu/novu:0.25.0
     container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_api
     restart: unless-stopped
@@ -706,6 +709,7 @@ services:
       - society_net
 
   novu-worker:
+    profiles: ["novu"]
     image: novu/novu:0.25.0
     container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_worker
     restart: unless-stopped

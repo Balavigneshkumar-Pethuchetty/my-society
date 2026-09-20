@@ -9,16 +9,16 @@ novu-setup:
 
 novu-start:
 	@echo "Starting Novu services..."
-	docker compose -f docker-compose.novu.yml up -d
+	docker compose -f docker-compose.novu.yml --profile novu up -d
 	@echo "Novu is starting... (wait ~30s)"
 
 novu-stop:
 	@echo "Stopping Novu services..."
-	docker compose -f docker-compose.novu.yml stop
+	docker compose -f docker-compose.novu.yml --profile novu stop
 
 novu-restart:
 	@echo "Restarting Novu services..."
-	docker compose -f docker-compose.novu.yml restart
+	docker compose -f docker-compose.novu.yml --profile novu restart
 	@echo "Novu restarted"
 
 novu-down:

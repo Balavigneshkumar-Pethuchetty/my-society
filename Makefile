@@ -379,17 +379,17 @@ logs-fluent-bit: ## Follow Fluent Bit logs (centralized ~/splunk-service)
 
 ## ── Novu Notification Service ───────────────────────────────────────────────
 logs-novu: ## Follow all Novu service logs (API, worker, MongoDB, Redis)
-	$(COMPOSE) logs -f novu-api novu-worker novu-mongo novu-redis
+	$(COMPOSE) --profile novu logs -f novu-api novu-worker novu-mongo novu-redis
 
 logs-novu-api: ## Follow Novu API logs only
-	$(COMPOSE) logs -f novu-api
+	$(COMPOSE) --profile novu logs -f novu-api
 
 logs-novu-worker: ## Follow Novu Worker logs only
-	$(COMPOSE) logs -f novu-worker
+	$(COMPOSE) --profile novu logs -f novu-worker
 
 novu-up: ## Start Novu services (API, worker, MongoDB, Redis)
 	@echo "$(CYAN)Starting Novu services…$(RESET)"
-	$(COMPOSE) up -d novu-mongo novu-redis novu-api novu-worker
+	$(COMPOSE) --profile novu up -d novu-mongo novu-redis novu-api novu-worker
 	@echo "  Waiting for Novu API to be healthy…"
 	@for i in {1..30}; do \
 	  if curl -sf http://localhost:3000/v1/health >/dev/null 2>&1; then \
@@ -403,12 +403,12 @@ novu-up: ## Start Novu services (API, worker, MongoDB, Redis)
 
 novu-down: ## Stop Novu services (preserves MongoDB/Redis data)
 	@echo "$(CYAN)Stopping Novu services…$(RESET)"
-	$(COMPOSE) stop novu-api novu-worker novu-mongo novu-redis
+	$(COMPOSE) --profile novu stop novu-api novu-worker novu-mongo novu-redis
 	@echo "  ✓ Novu services stopped (data preserved)"
 
 novu-restart: ## Restart Novu services (API, worker, MongoDB, Redis)
 	@echo "$(CYAN)Restarting Novu services…$(RESET)"
-	$(COMPOSE) restart novu-api novu-worker novu-mongo novu-redis
+	$(COMPOSE) --profile novu restart novu-api novu-worker novu-mongo novu-redis
 	@echo "  Waiting for Novu API to be healthy…"
 	@for i in {1..30}; do \
 	  if curl -sf http://localhost:3000/v1/health >/dev/null 2>&1; then \
@@ -423,7 +423,7 @@ novu-status: ## Check Novu services health status
 	@echo "$(CYAN)Novu Services Status:$(RESET)"
 	@echo ""
 	@echo "  Container status:"
-	@$(COMPOSE) ps novu-api novu-worker novu-mongo novu-redis 2>/dev/null | tail -n +2 || echo "    Not running"
+	@$(COMPOSE) --profile novu ps novu-api novu-worker novu-mongo novu-redis 2>/dev/null | tail -n +2 || echo "    Not running"
 	@echo ""
 	@echo "  API health check:"
 	@if curl -sf http://localhost:3000/v1/health 2>/dev/null | head -c 50; then \

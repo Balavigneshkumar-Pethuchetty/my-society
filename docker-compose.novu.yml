@@ -3,6 +3,7 @@ version: '3.8'
 services:
   # Novu API & Dashboard
   novu-api:
+    profiles: ["novu"]
     image: novu/novu:0.25.0
     container_name: novu_api
     restart: unless-stopped
@@ -29,6 +30,7 @@ services:
 
   # Novu Worker (processes jobs)
   novu-worker:
+    profiles: ["novu"]
     image: novu/novu:0.25.0
     container_name: novu_worker
     restart: unless-stopped
@@ -47,6 +49,7 @@ services:
 
   # MongoDB for Novu
   novu-mongo:
+    profiles: ["novu"]
     image: mongo:6
     container_name: novu_mongo
     restart: unless-stopped
@@ -62,6 +65,7 @@ services:
 
   # Redis for Novu
   novu-redis:
+    profiles: ["novu"]
     image: redis:7-alpine
     container_name: novu_redis
     restart: unless-stopped
