@@ -198,7 +198,7 @@ up: validate-ports ## Start all services in daemon mode (background). Services c
 	 echo "  Registration docs  → $$_local/api/registrations/docs"; \
 	 echo "  Ticket API docs    → $$_local/api/tickets/docs"; \
 	 echo "  Payment API docs   → $$_local/api/payments/docs"; \
-	 echo "  Notification API   → http://localhost:3009/docs"; \
+	 echo "  Notification docs  → $$_local/api/notifications/docs"; \
 	 echo ""; \
 	 echo "  $(CYAN)MFE preview roots$(RESET)"; \
 	 echo "  Admin MFE          → $$_local/mfe-admin/"; \
@@ -359,7 +359,7 @@ status: ## Show comprehensive service status with endpoints
 	@echo "  Registration        → http://localhost:8080/api/registrations/docs"
 	@echo "  Ticket Service      → http://localhost:8080/api/tickets/docs"
 	@echo "  Payment Service     → http://localhost:8080/api/payments/docs"
-	@echo "  Notification Service → http://localhost:8080/api/notifications/docs"
+	@echo "  Notification API    → http://localhost:8080/api/notifications/docs"
 	@echo ""
 	@echo "  $(CYAN)Frontend / Admin$(RESET)"
 	@echo "  ─────────────────────────────────────────"
