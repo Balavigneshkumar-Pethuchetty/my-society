@@ -27,6 +27,10 @@
         logs-novu logs-novu-api logs-novu-worker \
         novu-up novu-down novu-restart novu-status \
         novu-health novu-smoke-test novu-pre-deploy-check \
+        monitoring-up monitoring-down monitoring-restart monitoring-status \
+        monitoring-logs logs-prometheus logs-grafana logs-alertmanager \
+        grafana-open prometheus-open alertmanager-open \
+        metrics-health metrics-export \
         splunk-up splunk-down \
         clean-docker clean-build clean-cache clean-all prepare up-clean
 
@@ -438,6 +442,84 @@ novu-smoke-test: ## Run smoke test (verify end-to-end notification delivery)
 
 novu-pre-deploy-check: ## Pre-deployment verification (config, security, resources)
 	@./scripts/pre-deployment-check.sh
+
+## ── Monitoring & Observability ──────────────────────────────────────────────
+monitoring-up: ## Start Prometheus, Grafana, and AlertManager
+	@echo "$(CYAN)Starting monitoring stack…$(RESET)"
+	$(COMPOSE) up -d prometheus grafana alertmanager
+	@echo "  Waiting for services…"
+	@sleep 5
+	@echo "$(CYAN)Monitoring stack started:$(RESET)"
+	@echo "  • Prometheus:   http://localhost:9090"
+	@echo "  • Grafana:      http://localhost:3001 (admin/admin)"
+	@echo "  • AlertManager: http://localhost:9093"
+
+monitoring-down: ## Stop Prometheus, Grafana, and AlertManager
+	@echo "$(CYAN)Stopping monitoring stack…$(RESET)"
+	$(COMPOSE) stop prometheus grafana alertmanager
+	@echo "  ✓ Monitoring services stopped (data preserved)"
+
+monitoring-restart: ## Restart monitoring stack
+	@$(MAKE) -s monitoring-down
+	@sleep 2
+	@$(MAKE) -s monitoring-up
+
+monitoring-status: ## Check monitoring services status
+	@echo "$(CYAN)Monitoring Services Status:$(RESET)"
+	@$(COMPOSE) ps prometheus grafana alertmanager 2>/dev/null | tail -n +2 || echo "  Not running"
+
+monitoring-logs: ## Follow all monitoring logs
+	$(COMPOSE) logs -f prometheus grafana alertmanager
+
+logs-prometheus: ## Follow Prometheus logs
+	$(COMPOSE) logs -f prometheus
+
+logs-grafana: ## Follow Grafana logs
+	$(COMPOSE) logs -f grafana
+
+logs-alertmanager: ## Follow AlertManager logs
+	$(COMPOSE) logs -f alertmanager
+
+grafana-open: ## Open Grafana dashboard in browser
+	@echo "Opening Grafana at http://localhost:3001"
+	@echo "Login: admin / admin"
+	@which xdg-open >/dev/null 2>&1 && xdg-open http://localhost:3001 || \
+	  which open >/dev/null 2>&1 && open http://localhost:3001 || \
+	  echo "Please open http://localhost:3001 manually"
+
+prometheus-open: ## Open Prometheus UI in browser
+	@echo "Opening Prometheus at http://localhost:9090"
+	@which xdg-open >/dev/null 2>&1 && xdg-open http://localhost:9090 || \
+	  which open >/dev/null 2>&1 && open http://localhost:9090 || \
+	  echo "Please open http://localhost:9090 manually"
+
+alertmanager-open: ## Open AlertManager UI in browser
+	@echo "Opening AlertManager at http://localhost:9093"
+	@which xdg-open >/dev/null 2>&1 && xdg-open http://localhost:9093 || \
+	  which open >/dev/null 2>&1 && open http://localhost:9093 || \
+	  echo "Please open http://localhost:9093 manually"
+
+metrics-health: ## Check if metrics are being collected
+	@echo "$(CYAN)Metrics Collection Status:$(RESET)"
+	@echo ""
+	@echo "  Prometheus targets:"
+	@curl -sf http://localhost:9090/api/v1/targets 2>/dev/null | \
+	  grep -o '"job":"[^"]*"' | sort -u | sed 's/"//g' | sed 's/:/: /' | sed 's/^/    /' || \
+	  echo "    (Prometheus not reachable)"
+	@echo ""
+	@echo "  Sample metrics (from last 5 min):"
+	@curl -sf 'http://localhost:9090/api/v1/query?query=count(novu_notifications_sent_total)' 2>/dev/null | \
+	  grep -o 'value":\["[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/^/    Total notifications sent: /' || \
+	  echo "    (Metrics not yet available)"
+
+metrics-export: ## Export current metrics to file (for backup or analysis)
+	@echo "$(CYAN)Exporting metrics…$(RESET)"
+	@mkdir -p ./metrics-exports
+	@timestamp=$$(date +%Y%m%d_%H%M%S); \
+	  curl -sf http://localhost:9090/api/v1/query?query='{__name__=~".+"}' \
+	    > ./metrics-exports/metrics_$$timestamp.json && \
+	  echo "  ✓ Metrics exported to metrics-exports/metrics_$$timestamp.json" || \
+	  echo "  ✗ Failed to export metrics (Prometheus not reachable)"
 
 ## ── Database ────────────────────────────────────────────────────────────────
 shell-db: ## Open psql in the active environment's database

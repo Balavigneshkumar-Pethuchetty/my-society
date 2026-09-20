@@ -1,0 +1,245 @@
+groups:
+  - name: novu_alerts
+    interval: 30s
+    rules:
+      # ─────────────────────────────────────────────────────────────
+      # Service Availability Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: NovuAPIDown
+        expr: novu_api_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Novu API is down"
+          description: "Novu API has been unreachable for 2+ minutes. Falling back to legacy notifications."
+          dashboard: "http://localhost:3000/grafana/d/novu-overview"
+
+      - alert: MongoDBDown
+        expr: novu_mongodb_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "MongoDB is down"
+          description: "Novu MongoDB database is unreachable. Novu will not function."
+
+      - alert: RedisDown
+        expr: novu_redis_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Redis is down"
+          description: "Novu Redis cache is unreachable. Queue processing may be affected."
+
+      - alert: FallbackSystemDown
+        expr: novu_fallback_system_health == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "Fallback notification system is down"
+          description: "Legacy notification system (auth-service or Gmail) is unreachable."
+
+      # ─────────────────────────────────────────────────────────────
+      # Error Rate Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: HighNotificationErrorRate
+        expr: |
+          rate(novu_notifications_failed_total[5m]) /
+          (rate(novu_notifications_failed_total[5m]) + rate(novu_notifications_sent_total[5m])) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "High notification error rate"
+          description: "More than 10% of notifications are failing over the last 5 minutes."
+          runbook: "https://wiki.example.com/novu-high-error-rate"
+
+      - alert: CriticalNotificationErrorRate
+        expr: |
+          rate(novu_notifications_failed_total[5m]) /
+          (rate(novu_notifications_failed_total[5m]) + rate(novu_notifications_sent_total[5m])) > 0.25
+        for: 2m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Critical notification error rate"
+          description: "More than 25% of notifications are failing. Immediate investigation required."
+
+      - alert: AllFallbacksFailing
+        expr: rate(novu_notifications_failed_total{source="legacy"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "All fallback notifications are failing"
+          description: "Legacy fallback system is failing most notifications. Primary and backup both down."
+
+      # ─────────────────────────────────────────────────────────────
+      # Performance Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: HighNotificationLatency
+        expr: histogram_quantile(0.95, novu_notification_latency_seconds_bucket) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "High notification latency"
+          description: "95th percentile notification latency is above 5 seconds."
+
+      - alert: CriticalNotificationLatency
+        expr: histogram_quantile(0.95, novu_notification_latency_seconds_bucket) > 30
+        for: 2m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Critical notification latency"
+          description: "95th percentile latency is above 30 seconds. Notifications are significantly delayed."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, novu_api_latency_seconds_bucket) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "Novu API latency is high"
+          description: "API 95th percentile latency exceeds 2 seconds."
+
+      - alert: HighFallbackLatency
+        expr: histogram_quantile(0.95, novu_fallback_latency_seconds_bucket) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "Fallback notifications are slow"
+          description: "Legacy channel latency is high (95th percentile > 60s)."
+
+      # ─────────────────────────────────────────────────────────────
+      # Fallback Activation Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: FrequentFallbackActivation
+        expr: rate(novu_notifications_fallback_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "Frequent fallback activation"
+          description: "Fallback is being triggered more than once per 2 seconds. Novu may be having issues."
+
+      - alert: FallbackActivationSpike
+        expr: rate(novu_notifications_fallback_total[1m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Fallback activation spike"
+          description: "More than 5 fallback activations per second. Critical Novu issue detected."
+
+      # ─────────────────────────────────────────────────────────────
+      # Subscriber & Queue Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: HighPendingNotifications
+        expr: novu_pending_notifications > 1000
+        for: 10m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "High number of pending notifications"
+          description: "Over 1000 notifications are pending in queue. Processing may be slow."
+
+      - alert: CriticalPendingNotifications
+        expr: novu_pending_notifications > 10000
+        for: 5m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Critical notification queue buildup"
+          description: "Over 10000 notifications are pending. Serious processing issue detected."
+
+      - alert: NoSubscriberGrowth
+        expr: increase(novu_subscribers_created_total[24h]) == 0
+        for: 24h
+        labels:
+          severity: info
+          service: novu
+        annotations:
+          summary: "No new subscribers in 24 hours"
+          description: "No new Novu subscribers have been created. Might indicate an issue."
+
+      # ─────────────────────────────────────────────────────────────
+      # Specific Event Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: CriticalEventFailureRate
+        expr: |
+          rate(novu_notifications_failed_total{event_name=~"refund|payment|user_approved"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "High failure rate for critical events"
+          description: "Refund, payment, or user approval notifications are failing. Immediate action required."
+
+      - alert: EventProcessingStalled
+        expr: |
+          rate(novu_notifications_sent_total[5m]) == 0
+          and rate(novu_notifications_failed_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: novu
+        annotations:
+          summary: "Event processing has stalled"
+          description: "No notifications (sent or failed) in the last 10 minutes. System may be frozen."
+
+      # ─────────────────────────────────────────────────────────────
+      # Composite Alerts
+      # ─────────────────────────────────────────────────────────────
+
+      - alert: NovuDegraded
+        expr: |
+          novu_api_health == 0 and novu_fallback_system_health == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: novu
+        annotations:
+          summary: "Novu is degraded, relying on fallback"
+          description: "Primary Novu API is down. System is operating on legacy fallback only."
+
+      - alert: NovuTotalFailure
+        expr: |
+          novu_api_health == 0 and novu_fallback_system_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          oncall: true
+          service: novu
+        annotations:
+          summary: "CRITICAL: Notification system total failure"
+          description: "Both Novu and fallback systems are down. IMMEDIATE ESCALATION REQUIRED."
+          runbook: "https://wiki.example.com/novu-total-failure"
+          escalation: "page oncall immediately"
