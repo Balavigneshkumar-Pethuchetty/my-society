@@ -652,6 +652,78 @@ services:
     networks:
       - society_net
 
+  # ─── Novu Notification Orchestration ──────────────────────────────────────
+  novu-mongo:
+    image: mongo:6
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_mongo
+    restart: unless-stopped
+    volumes:
+      - novu_mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/novu --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - society_net
+
+  novu-redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_redis
+    restart: unless-stopped
+    volumes:
+      - novu_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - society_net
+
+  novu-api:
+    image: novu/novu:0.25.0
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mongodb://novu-mongo:27017/novu
+      REDIS_URL: redis://novu-redis:6379
+      JWT_SECRET: ${NOVU_JWT_SECRET:-change-me-in-production}
+      STORE_ENCRYPTION_KEY: ${NOVU_ENCRYPTION_KEY:-change-me-in-production}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      novu-mongo:
+        condition: service_healthy
+      novu-redis:
+        condition: service_healthy
+    networks:
+      - society_net
+
+  novu-worker:
+    image: novu/novu:0.25.0
+    container_name: ${COMPOSE_PROJECT_NAME:-society}_novu_worker
+    restart: unless-stopped
+    command: npm run start:worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mongodb://novu-mongo:27017/novu
+      REDIS_URL: redis://novu-redis:6379
+      JWT_SECRET: ${NOVU_JWT_SECRET:-change-me-in-production}
+      STORE_ENCRYPTION_KEY: ${NOVU_ENCRYPTION_KEY:-change-me-in-production}
+    depends_on:
+      novu-mongo:
+        condition: service_healthy
+      novu-redis:
+        condition: service_healthy
+    networks:
+      - society_net
+
 # ─── Volumes ─────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
@@ -674,6 +746,10 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME:-society}_visitor_postgres_data
   visitor_uploads:
     name: ${COMPOSE_PROJECT_NAME:-society}_visitor_uploads
+  novu_mongo_data:
+    name: ${COMPOSE_PROJECT_NAME:-society}_novu_mongo_data
+  novu_redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-society}_novu_redis_data
 
 # ─── Network ─────────────────────────────────────────────────────────────────
 networks:

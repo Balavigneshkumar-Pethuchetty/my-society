@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     smtp_from_name: str = "GM Global Techies Town"
     society_name: str = "GM Global Techies Town"
 
+    # Novu notification orchestration service
+    novu_api_key: str = ""
+    novu_base_url: str = "http://novu-api:3000"
+    # Strategy: "novu_only" (no fallback), "legacy_only" (no Novu), or "novu_with_fallback" (default)
+    notification_strategy: str = "novu_with_fallback"
+
     # "testing" mounts the /test/* endpoints (clear-transactions, seed-transaction)
     # used to exercise the centralized reconciliation service's /parseEmail without a
     # real checkout. Any other value (default "production") leaves them unmounted.

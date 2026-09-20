@@ -1,15 +1,18 @@
 """
-Centralized Novu notification client for all services.
+Centralized Novu notification client with fallback support.
 Provides a unified interface for sending notifications across multiple channels:
 - SMS (via Twilio/custom provider)
 - Telegram
 - In-app notifications
 - Email (optional)
+
+Primary: Novu for centralized notification orchestration
+Fallback: Legacy auth-service SMS/Telegram + Gmail SMTP when Novu unavailable
 """
 
 import logging
-from typing import Optional, Dict, Any
-from datetime import datetime
+from typing import Optional, Dict, Any, Callable
+from enum import Enum
 
 import httpx
 from app.config import settings
@@ -17,9 +20,21 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+class NotificationStrategy(str, Enum):
+    """Notification delivery strategy"""
+    NOVU_ONLY = "novu_only"
+    LEGACY_ONLY = "legacy_only"
+    NOVU_WITH_FALLBACK = "novu_with_fallback"  # Try Novu first, fall back to legacy
+
+
 class NovuNotificationClient:
     """
-    Unified notification client using Novu as the notification orchestration layer.
+    Unified notification client using Novu with optional fallback to legacy system.
+
+    Strategy (configurable via NOTIFICATION_STRATEGY env var):
+    - NOVU_ONLY: Use Novu exclusively, disable legacy channels
+    - LEGACY_ONLY: Use legacy auth-service + SMTP (no Novu)
+    - NOVU_WITH_FALLBACK: Try Novu first, silently fall back to legacy if unavailable
 
     Instead of managing SMS, Telegram, and in-app notifications separately,
     this client sends events to Novu which handles:
@@ -29,15 +44,22 @@ class NovuNotificationClient:
     - Template management
     """
 
-    def __init__(self):
+    def __init__(self, fallback_handler: Optional[Callable] = None):
         self.api_key = settings.novu_api_key
         self.base_url = settings.novu_base_url or "http://novu-api:3000"
+        self.strategy = NotificationStrategy(
+            getattr(settings, "notification_strategy", NotificationStrategy.NOVU_WITH_FALLBACK)
+        )
+        self.fallback_handler = fallback_handler
+        self.enabled = bool(self.api_key)
+
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={"Authorization": f"ApiKey {self.api_key}"},
             timeout=10.0
-        )
-        self.enabled = bool(self.api_key)
+        ) if self.enabled else None
+
+        logger.info(f"NovuNotificationClient initialized with strategy: {self.strategy}, enabled: {self.enabled}")
 
     async def send_notification(
         self,
@@ -46,9 +68,9 @@ class NovuNotificationClient:
         payload: Dict[str, Any],
         tags: Optional[list] = None,
         override_preferences: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
-        Send a notification via Novu.
+        Send a notification via Novu with optional fallback to legacy system.
 
         Args:
             event_name: Novu workflow/template name (e.g., 'refund_approved', 'user_approved')
@@ -58,20 +80,33 @@ class NovuNotificationClient:
             override_preferences: Channel preference overrides for this notification
 
         Returns:
-            Response data if successful, None if disabled or failed
+            Dict with keys: {
+                "source": "novu" | "legacy" | "none",
+                "success": bool,
+                "id": str (novu_id or transaction_ref if fallback),
+                "data": dict (raw response)
+            }
 
         Example:
-            await novu.send_notification(
+            result = await novu.send_notification(
                 event_name="refund_approved",
                 subscriber_id=user_id,
                 payload={"amount": 100, "currency": "INR"},
                 tags=["refund", "payment"]
             )
+            assert result["source"] in ("novu", "legacy")
         """
 
+        if self.strategy == NotificationStrategy.LEGACY_ONLY:
+            return await self._fallback_send(event_name, subscriber_id, payload)
+
         if not self.enabled:
-            logger.warning("Novu is disabled - set NOVU_API_KEY to enable")
-            return None
+            if self.strategy == NotificationStrategy.NOVU_WITH_FALLBACK:
+                logger.warning("Novu unavailable - falling back to legacy notification system")
+                return await self._fallback_send(event_name, subscriber_id, payload)
+            else:
+                logger.warning("Novu is disabled and fallback is disabled")
+                return {"source": "none", "success": False, "id": None, "data": {}}
 
         try:
             request_data = {
@@ -95,32 +130,44 @@ class NovuNotificationClient:
 
             if response.status_code == 201:
                 data = response.json()
+                novu_id = data.get("data", {}).get("id")
                 logger.info(
-                    f"Notification sent successfully",
+                    f"Notification sent successfully via Novu",
                     extra={
                         "event": event_name,
                         "user_id": subscriber_id,
-                        "novu_id": data.get("data", {}).get("id"),
+                        "novu_id": novu_id,
                     }
                 )
-                return data
+                return {
+                    "source": "novu",
+                    "success": True,
+                    "id": novu_id,
+                    "data": data
+                }
             else:
-                logger.error(
-                    f"Novu API error: {response.status_code}",
+                logger.warning(
+                    f"Novu API error: {response.status_code}, falling back",
                     extra={
                         "event": event_name,
                         "user_id": subscriber_id,
                         "response": response.text,
                     }
                 )
-                return None
+                if self.strategy == NotificationStrategy.NOVU_WITH_FALLBACK:
+                    return await self._fallback_send(event_name, subscriber_id, payload)
+                else:
+                    return {"source": "novu", "success": False, "id": None, "data": {}}
 
-        except httpx.TimeoutException:
-            logger.error(
-                "Novu API timeout",
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            logger.warning(
+                f"Novu API unavailable ({type(e).__name__}), falling back",
                 extra={"event": event_name, "user_id": subscriber_id}
             )
-            return None
+            if self.strategy == NotificationStrategy.NOVU_WITH_FALLBACK:
+                return await self._fallback_send(event_name, subscriber_id, payload)
+            else:
+                return {"source": "novu", "success": False, "id": None, "data": {}}
         except Exception as e:
             logger.error(
                 f"Failed to send notification via Novu: {str(e)}",
@@ -131,7 +178,55 @@ class NovuNotificationClient:
                 },
                 exc_info=True
             )
-            return None
+            if self.strategy == NotificationStrategy.NOVU_WITH_FALLBACK:
+                return await self._fallback_send(event_name, subscriber_id, payload)
+            else:
+                return {"source": "novu", "success": False, "id": None, "data": {}}
+
+    async def _fallback_send(
+        self, event_name: str, subscriber_id: str, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Fallback to legacy notification system when Novu is unavailable.
+
+        This calls the registered fallback_handler if available, or returns a
+        safe "not sent" response if no fallback is configured.
+
+        The fallback_handler is expected to accept:
+          - event_name: str (e.g., "refund_approved")
+          - subscriber_id: str (user UUID)
+          - payload: dict (notification data)
+
+        And return a dict with:
+          - "success": bool
+          - "id": str or None
+        """
+        if not self.fallback_handler:
+            logger.error(
+                f"No fallback handler configured - notification lost",
+                extra={"event": event_name, "user_id": subscriber_id}
+            )
+            return {"source": "legacy", "success": False, "id": None, "data": {}}
+
+        try:
+            logger.info(
+                f"Sending notification via legacy fallback handler",
+                extra={"event": event_name, "user_id": subscriber_id}
+            )
+            result = await self.fallback_handler(event_name, subscriber_id, payload)
+            result["source"] = "legacy"
+            return result
+        except Exception as e:
+            logger.error(
+                f"Fallback handler failed: {str(e)}",
+                extra={
+                    "event": event_name,
+                    "user_id": subscriber_id,
+                    "error": str(e),
+                },
+                exc_info=True
+            )
+            return {"source": "legacy", "success": False, "id": None, "data": {}}
 
     async def send_bulk_notifications(
         self,
@@ -139,7 +234,7 @@ class NovuNotificationClient:
         subscriber_ids: list,
         payload: Dict[str, Any],
         tags: Optional[list] = None,
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Any]:
         """
         Send notification to multiple subscribers.
 
@@ -150,9 +245,18 @@ class NovuNotificationClient:
             tags: Optional tags
 
         Returns:
-            Dict with counts: {"successful": 5, "failed": 1}
+            Dict with counts and details:
+            {
+                "successful": 5,
+                "failed": 1,
+                "by_source": {"novu": 5, "legacy": 0, "none": 1}
+            }
         """
-        results = {"successful": 0, "failed": 0}
+        results = {
+            "successful": 0,
+            "failed": 0,
+            "by_source": {"novu": 0, "legacy": 0, "none": 0}
+        }
 
         for subscriber_id in subscriber_ids:
             response = await self.send_notification(
@@ -161,8 +265,10 @@ class NovuNotificationClient:
                 payload=payload,
                 tags=tags,
             )
-            if response:
+            source = response.get("source", "none")
+            if response.get("success"):
                 results["successful"] += 1
+                results["by_source"][source] = results["by_source"].get(source, 0) + 1
             else:
                 results["failed"] += 1
 
@@ -261,9 +367,26 @@ class NovuNotificationClient:
 _novu_client: Optional[NovuNotificationClient] = None
 
 
-def get_novu_client() -> NovuNotificationClient:
-    """Get or create the Novu client singleton."""
+def get_novu_client(fallback_handler: Optional[Callable] = None) -> NovuNotificationClient:
+    """
+    Get or create the Novu client singleton.
+
+    Args:
+        fallback_handler: Optional async function to handle fallback notifications.
+                         Called when Novu is unavailable and strategy is NOVU_WITH_FALLBACK.
+                         Signature: async fn(event_name: str, subscriber_id: str, payload: dict) -> dict
+
+    Returns:
+        NovuNotificationClient singleton instance
+    """
     global _novu_client
     if _novu_client is None:
-        _novu_client = NovuNotificationClient()
+        _novu_client = NovuNotificationClient(fallback_handler=fallback_handler)
     return _novu_client
+
+
+def set_novu_fallback_handler(handler: Callable) -> None:
+    """Configure the fallback handler for an already-initialized client."""
+    global _novu_client
+    if _novu_client is not None:
+        _novu_client.fallback_handler = handler

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     smtp_from_name: str = "GM Global Techies Town"
     society_name: str = "GM Global Techies Town"
 
+    # Novu notification orchestration service
+    novu_api_key: str = ""
+    novu_base_url: str = "http://novu-api:3000"
+    notification_strategy: str = "novu_with_fallback"
 
     @property
     def database_url(self) -> str:
