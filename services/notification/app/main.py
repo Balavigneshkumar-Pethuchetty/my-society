@@ -28,12 +28,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default credentials for development/testing
-DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = "admin123"  # Change in production!
+# JWT Configuration
 JWT_SECRET = "your-secret-key-change-in-production"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+KEYCLOAK_CLIENT_ID = "society-api"
+KEYCLOAK_CLIENT_SECRET = settings.keycloak_api_client_secret if hasattr(settings, 'keycloak_api_client_secret') else ""
 
 
 class LoginRequest(BaseModel):
@@ -143,7 +143,7 @@ def custom_openapi():
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Bearer token from /login endpoint. Login with: username='admin', password='admin123'"
+            "description": "Bearer token from /login endpoint. Login with your Keycloak credentials from auth-service."
         },
         "APIKey": {
             "type": "apiKey",
@@ -183,31 +183,46 @@ async def health_check():
 @app.post("/login", response_model=TokenResponse, tags=["Authentication"])
 async def login(credentials: LoginRequest):
     """
-    Login with username and password.
+    Login with Keycloak credentials from auth-service.
 
-    **Default credentials for development:**
-    - Username: `admin`
-    - Password: `admin123`
+    Use your Keycloak account username and password. Valid credentials will return
+    a Bearer token that can be used to authenticate API requests.
 
-    Returns a Bearer token that can be used for API authentication.
+    **Note:** Your Keycloak user must exist in the society-events realm.
     """
-    # For development: accept default credentials
-    if credentials.username == DEFAULT_USERNAME and credentials.password == DEFAULT_PASSWORD:
-        access_token = create_access_token(credentials.username)
-        return {
-            "access_token": access_token,
-            "token_type": "bearer"
-        }
+    try:
+        # Authenticate against Keycloak
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token_response = await client.post(
+                f"{settings.keycloak_url}/realms/society-events/protocol/openid-connect/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": KEYCLOAK_CLIENT_ID,
+                    "username": credentials.username,
+                    "password": credentials.password,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
 
-    # Also accept the internal API key as a password
-    if credentials.username == "service" and credentials.password == settings.internal_api_key:
-        access_token = create_access_token("service")
-        return {
-            "access_token": access_token,
-            "token_type": "bearer"
-        }
+            if token_response.status_code == 200:
+                # Keycloak auth successful
+                logger.info(f"User {credentials.username} authenticated successfully")
+                # Create our own JWT token for API use
+                access_token = create_access_token(credentials.username)
+                return {
+                    "access_token": access_token,
+                    "token_type": "bearer"
+                }
+            elif token_response.status_code == 401:
+                logger.warning(f"Keycloak auth failed for user: {credentials.username}")
+                raise HTTPException(status_code=401, detail="Invalid username or password")
+            else:
+                logger.error(f"Keycloak error: {token_response.status_code} - {token_response.text}")
+                raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
-    raise HTTPException(status_code=401, detail="Invalid username or password")
+    except httpx.RequestError as e:
+        logger.error(f"Failed to connect to Keycloak at {settings.keycloak_url}: {e}")
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
 
 @app.post("/api/notifications/send", response_model=SendNotificationResponse)
