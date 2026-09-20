@@ -76,8 +76,45 @@ Every backend service connects to the **same** PostgreSQL database (`society_eve
 | registration-service | 3005 | `/api/registrations/` | registrations, cart, manual-payment review, complimentary tickets, ticket cancellation |
 | ticket-service | 3006 | `/api/tickets/` | ticket issuance/QR, gate scan/entry, event roster |
 | payment-service | 3007 | `/api/payments/` | centralized UPI payment reconciliation (`payment_transaction`), refund queue |
+| visitor-service | 3008 | `/api/visitors/` | visitor management (dedicated Postgres) |
+| notification-service | 3009 | `/api/notifications/` | unified notification routing (Novu + legacy fallback) |
 
 All services validate JWTs against the same Keycloak JWKS endpoint and gate routes with a `require_role(*roles)` dependency checking `realm_access.roles` from the token. Known roles: `admin`, `committee_member`, `resident`, `security_guard`, `sponsor`.
+
+### Unified notification service — single point for all notifications
+
+**notification-service** is a centralized microservice that handles all notification delivery across the system. Instead of each service implementing its own notification logic, they make HTTP calls to notification-service, which then routes the notification based on a configurable strategy.
+
+**Architecture:**
+- **Strategy-based routing**: `NOVU_ONLY`, `NOVU_WITH_FALLBACK` (default), or `FALLBACK_ONLY` — set via `NOVU_STRATEGY` env var
+- **Novu primary**: Novu event-triggered templates with full delivery tracking
+- **Legacy fallback**: SMS/Telegram (via `auth-service`), Email (via Gmail SMTP) when Novu fails or disabled
+- **In-app notifications**: Stored in `user-service` for dashboard display
+- **Audit trail**: All sent notifications logged in `notification.notification_logs` table
+
+**How other services use it:**
+```python
+async with httpx.AsyncClient() as client:
+    await client.post(
+        "http://notification-service:3009/api/notifications/send",
+        json={
+            "user_id": user_id,
+            "event_name": "refund_approved",  # Novu template name
+            "payload": {"amount": 100, "currency": "INR"},
+            "user_phone": "+91-xxx",
+            "user_email": "user@example.com",
+            "legacy_message": "Your refund has been approved",
+            "notify_sms": True,
+            "notify_email": True,
+        },
+        headers={"X-Api-Key": settings.internal_api_key},
+    )
+```
+
+**Configuration:**
+- Enable/disable Novu, email, SMS/Telegram independently via env vars
+- Fallback strategy allows graceful degradation if Novu is down
+- Background task processing (`USE_BACKGROUND_TASKS=true`) queues sends instead of blocking
 
 ### Two parallel payment systems — know which one is live
 

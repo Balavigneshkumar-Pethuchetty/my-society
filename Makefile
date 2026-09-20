@@ -18,10 +18,10 @@
         shell-db shell-redis shell-visitor-db sync-users setup-google-idp sync-keycloak-redirect-uris \
         frontend frontend-install frontend-docker \
         restart-nginx restart-postgres restart-redis \
-        restart-pgadmin restart-user-service restart-event-service \
+        restart-pgadmin restart-user-service restart-event-service restart-notification-service \
         restart-visitor-service restart-visitor-postgres \
         restart-mfe-admin restart-mfe-events restart-mfe-booking restart-mfe-payment restart-mfe-visitors \
-        logs-nginx logs-db logs-user logs-events logs-visitor logs-visitor-db \
+        logs-nginx logs-db logs-user logs-events logs-notification logs-visitor logs-visitor-db \
         logs-mfe-admin logs-mfe-events logs-mfe-booking logs-mfe-payment logs-mfe-visitors \
         logs-splunk logs-fluent-bit \
         logs-novu logs-novu-api logs-novu-worker \
@@ -293,6 +293,9 @@ restart-user-service: ## Rebuild & restart user service (picks up code changes)
 restart-event-service: ## Rebuild & restart event service (picks up code changes)
 	$(COMPOSE) up -d --build event-service
 
+restart-notification-service: ## Rebuild & restart notification service (picks up code changes)
+	$(COMPOSE) up -d --build notification-service
+
 restart-visitor-service: ## Rebuild & restart visitor service (picks up code changes)
 	$(COMPOSE) up -d --build visitor-service
 
@@ -346,6 +349,9 @@ logs-user: ## Follow user service logs only
 
 logs-events: ## Follow event service logs only
 	$(COMPOSE) logs -f event-service
+
+logs-notification: ## Follow notification service logs only
+	$(COMPOSE) logs -f notification-service
 
 logs-visitor: ## Follow visitor service logs only
 	$(COMPOSE) logs -f visitor-service

@@ -511,6 +511,46 @@ services:
     networks:
       - society_net
 
+  # ─── Notification Service (port 3009) ────────────────────────────────────
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    restart: always
+    environment:
+      DB_HOST:           pgbouncer
+      DB_PORT:           6432
+      DB_NAME:           ${POSTGRES_DB:-society_events}
+      DB_USER:           ${NOTIFICATION_DB_USER}
+      DB_PASSWORD:       ${NOTIFICATION_DB_PASSWORD}
+      NOVU_API_KEY:            ${NOVU_API_KEY:-}
+      NOVU_BACKEND_URL:        ${NOVU_BACKEND_URL:-https://api.novu.co}
+      NOVU_STRATEGY:           ${NOVU_STRATEGY:-NOVU_WITH_FALLBACK}
+      AUTH_SERVICE_URL:        ${AUTH_SERVICE_URL:-http://host.containers.internal:8000}
+      AUTH_SERVICE_API_KEY:    ${AUTH_SERVICE_API_KEY:-}
+      GMAIL_SMTP_USER:         ${GMAIL_SMTP_USER:-}
+      GMAIL_APP_PASSWORD:      ${GMAIL_APP_PASSWORD:-}
+      SPLUNK_HEC_URL:          http://host.containers.internal:8088/services/collector/event
+      SPLUNK_HEC_TOKEN:        ${SPLUNK_HEC_TOKEN:-}
+      SOCIETY_ID:              11100000-0000-0000-0000-000000000001
+      KEYCLOAK_URL:            ${KEYCLOAK_URL:-https://auth.gm-global-techies-town.club}
+      KEYCLOAK_REALM:          society-events
+      KEYCLOAK_PUBLIC_URL:     ${KEYCLOAK_PUBLIC_URL}
+      INTERNAL_API_KEY:        ${INTERNAL_API_KEY}
+      USER_SERVICE_URL:        http://user-service:3001
+      USE_BACKGROUND_TASKS:    ${USE_BACKGROUND_TASKS:-true}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3009/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - society_net
+
   # ─── Shell App ────────────────────────────────────────────────────────────
   # Opt-in only: docker compose --profile frontend up -d --build
   # For local dev use: npm run dev inside frontend/shell (Vite HMR, no Docker)
