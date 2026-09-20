@@ -1,0 +1,175 @@
+# Novu Data Retention Policy Configuration
+# Defines how long to keep data and when to archive/delete
+
+retention_policy:
+  # Global retention settings
+  default_retention_days: 90
+  archive_threshold_days: 30
+  backup_retention_days: 180
+
+  # Per-collection retention
+  collections:
+
+    # Notifications - most important, keep longer
+    notifications:
+      retention_days: 90
+      archive_after_days: 30
+      priority: high
+      description: "User-facing notifications and delivery logs"
+      compress_after_days: 60
+      index: "createdAt"
+
+    # Subscriber data - keep indefinitely (archive only)
+    subscribers:
+      retention_days: forever
+      archive_after_days: 365
+      priority: high
+      description: "Subscriber contact information"
+      compress_after_days: 180
+      index: "subscriberId"
+
+    # Message logs - medium retention
+    messages:
+      retention_days: 60
+      archive_after_days: 30
+      priority: medium
+      description: "Message send history and delivery status"
+      compress_after_days: 45
+      index: "createdAt"
+
+    # Templates - keep indefinitely
+    templates:
+      retention_days: forever
+      archive_after_days: never
+      priority: high
+      description: "Notification templates"
+      compress_after_days: never
+      index: "name"
+
+    # Audit logs - compliance retention
+    auditLog:
+      retention_days: 365
+      archive_after_days: 90
+      priority: high
+      description: "Audit trail for compliance"
+      compress_after_days: 180
+      index: "createdAt"
+
+    # API keys and credentials
+    keys:
+      retention_days: forever
+      archive_after_days: never
+      priority: critical
+      description: "API keys and credentials"
+      compress_after_days: never
+      index: "name"
+
+    # Preferences and settings
+    preferences:
+      retention_days: forever
+      archive_after_days: never
+      priority: medium
+      description: "User preferences and settings"
+      compress_after_days: never
+      index: "userId"
+
+  # Backup strategy
+  backups:
+    full_backup_frequency: "weekly"  # Every Sunday
+    full_backup_retention: "180"     # Keep 6 months
+    incremental_backup_frequency: "daily"  # Every night
+    incremental_backup_retention: "30"    # Keep 30 days
+    backup_time: "01:00"             # 1 AM UTC
+    backup_compression: "gzip"
+    backup_verification: "sha256"
+    backup_storage: "/backups/novu"
+    backup_encryption: "optional"    # For sensitive environments
+
+  # Archive strategy
+  archives:
+    archive_frequency: "daily"
+    archive_time: "02:00"
+    archive_compression: "gzip"
+    archive_encryption: "optional"
+    archive_storage: "/archives/novu"
+    archive_storage_type: "local"    # local, s3, gcs, azure
+    s3_bucket: ""                    # If using S3
+    s3_region: ""
+    archive_retention: "forever"
+    archive_indexing: true
+
+  # Deletion policy
+  deletion:
+    soft_delete_enabled: true        # Mark as deleted, not purged
+    soft_delete_retention: "30"      # Keep soft-deleted for 30 days
+    permanent_deletion_enabled: true
+    permanent_deletion_after_days: 90
+    deletion_verification: true      # Verify deletion success
+    deletion_audit_log: true         # Log all deletions
+    allow_bulk_deletion: false       # Require one-by-one for safety
+
+  # Compliance and Legal Hold
+  compliance:
+    legal_hold_enabled: true
+    legal_hold_collections:
+      - notifications
+      - auditLog
+      - messages
+    compliance_retention_override: true  # Legal holds override policies
+    data_export_enabled: true        # Allow data export
+    data_export_format: "json"       # Format: json, csv, xml
+    gdpr_right_to_deletion: true     # Support GDPR deletion requests
+    data_residency: "required"       # Keep data in specific region
+
+  # Monitoring and alerts
+  monitoring:
+    storage_usage_alert_threshold: "80%"  # Alert at 80% usage
+    backup_failure_alert: true
+    archive_failure_alert: true
+    retention_policy_check_frequency: "daily"
+    storage_metrics_enabled: true
+
+  # Automation
+  automation:
+    auto_archive_enabled: true
+    auto_delete_enabled: false       # Careful with this!
+    scheduled_backup_enabled: true
+    scheduled_cleanup_enabled: true
+    cleanup_time: "03:00"           # 3 AM UTC
+    parallel_operations: 4          # Parallel cleanup threads
+    dry_run_mode: false             # Set true for testing
+
+# Scheduling Configuration
+scheduling:
+  cron:
+    daily_archive: "0 2 * * *"      # 2 AM daily
+    weekly_full_backup: "0 1 * * 0" # 1 AM every Sunday
+    nightly_incremental_backup: "0 0 * * *"  # Midnight daily
+    monthly_compliance_check: "0 3 1 * *"    # 3 AM on 1st
+    quarterly_data_export: "0 4 1 */3 *"     # 4 AM quarterly
+
+# Storage Quotas
+storage_quotas:
+  total_database_quota: "100GB"
+  live_notifications_quota: "50GB"
+  archive_quota: "500GB"
+  backup_quota: "1TB"
+  alert_on_quota_percentage: 80
+
+# Performance Tuning
+performance:
+  batch_size_delete: 1000          # Delete in batches
+  batch_size_archive: 5000         # Archive in batches
+  index_maintenance_enabled: true
+  compaction_enabled: true
+  compression_level: 6             # 1-9, higher = smaller but slower
+  parallel_compression: true
+
+# Export/Import Settings
+data_interchange:
+  export_format: "json"
+  export_compression: "gzip"
+  import_validation: true
+  import_backup_before: true      # Backup before importing
+  export_include_metadata: true
+  export_include_indexes: true

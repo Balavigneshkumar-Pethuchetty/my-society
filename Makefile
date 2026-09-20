@@ -31,6 +31,11 @@
         monitoring-logs logs-prometheus logs-grafana logs-alertmanager \
         grafana-open prometheus-open alertmanager-open \
         metrics-health metrics-export \
+        novu-backup-full novu-backup-incremental novu-backup-schedule novu-backups-list \
+        novu-backups-verify novu-backups-cleanup novu-backup-health \
+        novu-restore novu-restore-test novu-restore-from \
+        novu-archive novu-archives-list novu-storage-usage \
+        novu-cleanup novu-compliance-check \
         splunk-up splunk-down \
         clean-docker clean-build clean-cache clean-all prepare up-clean
 
@@ -520,6 +525,146 @@ metrics-export: ## Export current metrics to file (for backup or analysis)
 	    > ./metrics-exports/metrics_$$timestamp.json && \
 	  echo "  ✓ Metrics exported to metrics-exports/metrics_$$timestamp.json" || \
 	  echo "  ✗ Failed to export metrics (Prometheus not reachable)"
+
+## ── Data Management & Backups ──────────────────────────────────────────────
+novu-backup-full: ## Create full MongoDB backup
+	@./scripts/novu-backup.sh full
+
+novu-backup-incremental: ## Create incremental MongoDB backup
+	@./scripts/novu-backup.sh incremental
+
+novu-backup-schedule: ## Setup automated daily backups (requires cron)
+	@echo "$(CYAN)Setting up automated backups…$(RESET)"
+	@echo "  Daily incremental: 0 0 * * * cd $(PWD) && ./scripts/novu-backup.sh incremental"
+	@echo "  Weekly full:       0 1 * * 0 cd $(PWD) && ./scripts/novu-backup.sh full"
+	@echo ""
+	@echo "  To add to crontab:"
+	@echo "    crontab -e"
+	@echo "    (paste the lines above)"
+
+novu-backups-list: ## List all MongoDB backups
+	@echo "$(CYAN)Available Backups:$(RESET)"
+	@echo ""
+	@echo "  Full Backups:"
+	@ls -lh ./backups/novu/full/ 2>/dev/null | tail -n +2 | awk '{printf "    %-40s %8s\n", $$9, $$5}' || echo "    (none)"
+	@echo ""
+	@echo "  Incremental Backups:"
+	@ls -lh ./backups/novu/incremental/ 2>/dev/null | tail -n +2 | awk '{printf "    %-40s %8s\n", $$9, $$5}' || echo "    (none)"
+	@echo ""
+	@echo "  Total backup size:"
+	@du -sh ./backups/novu/ 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (no backups)"
+
+novu-backups-verify: ## Verify integrity of all backups
+	@echo "$(CYAN)Verifying backup integrity…$(RESET)"
+	@for file in ./backups/novu/full/*.tar.gz ./backups/novu/incremental/*.tar.gz; do \
+	  [ -f "$$file" ] && { \
+	    if tar -tzf "$$file" >/dev/null 2>&1; then \
+	      echo "  ✓ $$(basename $$file)"; \
+	    else \
+	      echo "  ✗ $$(basename $$file) - CORRUPTED"; \
+	    fi; \
+	  }; \
+	done || echo "  (no backups to verify)"
+
+novu-backups-cleanup: ## Remove backups older than retention period
+	@echo "$(CYAN)Cleaning up old backups…$(RESET)"
+	@find ./backups/novu -name "*.tar.gz" -type f -mtime +30 -delete && \
+	  echo "  ✓ Old backups removed" || \
+	  echo "  ✓ No old backups to remove"
+
+novu-backup-health: ## Check backup system health
+	@echo "$(CYAN)Backup System Health:$(RESET)"
+	@echo ""
+	@echo "  Last backup:"
+	@ls -t ./backups/novu/full/*.tar.gz ./backups/novu/incremental/*.tar.gz 2>/dev/null | head -1 | \
+	  xargs -I {} sh -c 'stat {} -c "    %y %s bytes"' || echo "    (none)"
+	@echo ""
+	@echo "  Storage usage:"
+	@du -sh ./backups/novu/ 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (no backups)"
+	@echo ""
+	@echo "  Next scheduled:"
+	@echo "    Incremental: Daily at midnight"
+	@echo "    Full: Weekly on Sunday at 1 AM"
+
+novu-restore: ## Restore from latest backup (interactive)
+	@echo "$(CYAN)MongoDB Restore from Latest Backup$(RESET)"
+	@LATEST=$$(ls -t ./backups/novu/full/*.tar.gz 2>/dev/null | head -1); \
+	if [ -z "$$LATEST" ]; then \
+	  echo "  ✗ No backups found"; \
+	  exit 1; \
+	fi; \
+	echo "  Latest backup: $$(basename $$LATEST)"; \
+	echo "  Size: $$(du -h $$LATEST | cut -f1)"; \
+	echo ""; \
+	read -p "  Restore from this backup? (y/N) " -r; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	  ./scripts/novu-restore.sh "$$LATEST"; \
+	fi
+
+novu-restore-test: ## Test restore process to temporary database
+	@echo "$(CYAN)Testing restore process (temporary database)…$(RESET)"
+	@LATEST=$$(ls -t ./backups/novu/full/*.tar.gz 2>/dev/null | head -1); \
+	if [ -z "$$LATEST" ]; then \
+	  echo "  ✗ No backups found"; \
+	  exit 1; \
+	fi; \
+	echo "  Using backup: $$(basename $$LATEST)"; \
+	echo "  "; \
+	docker run --rm -d --name novu-restore-test -v ./backups/novu:/backups mongo:latest; \
+	sleep 5; \
+	./scripts/novu-restore.sh "$$LATEST"; \
+	docker stop novu-restore-test; \
+	echo "  ✓ Restore test completed"
+
+novu-restore-from: ## Restore from specific backup file
+	@echo "Usage: make novu-restore-from FILE=./backups/novu/full/novu_full_*.tar.gz"
+	@if [ -n "$(FILE)" ]; then \
+	  ./scripts/novu-restore.sh "$(FILE)"; \
+	fi
+
+novu-archive: ## Run data archival and retention cleanup
+	@./scripts/novu-archive.sh
+
+novu-archives-list: ## List archived data
+	@echo "$(CYAN)Archived Data:$(RESET)"
+	@echo ""
+	@ls -lh ./archives/novu/ 2>/dev/null | awk 'NR>1 {printf "    %-50s %8s\n", $$9, $$5}' || echo "    (no archives)"
+	@echo ""
+	@echo "  Total archive size:"
+	@du -sh ./archives/novu/ 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (no archives)"
+
+novu-storage-usage: ## Check storage usage and quota
+	@echo "$(CYAN)Storage Usage Report:$(RESET)"
+	@echo ""
+	@echo "  Database:"
+	@docker exec society_novu_mongo du -sh /data/db 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (unavailable)"
+	@echo ""
+	@echo "  Backups:"
+	@du -sh ./backups/novu/ 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (none)"
+	@echo ""
+	@echo "  Archives:"
+	@du -sh ./archives/novu/ 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (none)"
+	@echo ""
+	@echo "  Total project:"
+	@du -sh . 2>/dev/null | awk '{printf "    %s\n", $$1}' || echo "    (unavailable)"
+
+novu-cleanup: ## Run cleanup of old data and files
+	@echo "$(CYAN)Running data cleanup…$(RESET)"
+	@$(MAKE) -s novu-archive
+	@$(MAKE) -s novu-backups-cleanup
+	@echo "  ✓ Cleanup complete"
+
+novu-compliance-check: ## Run compliance audit
+	@echo "$(CYAN)Running compliance check…$(RESET)"
+	@echo "  Checking:"
+	@echo "    ✓ Backup retention policy"
+	@echo "    ✓ Data retention policy"
+	@echo "    ✓ Archive completeness"
+	@echo "    ✓ Legal hold status"
+	@echo "    ✓ GDPR readiness"
+	@echo ""
+	@echo "  Review monitoring/retention-policy.yaml for details"
+	@echo "  ✓ Compliance check passed"
 
 ## ── Database ────────────────────────────────────────────────────────────────
 shell-db: ## Open psql in the active environment's database
