@@ -287,7 +287,7 @@ function MembersTab({ token, nodes, nodesLoading }: MembersTabProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<{ total: number; items: DbUser[] }>('?active=true&limit=200', token);
+      const res = await apiFetch<{ total: number; items: DbUser[] }>('/?active=true&limit=200', token);
       setUsers(res.items);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load');

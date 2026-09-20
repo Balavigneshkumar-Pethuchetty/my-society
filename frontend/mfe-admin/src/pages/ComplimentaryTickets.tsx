@@ -137,9 +137,9 @@ export function ComplimentaryTickets({ token, id: eventId }: { token?: string | 
     setLoading(true);
     setError(null);
     Promise.all([
-      apiFetch<EventDetail>('events', `/${eventId}`, token),
-      apiFetch<{ items: UserSummary[] }>('users', '?limit=200', token),
-      apiFetch<Entry[]>('registrations', `/complimentary/tickets?event_id=${eventId}`, token),
+      apiFetch<EventDetail>('events', `/${eventId}/`, token),
+      apiFetch<{ items: UserSummary[] }>('users', '/?limit=200', token),
+      apiFetch<Entry[]>('registrations', `/complimentary/tickets/?event_id=${eventId}`, token),
     ])
       .then(([ev, userList, comp]) => {
         setEvent(ev);
