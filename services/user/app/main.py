@@ -1,10 +1,14 @@
 import asyncio
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from jose import jwt
+import httpx
 
 from app.config import settings
 from app.database import wait_for_db, close_pool, get_pool
@@ -17,6 +21,38 @@ from shared.swagger_theme import themed_swagger_ui_html
 # All nginx-prefixed paths (browser-visible via http://host/api/users/...)
 _OPENAPI_URL   = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
+
+# JWT Configuration
+JWT_SECRET = "your-secret-key-change-in-production"
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 24
+KEYCLOAK_CLIENT_ID = "society-frontend"
+
+
+class LoginRequest(BaseModel):
+    """Login request model."""
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """Token response model."""
+    access_token: str
+    token_type: str = "bearer"
+
+
+def create_access_token(username: str, expires_delta: timedelta = None) -> str:
+    """Create JWT token."""
+    if expires_delta is None:
+        expires_delta = timedelta(hours=JWT_EXPIRATION_HOURS)
+    expire = datetime.utcnow() + expires_delta
+    payload = {
+        "sub": username,
+        "exp": expire,
+        "iat": datetime.utcnow()
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return token
 
 
 @asynccontextmanager
@@ -46,10 +82,26 @@ async def oauth2_redirect() -> HTMLResponse:
     return get_swagger_ui_oauth2_redirect_html()
 
 
+@app.get("/openapi.json", include_in_schema=False)
+async def get_openapi_schema():
+    """Return OpenAPI schema without authentication."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema["servers"] = [{"url": "/api/users", "description": "via nginx"}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
 @app.get("/docs", include_in_schema=False)
 async def swagger_ui() -> HTMLResponse:
     return themed_swagger_ui_html(
-        openapi_url=_OPENAPI_URL,           # Swagger UI fetches spec via nginx prefix
+        openapi_url="./openapi.json",
         title="User Service",
         oauth2_redirect_url=_OAUTH2_REDIRECT,
         init_oauth={
@@ -57,6 +109,35 @@ async def swagger_ui() -> HTMLResponse:
             "scopes": "openid profile email roles",
         },
     )
+
+
+@app.post("/login", response_model=TokenResponse, tags=["Authentication"], include_in_schema=False)
+async def login(credentials: LoginRequest):
+    """Login with Keycloak credentials from auth-service."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token_response = await client.post(
+                f"{settings.keycloak_url}/realms/society-events/protocol/openid-connect/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": KEYCLOAK_CLIENT_ID,
+                    "username": credentials.username,
+                    "password": credentials.password,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            if token_response.status_code == 200:
+                access_token = create_access_token(credentials.username)
+                return {
+                    "access_token": access_token,
+                    "token_type": "bearer"
+                }
+            elif token_response.status_code == 401:
+                raise HTTPException(status_code=401, detail="Invalid username or password")
+            else:
+                raise HTTPException(status_code=503, detail="Authentication service unavailable")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
 
 def _build_openapi():

@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 JWT_SECRET = "your-secret-key-change-in-production"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
-KEYCLOAK_CLIENT_ID = "society-api"
-KEYCLOAK_CLIENT_SECRET = settings.keycloak_api_client_secret if hasattr(settings, 'keycloak_api_client_secret') else ""
+KEYCLOAK_CLIENT_ID = "society-frontend"
 
 
 class LoginRequest(BaseModel):
@@ -126,7 +125,7 @@ app = FastAPI(
 
 
 def custom_openapi():
-    """Custom OpenAPI schema with Bearer token security scheme."""
+    """Custom OpenAPI schema with OAuth2 and Bearer token security schemes."""
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -137,13 +136,28 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Add Bearer token and API Key security schemes
+    # Add OAuth2, Bearer token and API Key security schemes
     openapi_schema["components"]["securitySchemes"] = {
+        "OAuth2PasswordBearer": {
+            "type": "oauth2",
+            "flows": {
+                "password": {
+                    "tokenUrl": "/login",
+                    "scopes": {
+                        "openid": "OpenID Connect",
+                        "profile": "User profile",
+                        "email": "User email",
+                        "roles": "User roles"
+                    }
+                }
+            },
+            "description": "Login with Keycloak credentials from auth-service"
+        },
         "BearerToken": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Bearer token from /login endpoint. Login with your Keycloak credentials from auth-service."
+            "description": "Bearer token from /login endpoint"
         },
         "APIKey": {
             "type": "apiKey",
@@ -159,6 +173,7 @@ def custom_openapi():
             for operation in path_item.values():
                 if isinstance(operation, dict) and "security" not in operation:
                     operation["security"] = [
+                        {"OAuth2PasswordBearer": ["openid", "profile", "email", "roles"]},
                         {"BearerToken": []},
                         {"APIKey": []}
                     ]
