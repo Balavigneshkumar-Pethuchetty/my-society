@@ -5,9 +5,10 @@ from datetime import datetime, timedelta
 import jwt
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Header, Security
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.openapi.utils import get_openapi
+from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
 from pydantic import BaseModel
 
 from app.config import settings
@@ -20,6 +21,7 @@ from app.models import (
     BulkNotificationResponse,
 )
 from app.notifications import send_unified_notification
+from shared.swagger_theme import themed_swagger_ui_html
 import httpx
 
 logging.basicConfig(
@@ -118,10 +120,31 @@ app = FastAPI(
     version="1.0.0",
     root_path="/api/notifications",
     openapi_url="/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
+    swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
     lifespan=lifespan,
 )
+
+
+@app.get("/docs/oauth2-redirect", include_in_schema=False)
+async def oauth2_redirect() -> HTMLResponse:
+    """OAuth2 redirect handler for Swagger UI."""
+    return get_swagger_ui_oauth2_redirect_html()
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui() -> HTMLResponse:
+    """Swagger UI with theme support."""
+    return themed_swagger_ui_html(
+        openapi_url="./openapi.json",
+        title="Notification Service",
+        oauth2_redirect_url="/docs/oauth2-redirect",
+        init_oauth={
+            "clientId": "society-frontend",
+            "scopes": "openid profile email roles",
+        },
+    )
 
 
 def custom_openapi():
