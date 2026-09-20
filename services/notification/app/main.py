@@ -1,11 +1,14 @@
 """Notification Service API."""
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+import jwt
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Header, Security
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.openapi.utils import get_openapi
+from pydantic import BaseModel
 
 from app.config import settings
 from app.models import (
@@ -25,19 +28,81 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# API Key for Swagger UI authentication
-api_key_header = APIKeyHeader(
-    name="X-Api-Key",
-    description="Internal API Key for service-to-service authentication",
-    scheme_name="APIKeyHeader"
+# Default credentials for development/testing
+DEFAULT_USERNAME = "admin"
+DEFAULT_PASSWORD = "admin123"  # Change in production!
+JWT_SECRET = "your-secret-key-change-in-production"
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 24
+
+
+class LoginRequest(BaseModel):
+    """Login request model."""
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """Token response model."""
+    access_token: str
+    token_type: str = "bearer"
+
+
+# Bearer token for Swagger UI authentication
+bearer_scheme = HTTPBearer(
+    description="Bearer token from /login endpoint"
 )
 
 
-def verify_internal_api_key(x_api_key: str = Security(api_key_header)) -> str:
-    """Verify internal service API key."""
-    if not settings.internal_api_key or x_api_key != settings.internal_api_key:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-    return x_api_key
+def create_access_token(username: str, expires_delta: timedelta = None) -> str:
+    """Create JWT token."""
+    if expires_delta is None:
+        expires_delta = timedelta(hours=JWT_EXPIRATION_HOURS)
+
+    expire = datetime.utcnow() + expires_delta
+    payload = {
+        "sub": username,
+        "exp": expire,
+        "iat": datetime.utcnow()
+    }
+
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return token
+
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Security(bearer_scheme)) -> str:
+    """Verify JWT token."""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=403, detail="Invalid token")
+        return username
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+
+def verify_internal_api_key(x_api_key: str = Header(None), authorization: str = Header(None)) -> str:
+    """Verify either API key or Bearer token."""
+    # Try Bearer token first
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            username = payload.get("sub")
+            if username:
+                return username
+        except jwt.InvalidTokenError:
+            pass
+
+    # Fall back to API key
+    if x_api_key:
+        if settings.internal_api_key and x_api_key == settings.internal_api_key:
+            return "service"
+
+    raise HTTPException(status_code=403, detail="Invalid credentials")
 
 
 @asynccontextmanager
@@ -61,7 +126,7 @@ app = FastAPI(
 
 
 def custom_openapi():
-    """Custom OpenAPI schema with API Key security scheme."""
+    """Custom OpenAPI schema with Bearer token security scheme."""
     if app.openapi_schema:
         return app.openapi_schema
 
@@ -72,21 +137,31 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Add API Key security scheme
+    # Add Bearer token and API Key security schemes
     openapi_schema["components"]["securitySchemes"] = {
-        "APIKeyHeader": {
+        "BearerToken": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Bearer token from /login endpoint. Login with: username='admin', password='admin123'"
+        },
+        "APIKey": {
             "type": "apiKey",
             "in": "header",
             "name": "X-Api-Key",
-            "description": "Internal API Key for authentication. Ask your administrator for this key.",
+            "description": "Internal service API key (alternative to Bearer token)"
         }
     }
 
-    # Apply security to all endpoints
-    for path in openapi_schema["paths"].values():
-        for operation in path.values():
-            if isinstance(operation, dict) and "security" not in operation:
-                operation["security"] = [{"APIKeyHeader": []}]
+    # Apply security to all endpoints except /login and /health
+    for path, path_item in openapi_schema["paths"].items():
+        if path not in ["/login", "/health", "/api/notifications/login", "/api/notifications/health"]:
+            for operation in path_item.values():
+                if isinstance(operation, dict) and "security" not in operation:
+                    operation["security"] = [
+                        {"BearerToken": []},
+                        {"APIKey": []}
+                    ]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -103,6 +178,36 @@ async def health_check():
         "service": settings.service_name,
         "environment": settings.environment,
     }
+
+
+@app.post("/login", response_model=TokenResponse, tags=["Authentication"])
+async def login(credentials: LoginRequest):
+    """
+    Login with username and password.
+
+    **Default credentials for development:**
+    - Username: `admin`
+    - Password: `admin123`
+
+    Returns a Bearer token that can be used for API authentication.
+    """
+    # For development: accept default credentials
+    if credentials.username == DEFAULT_USERNAME and credentials.password == DEFAULT_PASSWORD:
+        access_token = create_access_token(credentials.username)
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+
+    # Also accept the internal API key as a password
+    if credentials.username == "service" and credentials.password == settings.internal_api_key:
+        access_token = create_access_token("service")
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+
+    raise HTTPException(status_code=401, detail="Invalid username or password")
 
 
 @app.post("/api/notifications/send", response_model=SendNotificationResponse)
