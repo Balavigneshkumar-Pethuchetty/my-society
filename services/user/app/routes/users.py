@@ -1153,7 +1153,7 @@ async def remove_my_unit(
 )
 async def list_users(
     role: Optional[str] = Query(None, description="Filter by role"),
-    active: Optional[bool] = Query(None, description="Filter by is_active"),
+    active: Optional[str] = Query(None, description="Filter by is_active (true/false)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     pool: Pool = Depends(get_pool),
@@ -1171,7 +1171,8 @@ async def list_users(
     else:
         conditions.append("u.role != 'guest'")
     if active is not None:
-        params.append(active)
+        active_bool = active.lower() in ("true", "1", "yes", "on")
+        params.append(active_bool)
         conditions.append(f"u.is_active = ${len(params)}")
 
     where = " AND ".join(conditions)
