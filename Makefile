@@ -147,7 +147,7 @@ validate-ports: check-env ## Validate that host ports in the active env file do 
 	  exit 1; \
 	fi
 
-up: validate-ports ## Start all services (detached). ENV=dev|test|stage|prod
+up: validate-ports ## Start all services in daemon mode (background). Services continue running even if terminal closes. ENV=dev|test|stage|prod
 	@$(MAKE) -s free-ports ENV=$(ENV)
 	$(COMPOSE) --profile frontend up -d --build
 	@echo "  Activating host port bindings…"
