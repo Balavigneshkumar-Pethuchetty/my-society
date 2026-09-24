@@ -56,7 +56,7 @@ else
   COMPOSE_FILES := -f docker-compose.yml
 endif
 
-COMPOSE          := docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES)
+COMPOSE          := docker compose --env-file $(ENV_FILE) --env-file db/.env --env-file nginx/.env --env-file frontend/.env $(COMPOSE_FILES)
 COMPOSE_PROJECT  := $(shell grep -m1 '^COMPOSE_PROJECT_NAME=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo society)
 POSTGRES_DB_NAME := $(shell grep -m1 '^POSTGRES_DB=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo society_events)
 
@@ -101,23 +101,25 @@ up-clean: clean-build ## Clean build artifacts then start services (recommended 
 
 ## ── Core lifecycle ──────────────────────────────────────────────────────────
 check-env: ## Ensure the active env file exists (auto-creates from example if available)
-	@if [ ! -f $(ENV_FILE) ]; then \
-	  example="$(ENV_FILE).example"; \
-	  if [ -f "$$example" ]; then \
-	    cp "$$example" $(ENV_FILE); \
-	    echo "$(CYAN)$(ENV_FILE) created from $$example — review values before starting.$(RESET)"; \
-	  else \
-	    echo "$(CYAN)ERROR: $(ENV_FILE) not found. Create it or run: cp .env.example $(ENV_FILE)$(RESET)"; \
-	    exit 1; \
+	@for envfile in $(ENV_FILE) db/.env nginx/.env frontend/.env; do \
+	  if [ ! -f "$$envfile" ]; then \
+	    example="$${envfile}.example"; \
+	    if [ -f "$$example" ]; then \
+	      cp "$$example" "$$envfile"; \
+	      echo "$(CYAN)$$envfile created from $$example — review values before starting.$(RESET)"; \
+	    else \
+	      echo "$(CYAN)ERROR: $$envfile not found. Create it or run: cp $${envfile}.example $$envfile$(RESET)"; \
+	      exit 1; \
+	    fi; \
 	  fi; \
-	fi
+	done
 
 free-ports: ## Kill stale rootlessport processes that hold project ports (Podman rootless workaround)
 	@_released=0; \
 	for port in \
-	    $$(grep -m1 '^NGINX_PORT='    $(ENV_FILE) 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 8080) \
-	    $$(grep -m1 '^POSTGRES_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 5432) \
-	    $$(grep -m1 '^REDIS_PORT='    $(ENV_FILE) 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 6379); do \
+	    $$(grep -m1 '^NGINX_PORT='    nginx/.env 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 8080) \
+	    $$(grep -m1 '^POSTGRES_PORT=' db/.env 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 5432) \
+	    $$(grep -m1 '^REDIS_PORT='    db/.env 2>/dev/null | cut -d= -f2 | tr -d '"[:space:]' || echo 6379); do \
 	  pid=$$(ss -Htlnp | grep ":$$port[[:space:]]" | grep -o 'pid=[0-9]*' | cut -d= -f2 | head -1); \
 	  if [ -n "$$pid" ]; then \
 	    echo "  [free-ports] releasing port $$port (pid $$pid)"; \
@@ -128,22 +130,23 @@ free-ports: ## Kill stale rootlessport processes that hold project ports (Podman
 	[ "$$_released" = "1" ] && sleep 1 || true
 
 validate-ports: check-env ## Validate that host ports in the active env file do not conflict
-	@_f=$(ENV_FILE); \
-	_get() { grep -m1 "^$$1=" "$$_f" 2>/dev/null | cut -d= -f2- | tr -d '"[:space:]' || echo "$$2"; }; \
-	ports="NGINX_PORT:$$(_get NGINX_PORT 8080) POSTGRES_PORT:$$(_get POSTGRES_PORT 5432) REDIS_PORT:$$(_get REDIS_PORT 6379)"; \
+	@_get_nginx() { grep -m1 "^NGINX_PORT=" nginx/.env 2>/dev/null | cut -d= -f2- | tr -d '"[:space:]' || echo "8080"; }; \
+	_get_postgres() { grep -m1 "^POSTGRES_PORT=" db/.env 2>/dev/null | cut -d= -f2- | tr -d '"[:space:]' || echo "5432"; }; \
+	_get_redis() { grep -m1 "^REDIS_PORT=" db/.env 2>/dev/null | cut -d= -f2- | tr -d '"[:space:]' || echo "6379"; }; \
+	ports="NGINX_PORT:$$(_get_nginx) POSTGRES_PORT:$$(_get_postgres) REDIS_PORT:$$(_get_redis)"; \
 	seen=""; has_conflict=0; \
 	for item in $$ports; do \
 	  name=$${item%%:*}; port=$${item#*:}; \
 	  for prev in $$seen; do \
 	    if [ "$${prev#*:}" = "$$port" ]; then \
-	      echo "  [validate-ports] $$name and $${prev%%:*} both use port $$port in $(ENV_FILE)"; \
+	      echo "  [validate-ports] $$name and $${prev%%:*} both use port $$port"; \
 	      has_conflict=1; \
 	    fi; \
 	  done; \
 	  seen="$$seen $$item"; \
 	done; \
 	if [ "$$has_conflict" = "1" ]; then \
-	  echo "  Update $(ENV_FILE) so each exposed service has a unique host port."; \
+	  echo "  Update nginx/.env and db/.env so each exposed service has a unique host port."; \
 	  exit 1; \
 	fi
 
