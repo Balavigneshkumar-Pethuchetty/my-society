@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_oauth2_redirect_html
@@ -8,17 +9,60 @@ from app.database import wait_for_db, close_pool, get_pool
 from app.redis_client import wait_for_redis, close_redis
 from app.routes import events, categories, internal
 from app.middleware.splunk import SplunkLoggingMiddleware
+from app.config import settings
 from shared.swagger_theme import themed_swagger_ui_html
+from shared.notification_queue import NotificationQueue
+from shared.notification_client_v2 import GracefulNotificationClient
+import redis.asyncio as aioredis
+
+logger = logging.getLogger(__name__)
 
 _OPENAPI_URL    = "openapi.json"
 _OAUTH2_REDIRECT = "/docs/oauth2-redirect"
 
+# Global notification instances
+notification_queue: NotificationQueue = None
+notification_client: GracefulNotificationClient = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global notification_queue, notification_client
+
     await wait_for_db()
     await wait_for_redis()
+
+    # Initialize notification queue if enabled
+    if settings.enable_notifications:
+        try:
+            if settings.notification_queue_type == "redis":
+                redis_client = aioredis.from_url(
+                    f"redis://{settings.redis_host}:{settings.redis_port}/0",
+                    encoding="utf8",
+                    decode_responses=True,
+                )
+                notification_queue = NotificationQueue(
+                    use_redis=True,
+                    redis_client=redis_client,
+                )
+                logger.info("Redis notification queue initialized")
+            else:
+                notification_queue = NotificationQueue(use_redis=False)
+                logger.info("In-memory notification queue initialized")
+
+            # Initialize graceful notification client
+            notification_client = GracefulNotificationClient(
+                notification_service_url=settings.notification_service_url,
+                internal_api_key=settings.internal_api_key,
+                enable_notifications=True,
+                queue_handler=notification_queue,
+            )
+            logger.info("Graceful notification client initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize notifications: {e}")
+
     yield
+
     await close_redis()
     await close_pool()
 
@@ -33,6 +77,10 @@ app = FastAPI(
     openapi_url="/openapi.json",
     swagger_ui_oauth2_redirect_url=_OAUTH2_REDIRECT,
 )
+
+# Store notification client in app state for access in routes
+app.state.notification_client = notification_client
+app.state.notification_queue = notification_queue
 
 
 @app.get(_OAUTH2_REDIRECT, include_in_schema=False)
