@@ -174,11 +174,11 @@ async def get_society():
     )
 
 
-app.include_router(users.router,         prefix="/users",          tags=["users"])
-app.include_router(notifications.router, prefix="/notifications",   tags=["notifications"])
-app.include_router(internal.router,      prefix="/internal/users",  tags=["internal"])
-app.include_router(building.router,      prefix="/building",        tags=["building"])
-app.include_router(leave_requests.router, prefix="/leave-requests", tags=["leave-requests"])
+app.include_router(users.router,         prefix="/users",                   tags=["users"])
+app.include_router(notifications.router, prefix="/users/notifications",      tags=["notifications"])
+app.include_router(internal.router,      prefix="/internal/users",           tags=["internal"])
+app.include_router(building.router,      prefix="/users/building",           tags=["building"])
+app.include_router(leave_requests.router, prefix="/users/leave-requests",    tags=["leave-requests"])
 app.include_router(logs.router,          tags=["ops"])
 
 
