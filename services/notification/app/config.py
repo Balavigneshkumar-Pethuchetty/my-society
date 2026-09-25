@@ -55,6 +55,33 @@ class Settings(BaseSettings):
     # Async Task Processing (optional)
     use_background_tasks: bool = os.getenv("USE_BACKGROUND_TASKS", "true").lower() == "true"
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = os.getenv("ENABLE_NOTIFICATIONS", "true").lower() == "true"
+    notification_queue_type: str = os.getenv("NOTIFICATION_QUEUE_TYPE", "redis")
+
+    # Redis Configuration
+    redis_host: str = os.getenv("REDIS_HOST", "redis")
+    redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
+    redis_db: int = int(os.getenv("REDIS_DB", "0"))
+
+    # Notification Channels Configuration
+    notification_channels: str = os.getenv("NOTIFICATION_CHANNELS", "email,novu")
+    email_enabled: bool = os.getenv("EMAIL_ENABLED", "true").lower() == "true"
+    sms_enabled: bool = os.getenv("SMS_ENABLED", "false").lower() == "true"
+    telegram_enabled: bool = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
+
+    # SMS Provider (twilio or aws-sns)
+    sms_provider: str = os.getenv("SMS_PROVIDER", "twilio")
+    twilio_account_sid: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID")
+    twilio_auth_token: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN")
+
+    # Telegram
+    telegram_bot_token: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN")
+
+    # Retry Configuration
+    notification_max_retries: int = int(os.getenv("NOTIFICATION_MAX_RETRIES", "5"))
+    notification_retry_backoff_seconds: int = int(os.getenv("NOTIFICATION_RETRY_BACKOFF_SECONDS", "60"))
+
     class Config:
         env_file = ".env"
 

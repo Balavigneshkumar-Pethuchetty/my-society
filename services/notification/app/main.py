@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import jwt
+import asyncio
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Header, Security
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -21,8 +22,11 @@ from app.models import (
     BulkNotificationResponse,
 )
 from app.notifications import send_unified_notification
+from app.channels import load_builtin_channels, get_channel, list_channels
+from shared.notification_queue import NotificationQueue
 from shared.swagger_theme import themed_swagger_ui_html
 import httpx
+import redis.asyncio as aioredis
 
 logging.basicConfig(
     level=logging.INFO if not settings.debug else logging.DEBUG,
@@ -106,11 +110,72 @@ def verify_internal_api_key(x_api_key: str = Header(None), authorization: str = 
     raise HTTPException(status_code=403, detail="Invalid credentials")
 
 
+queue_handler: NotificationQueue = None
+queue_processor_task = None
+
+
+async def process_queue_periodically():
+    """Background task to process queued notifications."""
+    logger.info("Queue processor started")
+    while True:
+        try:
+            if not settings.enable_notifications:
+                await asyncio.sleep(60)
+                continue
+
+            queue_size = await queue_handler.get_queue_size()
+            if queue_size > 0:
+                logger.info(f"Processing {queue_size} queued notifications")
+                # TODO: Implement queue processing logic
+                # This would dequeue notifications and attempt delivery
+            await asyncio.sleep(30)
+        except Exception as e:
+            logger.error(f"Error in queue processor: {e}", exc_info=True)
+            await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context manager."""
+    global queue_handler, queue_processor_task
+
     logger.info(f"Starting {settings.service_name}")
+
+    # Initialize notification queue
+    if settings.enable_notifications:
+        try:
+            if settings.notification_queue_type == "redis":
+                redis_client = aioredis.from_url(
+                    f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}",
+                    encoding="utf8",
+                    decode_responses=True,
+                )
+                queue_handler = NotificationQueue(use_redis=True, redis_client=redis_client)
+                logger.info("Redis queue initialized")
+            else:
+                queue_handler = NotificationQueue(use_redis=False)
+                logger.info("In-memory queue initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize queue: {e}, falling back to in-memory")
+            queue_handler = NotificationQueue(use_redis=False)
+
+    # Load plugin channels
+    try:
+        load_builtin_channels()
+        channels = list_channels()
+        logger.info(f"Loaded channels: {', '.join(channels.keys())}")
+    except Exception as e:
+        logger.error(f"Failed to load channels: {e}")
+
+    # Start queue processor background task
+    if settings.enable_notifications:
+        queue_processor_task = asyncio.create_task(process_queue_periodically())
+
     yield
+
+    # Cleanup
+    if queue_processor_task:
+        queue_processor_task.cancel()
     logger.info(f"Shutting down {settings.service_name}")
 
 
@@ -210,12 +275,48 @@ app.openapi = custom_openapi
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "ok",
-        "service": settings.service_name,
-        "environment": settings.environment,
-    }
+    """Health check endpoint with channel and queue status."""
+    channels_status = {}
+
+    if settings.enable_notifications:
+        for name, channel_class in list_channels().items():
+            try:
+                channel_instance = channel_class(config={})
+                is_healthy = await channel_instance.health_check()
+                channels_status[name] = {
+                    "enabled": channel_instance.enabled,
+                    "healthy": is_healthy,
+                }
+            except Exception as e:
+                channels_status[name] = {
+                    "enabled": False,
+                    "healthy": False,
+                    "error": str(e),
+                }
+
+        queue_size = 0
+        if queue_handler:
+            try:
+                queue_size = await queue_handler.get_queue_size()
+            except Exception as e:
+                logger.error(f"Failed to get queue size: {e}")
+
+        return {
+            "status": "ok",
+            "service": settings.service_name,
+            "environment": settings.environment,
+            "notifications_enabled": settings.enable_notifications,
+            "channels": channels_status,
+            "queue_size": queue_size,
+            "queue_type": settings.notification_queue_type,
+        }
+    else:
+        return {
+            "status": "ok",
+            "service": settings.service_name,
+            "environment": settings.environment,
+            "notifications_enabled": False,
+        }
 
 
 @app.post("/login", response_model=TokenResponse, tags=["Authentication"])
@@ -430,13 +531,61 @@ async def get_config(
     api_key: str = Depends(verify_internal_api_key),
 ):
     """Get current notification service configuration."""
+    channels = {}
+    if settings.enable_notifications:
+        for name in list_channels():
+            channels[name] = True
+
     return {
+        "notifications_enabled": settings.enable_notifications,
+        "channels_available": channels,
         "novu_enabled": bool(settings.novu_api_key),
         "novu_strategy": settings.novu_strategy,
         "email_enabled": bool(settings.gmail_smtp_user),
         "sms_telegram_enabled": bool(settings.auth_service_api_key),
         "background_tasks_enabled": settings.use_background_tasks,
+        "queue_type": settings.notification_queue_type,
     }
+
+
+@app.get("/api/notifications/queue/status")
+async def get_queue_status(
+    api_key: str = Depends(verify_internal_api_key),
+):
+    """Get current queue status."""
+    if not settings.enable_notifications or not queue_handler:
+        return {"queue_enabled": False, "size": 0}
+
+    try:
+        size = await queue_handler.get_queue_size()
+        return {
+            "queue_enabled": True,
+            "size": size,
+            "type": settings.notification_queue_type,
+            "max_retries": settings.notification_max_retries,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get queue status: {e}")
+        return {
+            "queue_enabled": False,
+            "error": str(e),
+        }
+
+
+@app.post("/api/notifications/queue/clear")
+async def clear_queue(
+    api_key: str = Depends(verify_internal_api_key),
+):
+    """Clear all pending notifications from queue."""
+    if not settings.enable_notifications or not queue_handler:
+        raise HTTPException(status_code=400, detail="Queue not enabled")
+
+    try:
+        await queue_handler.clear_queue()
+        return {"success": True, "message": "Queue cleared"}
+    except Exception as e:
+        logger.error(f"Failed to clear queue: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear queue: {str(e)}")
 
 
 if __name__ == "__main__":

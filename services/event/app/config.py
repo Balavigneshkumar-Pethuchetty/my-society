@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     novu_base_url: str = "http://novu-api:3000"
     notification_strategy: str = "novu_with_fallback"
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = True
+    notification_service_url: str = "http://notification-service:3009"
+    notification_queue_type: str = "redis"
+    redis_host: str = "redis"
+    redis_port: int = 6379
+
     @property
     def database_url(self) -> str:
         return (
