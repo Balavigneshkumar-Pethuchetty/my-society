@@ -60,7 +60,7 @@ _TXN_QUERY = """
            pt.parsed_amount, pt.parsed_upi_ref, pt.parsed_rrn,
            pt.parsed_bank, pt.parsed_timestamp,
            pt.created_at, pt.updated_at
-    FROM payment_transaction pt
+    FROM payment_svc.payment_transaction pt
 """
 
 
