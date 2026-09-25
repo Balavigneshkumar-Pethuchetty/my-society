@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # real checkout. Any other value (default "production") leaves them unmounted.
     payment_service_env: str = "production"
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = True
+    notification_service_url: str = "http://notification-service:3009"
+    notification_queue_type: str = "redis"
+
     @property
     def is_testing(self) -> bool:
         return self.payment_service_env.lower() == "testing"

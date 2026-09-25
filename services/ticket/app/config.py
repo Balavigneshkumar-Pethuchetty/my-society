@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     splunk_hec_url: str = "http://splunk:8088/services/collector/event"
     splunk_hec_token: str = ""
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = True
+    notification_service_url: str = "http://notification-service:3009"
+    notification_queue_type: str = "redis"
+
     @property
     def database_url(self) -> str:
         return (

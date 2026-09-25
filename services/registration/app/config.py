@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     smtp_from_name: str = "GM Global Techies Town"
     society_name: str = "GM Global Techies Town"
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = True
+    notification_service_url: str = "http://notification-service:3009"
+    notification_queue_type: str = "redis"
+
     @property
     def database_url(self) -> str:
         return (

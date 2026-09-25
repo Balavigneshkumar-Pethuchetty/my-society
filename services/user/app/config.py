@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     pii_encryption_key: str
     pii_hash_key: str
 
+    # Optional Notification Service Configuration
+    enable_notifications: bool = True
+    notification_service_url: str = "http://notification-service:3009"
+    notification_queue_type: str = "redis"
+
     @property
     def database_url(self) -> str:
         return (
