@@ -190,7 +190,7 @@ async def assign_structure_node(
     pool: Pool = Depends(get_pool),
 ):
     async with pool.acquire() as conn:
-        user = await conn.fetchrow("SELECT id FROM user_svc.usersWHERE id = $1", user_id)
+        user = await conn.fetchrow("SELECT id FROM user_svc.users WHERE id = $1", user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -232,7 +232,7 @@ async def list_user_units(user_id: UUID, pool: Pool = Depends(get_pool)):
 )
 async def add_user_unit(user_id: UUID, body: UserUnitRequest, pool: Pool = Depends(get_pool)):
     async with pool.acquire() as conn:
-        user = await conn.fetchrow("SELECT id FROM user_svc.usersWHERE id = $1", user_id)
+        user = await conn.fetchrow("SELECT id FROM user_svc.users WHERE id = $1", user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         node = await conn.fetchrow("SELECT id FROM structure_nodes WHERE id = $1", body.node_id)
@@ -266,7 +266,7 @@ async def remove_user_unit(user_id: UUID, node_id: UUID, pool: Pool = Depends(ge
 async def _build_request_response(conn, row: dict) -> UnitRequestResponse:
     reviewer = None
     if row["reviewed_by"]:
-        r = await conn.fetchrow("SELECT name FROM user_svc.usersWHERE id = $1", row["reviewed_by"])
+        r = await conn.fetchrow("SELECT name FROM user_svc.users WHERE id = $1", row["reviewed_by"])
         reviewer = r["name"] if r else None
     return UnitRequestResponse(
         id=row["id"],
@@ -302,7 +302,7 @@ async def create_unit_request(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, name, email FROM user_svc.usersWHERE keycloak_sub = $1", keycloak_sub
+            "SELECT id, name, email FROM user_svc.users WHERE keycloak_sub = $1", keycloak_sub
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -356,7 +356,7 @@ async def list_unit_requests(
         # DB role is the fallback when JWT realm_access is sparse or stale
         if not ("admin" in realm_roles or "committee_member" in realm_roles):
             db_row = await conn.fetchrow(
-                "SELECT role FROM user_svc.usersWHERE keycloak_sub = $1", keycloak_sub
+                "SELECT role FROM user_svc.users WHERE keycloak_sub = $1", keycloak_sub
             )
             db_role = db_row["role"] if db_row else None
         else:
@@ -381,7 +381,7 @@ async def list_unit_requests(
             rows = await conn.fetch(query, *params)
         else:
             user = await conn.fetchrow(
-                "SELECT id, name, email FROM user_svc.usersWHERE keycloak_sub = $1", keycloak_sub
+                "SELECT id, name, email FROM user_svc.users WHERE keycloak_sub = $1", keycloak_sub
             )
             if not user:
                 return []
@@ -421,7 +421,7 @@ async def review_unit_request(
     keycloak_sub = claims.get("sub")
     async with pool.acquire() as conn:
         reviewer = await conn.fetchrow(
-            "SELECT id FROM user_svc.usersWHERE keycloak_sub = $1", keycloak_sub
+            "SELECT id FROM user_svc.users WHERE keycloak_sub = $1", keycloak_sub
         )
         if not reviewer:
             raise HTTPException(status_code=404, detail="Reviewer not found")
@@ -458,7 +458,7 @@ async def review_unit_request(
                     )
 
         user = await conn.fetchrow(
-            "SELECT name, username, email FROM user_svc.usersWHERE id = $1", row["user_id"]
+            "SELECT name, username, email FROM user_svc.users WHERE id = $1", row["user_id"]
         )
         result = dict(row)
         result["user_name"] = user["name"] if user else "Unknown"

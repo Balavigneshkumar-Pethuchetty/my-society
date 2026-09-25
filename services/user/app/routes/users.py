@@ -243,13 +243,13 @@ async def sync_user(
         # If so, this is a new Keycloak user trying to use an existing email — link them
         # by keycloak_sub and update their name/verified status without touching email/phone.
         existing_by_email = await conn.fetchval(
-            "SELECT id FROM user_svc.usersWHERE email_hash = $1",
+            "SELECT id FROM user_svc.users WHERE email_hash = $1",
             email_hash,
         )
 
         # Check if this keycloak_sub already exists (same user logging in again).
         existing_by_sub = await conn.fetchval(
-            "SELECT id FROM user_svc.usersWHERE keycloak_sub = $1",
+            "SELECT id FROM user_svc.users WHERE keycloak_sub = $1",
             sub,
         )
 
@@ -374,7 +374,7 @@ async def update_me(
 
         if updates.get("username"):
             taken = await conn.fetchval(
-                "SELECT 1 FROM user_svc.usersWHERE username = $1 AND keycloak_sub != $2",
+                "SELECT 1 FROM user_svc.users WHERE username = $1 AND keycloak_sub != $2",
                 updates["username"], claims["sub"],
             )
             if taken:
@@ -382,7 +382,7 @@ async def update_me(
 
         if updates.get("phone"):
             taken = await conn.fetchval(
-                "SELECT 1 FROM user_svc.usersWHERE phone_hash = $1 AND keycloak_sub != $2",
+                "SELECT 1 FROM user_svc.users WHERE phone_hash = $1 AND keycloak_sub != $2",
                 new_phone_hash, claims["sub"],
             )
             if taken:
@@ -393,7 +393,7 @@ async def update_me(
         # name alone still resends the unchanged phone in the request body).
         if "phone" in updates:
             current = await conn.fetchrow(
-                "SELECT phone_hash FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+                "SELECT phone_hash FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
             )
             if current and new_phone_hash != current["phone_hash"]:
                 updates["phone_verified"] = False
@@ -445,7 +445,7 @@ async def check_username(
     async with pool.acquire() as conn:
         # Check if exact username is available
         taken = await conn.fetchval(
-            "SELECT 1 FROM user_svc.usersWHERE username = $1 AND keycloak_sub != $2",
+            "SELECT 1 FROM user_svc.users WHERE username = $1 AND keycloak_sub != $2",
             proposed, claims["sub"],
         )
         if not taken:
@@ -456,7 +456,7 @@ async def check_username(
         for i in range(1, 11):  # Try up to 10 suggestions
             candidate = f"{proposed}{i}"
             available = await conn.fetchval(
-                "SELECT 1 FROM user_svc.usersWHERE username = $1",
+                "SELECT 1 FROM user_svc.users WHERE username = $1",
                 candidate,
             )
             if not available:
@@ -485,7 +485,7 @@ async def upload_my_avatar(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, avatar_url FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id, avatar_url FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -522,7 +522,7 @@ async def remove_my_avatar(
 ):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, avatar_url FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id, avatar_url FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -553,7 +553,7 @@ async def send_email_verification(
 ):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT keycloak_sub, email, email_verified FROM user_svc.usersWHERE keycloak_sub = $1",
+            "SELECT keycloak_sub, email, email_verified FROM user_svc.users WHERE keycloak_sub = $1",
             claims["sub"],
         )
     if not user:
@@ -620,7 +620,7 @@ async def check_email_verification(
     """
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, keycloak_sub FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id, keycloak_sub FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -705,7 +705,7 @@ async def request_phone_verification(
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT phone, phone_verified FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT phone, phone_verified FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -780,7 +780,7 @@ async def confirm_phone_verification(
         )
 
     async with pool.acquire() as conn:
-        user = await conn.fetchrow("SELECT id FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"])
+        user = await conn.fetchrow("SELECT id FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"])
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute("UPDATE user_svc.users SET phone_verified = TRUE WHERE id = $1", user["id"])
@@ -974,7 +974,7 @@ async def add_my_apartment(
             raise HTTPException(status_code=404, detail="Apartment not found")
 
         user = await conn.fetchrow(
-            "SELECT id FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1007,7 +1007,7 @@ async def remove_my_apartment(
 ):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1064,7 +1064,7 @@ async def add_my_unit(
 ):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, role FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id, role FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1111,7 +1111,7 @@ async def remove_my_unit(
 ):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT id, role FROM user_svc.usersWHERE keycloak_sub = $1", claims["sub"]
+            "SELECT id, role FROM user_svc.users WHERE keycloak_sub = $1", claims["sub"]
         )
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1235,7 +1235,7 @@ async def list_users(
 async def get_admin_stats(pool: Pool = Depends(get_pool)):
     async with pool.acquire() as conn:
         total_pending = await conn.fetchval(
-            "SELECT COUNT(*) FROM user_svc.usersWHERE is_active = FALSE AND role != 'guest'"
+            "SELECT COUNT(*) FROM user_svc.users WHERE is_active = FALSE AND role != 'guest'"
         )
         counts = {r["action"]: r["cnt"] for r in await conn.fetch(
             "SELECT action, COUNT(*) AS cnt FROM admin_actions GROUP BY action"
@@ -1376,7 +1376,7 @@ async def update_role(
 ):
     async with pool.acquire() as conn:
         user_info = await conn.fetchrow(
-            "SELECT name, email, keycloak_sub, role FROM user_svc.usersWHERE id = $1", user_id
+            "SELECT name, email, keycloak_sub, role FROM user_svc.users WHERE id = $1", user_id
         )
         if not user_info:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1580,7 +1580,7 @@ async def _record_action(
 ) -> None:
     """Insert a row into admin_actions for persistent audit tracking."""
     sub = claims.get("sub")
-    admin = await conn.fetchrow("SELECT id, name FROM user_svc.usersWHERE keycloak_sub = $1", sub)
+    admin = await conn.fetchrow("SELECT id, name FROM user_svc.users WHERE keycloak_sub = $1", sub)
     admin_id   = admin["id"]   if admin else None
     admin_name = admin["name"] if admin else claims.get("preferred_username", "Unknown Admin")
     await conn.execute(
@@ -1609,7 +1609,7 @@ async def approve_user(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, name, email, keycloak_sub FROM user_svc.usersWHERE id = $1",
+            "SELECT id, name, email, keycloak_sub FROM user_svc.users WHERE id = $1",
             user_id,
         )
         if not row:
@@ -1652,7 +1652,7 @@ async def reject_user(
 ):
     async with pool.acquire() as conn:
         user_row = await conn.fetchrow(
-            "SELECT id, name, email FROM user_svc.usersWHERE id = $1 AND is_active = FALSE",
+            "SELECT id, name, email FROM user_svc.users WHERE id = $1 AND is_active = FALSE",
             user_id,
         )
         if not user_row:
@@ -1660,7 +1660,7 @@ async def reject_user(
         await conn.execute(
             "DELETE FROM core.notification WHERE type = 'new_registration' AND related_id = $1", user_id
         )
-        await conn.execute("DELETE FROM user_svc.usersWHERE id = $1", user_id)
+        await conn.execute("DELETE FROM user_svc.users WHERE id = $1", user_id)
         await _record_action(conn, claims, None, user_row["name"], user_row["email"], "rejected")
 
 
@@ -1677,12 +1677,12 @@ async def remove_user(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, name, email, keycloak_sub FROM user_svc.usersWHERE id = $1",
+            "SELECT id, name, email, keycloak_sub FROM user_svc.users WHERE id = $1",
             user_id,
         )
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
-        await conn.execute("DELETE FROM user_svc.usersWHERE id = $1", user_id)
+        await conn.execute("DELETE FROM user_svc.users WHERE id = $1", user_id)
         await _record_action(conn, claims, None, row["name"], row["email"], "removed")
 
     if row["keycloak_sub"]:

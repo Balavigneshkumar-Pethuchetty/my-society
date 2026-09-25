@@ -28,7 +28,7 @@ router = APIRouter()
 async def _get_db_user(conn, claims: dict) -> dict:
     sub = claims.get("sub")
     row = await conn.fetchrow(
-        "SELECT id, name, email, keycloak_sub FROM user_svc.usersWHERE keycloak_sub = $1", sub
+        "SELECT id, name, email, keycloak_sub FROM user_svc.users WHERE keycloak_sub = $1", sub
     )
     if not row:
         raise HTTPException(status_code=404, detail="User not found — call /users/sync first")
@@ -194,7 +194,7 @@ async def export_activity(
             raise HTTPException(status_code=404, detail="User no longer exists")
 
         profile = await conn.fetchrow(
-            "SELECT name, email, phone, role, created_at FROM user_svc.usersWHERE id = $1", user_id
+            "SELECT name, email, phone, role, created_at FROM user_svc.users WHERE id = $1", user_id
         )
         apartments = await conn.fetch(
             "SELECT a.block, a.unit_number, a.type FROM user_apartments ua "
@@ -397,7 +397,7 @@ async def approve_leave_request(
         recipients: list[dict] = []
         if row["user_id"]:
             await _notify(conn, row["user_id"], "leave_request_approved", "Leave Request Approved", message)
-            user = await conn.fetchrow("SELECT phone, email FROM user_svc.usersWHERE id = $1", row["user_id"])
+            user = await conn.fetchrow("SELECT phone, email FROM user_svc.users WHERE id = $1", row["user_id"])
             if user:
                 recipients = [{
                     "phone": crypto.decrypt(user["phone"]), "email": crypto.decrypt(user["email"]),

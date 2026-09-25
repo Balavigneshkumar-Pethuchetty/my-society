@@ -192,8 +192,8 @@ async def list_unitmates(
                     SELECT apartment_id FROM user_apartments WHERE user_id = $1
                 )
                 UNION
-                SELECT id FROM user_svc.usersWHERE structure_node_id IS NOT NULL AND structure_node_id = (
-                    SELECT structure_node_id FROM user_svc.usersWHERE id = $1
+                SELECT id FROM user_svc.users WHERE structure_node_id IS NOT NULL AND structure_node_id = (
+                    SELECT structure_node_id FROM user_svc.users WHERE id = $1
                 )
                 UNION
                 SELECT $1
@@ -250,7 +250,7 @@ async def create_notification(
     pool=Depends(get_pool),
 ):
     async with pool.acquire() as conn:
-        exists = await conn.fetchval("SELECT 1 FROM user_svc.usersWHERE id = $1", user_id)
+        exists = await conn.fetchval("SELECT 1 FROM user_svc.users WHERE id = $1", user_id)
         if not exists:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute(
