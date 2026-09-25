@@ -83,7 +83,7 @@ _REG_QUERY = """
         r.qr_code,
         p.id::text     AS payment_id,
         p.status       AS payment_status,
-        p.payment_method,
+        p.gateway_name AS payment_method,
         p.screenshot_path,
         p.utr_number,
         p.review_notes,
@@ -201,9 +201,9 @@ async def create_registration(
         if not is_free:
             await conn.fetchval(
                 "INSERT INTO payment "
-                "(registration_id, gateway_name, payment_method, original_amount, original_currency, "
+                "(registration_id, gateway_name, original_amount, original_currency, "
                 "settled_amount, settled_currency, status) "
-                "VALUES ($1::uuid, 'manual', 'manual_upi', $2, $3, $2, 'INR', 'pending_screenshot') "
+                "VALUES ($1::uuid, 'manual', $2, $3, $2, 'INR', 'pending_screenshot') "
                 "RETURNING id::text",
                 reg_id, total_amount, event["price_currency"],
             )
