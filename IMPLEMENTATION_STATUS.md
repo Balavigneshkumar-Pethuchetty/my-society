@@ -59,29 +59,38 @@
 
 ## 🏗️ Component Structure
 
+### Main Project (`/home/balavigneshkumar/my-society`)
 ```
 services/
 ├── shared/
 │   ├── notification_queue.py          ✅ Queue system (Redis/memory)
 │   ├── notification_client_v2.py      ✅ Graceful client
 │   └── NOTIFICATION_CLIENT_USAGE.md   ✅ Usage guide
-│
-└── notification/
-    └── app/
-        ├── config.py                  ✅ Updated with queue/channel config
-        ├── main.py                    ✅ Queue init + channel loading
-        ├── .env.example               ✅ All env variables documented
-        └── channels/
-            ├── base.py                ✅ Plugin interface
-            ├── __init__.py            ✅ Channel registry
-            ├── email_channel.py       ✅ Email implementation
-            ├── sms_channel.py         ✅ SMS integration point
-            ├── telegram_channel.py    ✅ Telegram integration point
-            └── novu_channel.py        ✅ Novu implementation
 
 Core Services (event, user, registration, ticket, payment):
 ├── config.py                          ✅ Notification settings added
 └── .env.example                       ✅ Env variables added
+```
+
+### Independent Notification Service (`/home/balavigneshkumar/notification-service`)
+```
+notification-service/
+├── app/
+│   ├── config.py                      ✅ Queue/channel config
+│   ├── main.py                        ✅ Queue init + channel loading
+│   ├── channels/
+│   │   ├── base.py                    ✅ Plugin interface
+│   │   ├── __init__.py                ✅ Channel registry
+│   │   ├── email_channel.py           ✅ Email implementation
+│   │   ├── sms_channel.py             ✅ SMS integration point
+│   │   ├── telegram_channel.py        ✅ Telegram integration point
+│   │   └── novu_channel.py            ✅ Novu implementation
+│
+├── shared/                            ✅ Copied from main project
+├── docker-compose.yml                 ✅ Standalone deployment
+├── .env.example                       ✅ Independent configuration
+├── Dockerfile                         ✅ Self-contained build
+└── README.md                          ✅ Complete setup guide
 ```
 
 ---

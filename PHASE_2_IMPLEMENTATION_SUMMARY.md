@@ -34,9 +34,18 @@ The optional notification service has been successfully implemented with a compl
   - **Telegram** (`telegram_channel.py`) - Telegram Bot API integration point
   - **Novu** (`novu_channel.py`) - Novu platform orchestration
 
-### 2. Notification Service Enhanced ✓
+### 2. Notification Service - Now Independent ✓
 
-#### Updated `services/notification/app/main.py`
+**Location**: `/home/balavigneshkumar/notification-service/` (separate sibling project)
+
+#### Standalone Deployment
+- Independent docker-compose.yml for separate deployment
+- Self-contained Dockerfile (no path to main project)
+- Separate .env configuration
+- Can start/stop without affecting main stack
+- Scales independently with own resources
+
+#### Key Components
 - Queue initialization on startup (Redis or in-memory)
 - Plugin channel loading via `load_builtin_channels()`
 - Background queue processor task
@@ -49,7 +58,7 @@ The optional notification service has been successfully implemented with a compl
   - `/api/notifications/queue/clear` - Clear pending notifications
   - `/api/notifications/config` - List available channels
 
-#### Configuration (`services/notification/app/config.py`)
+#### Configuration
 - `ENABLE_NOTIFICATIONS` - Toggle entire system
 - `NOTIFICATION_QUEUE_TYPE` - redis or memory
 - `NOTIFICATION_CHANNELS` - Comma-separated channel list
@@ -233,20 +242,38 @@ REDIS_PORT=6379
 
 ## Files Changed/Created
 
-### New Files
+### Main Project (`/home/balavigneshkumar/my-society`)
+**New Files**:
 ```
 services/shared/notification_queue.py
 services/shared/notification_client_v2.py
 services/shared/NOTIFICATION_CLIENT_USAGE.md
-services/notification/app/channels/__init__.py
-services/notification/app/channels/base.py
-services/notification/app/channels/email_channel.py
-services/notification/app/channels/sms_channel.py
-services/notification/app/channels/telegram_channel.py
-services/notification/app/channels/novu_channel.py
 OPTIONAL_NOTIFICATION_SERVICE.md
 PHASE_2_MIGRATION_GUIDE.md
 PHASE_2_IMPLEMENTATION_SUMMARY.md
+IMPLEMENTATION_STATUS.md
+```
+
+### Independent Notification Service (`/home/balavigneshkumar/notification-service`)
+**New Repository with**:
+```
+app/channels/__init__.py
+app/channels/base.py
+app/channels/email_channel.py
+app/channels/sms_channel.py
+app/channels/telegram_channel.py
+app/channels/novu_channel.py
+app/config.py
+app/main.py
+app/models.py
+app/notifications.py
+app/email.py
+shared/                           (copied from main project)
+docker-compose.yml               (standalone deployment)
+Dockerfile                        (self-contained build)
+.env.example                      (independent configuration)
+README.md                         (complete setup guide)
+requirements.txt
 ```
 
 ### Modified Files
