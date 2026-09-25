@@ -37,7 +37,7 @@ async def _fetch_unit_label(conn, user_id) -> Optional[str]:
              WHERE uu.user_id = $1 LIMIT 1),
             (SELECT a.block || ' – ' || a.unit_number FROM user_apartments ua
              JOIN apartment a ON a.id = ua.apartment_id WHERE ua.user_id = $1 LIMIT 1),
-            (SELECT sn.name FROM users u JOIN structure_nodes sn ON sn.id = u.structure_node_id
+            (SELECT sn.name FROM user_svc.usersu JOIN structure_nodes sn ON sn.id = u.structure_node_id
              WHERE u.id = $1)
         )
         """,
@@ -56,7 +56,7 @@ async def get_by_sub(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.keycloak_sub = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.keycloak_sub = $1",
             keycloak_sub,
         )
         if not row:
@@ -85,7 +85,7 @@ async def get_by_ids(
         return []
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.id = ANY($1::uuid[])",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = ANY($1::uuid[])",
             id_list,
         )
         users = []
@@ -107,7 +107,7 @@ async def get_by_email(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.email_hash = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.email_hash = $1",
             crypto.blind_index(email),
         )
         if not row:
@@ -130,7 +130,7 @@ async def broadcast_targets(
     """Registered ahead of GET /{user_id} for the same routing reason as /by-ids."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.is_active = TRUE AND u.role != 'guest'",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.is_active = TRUE AND u.role != 'guest'",
         )
         users = []
         for row in rows:
@@ -151,7 +151,7 @@ async def get_by_id(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
             user_id,
         )
         if not row:
@@ -183,7 +183,7 @@ async def list_unitmates(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT {_USER_COLS} FROM users u WHERE u.id IN (
+            SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id IN (
                 SELECT user_id FROM user_units WHERE node_id IN (
                     SELECT node_id FROM user_units WHERE user_id = $1
                 )
@@ -192,8 +192,8 @@ async def list_unitmates(
                     SELECT apartment_id FROM user_apartments WHERE user_id = $1
                 )
                 UNION
-                SELECT id FROM users WHERE structure_node_id IS NOT NULL AND structure_node_id = (
-                    SELECT structure_node_id FROM users WHERE id = $1
+                SELECT id FROM user_svc.usersWHERE structure_node_id IS NOT NULL AND structure_node_id = (
+                    SELECT structure_node_id FROM user_svc.usersWHERE id = $1
                 )
                 UNION
                 SELECT $1
@@ -220,7 +220,7 @@ async def list_by_role(
 ):
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT {_USER_COLS} FROM users u WHERE u.role = $1 AND u.is_active = TRUE",
+            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.role = $1 AND u.is_active = TRUE",
             role,
         )
         users = []
@@ -250,7 +250,7 @@ async def create_notification(
     pool=Depends(get_pool),
 ):
     async with pool.acquire() as conn:
-        exists = await conn.fetchval("SELECT 1 FROM users WHERE id = $1", user_id)
+        exists = await conn.fetchval("SELECT 1 FROM user_svc.usersWHERE id = $1", user_id)
         if not exists:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute(
@@ -276,7 +276,7 @@ async def create_guest(
 ):
     async with pool.acquire() as conn:
         guest_id = await conn.fetchval(
-            "INSERT INTO users (name, role, is_active) VALUES ($1, 'guest', FALSE) RETURNING id::text",
+            "INSERT INTO user_svc.users (name, role, is_active) VALUES ($1, 'guest', FALSE) RETURNING id::text",
             body.name,
         )
     return {"id": guest_id}

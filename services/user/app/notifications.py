@@ -33,7 +33,7 @@ async def notify_admins(
 ) -> list[dict]:
     query = (
         "SELECT id, phone, email, notify_sms, notify_email, notify_telegram "
-        "FROM users WHERE role = 'admin' AND is_active = TRUE"
+        "FROM user_svc.users WHERE role = 'admin' AND is_active = TRUE"
     )
     params: list = []
     if exclude_user_id:

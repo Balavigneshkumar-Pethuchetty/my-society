@@ -12,7 +12,7 @@ router = APIRouter()
 
 async def _get_user_id(claims: dict, conn) -> UUID:
     sub = claims.get("sub")
-    row = await conn.fetchrow("SELECT id FROM users WHERE keycloak_sub = $1", sub)
+    row = await conn.fetchrow("SELECT id FROM user_svc.users WHERE keycloak_sub = $1", sub)
     if not row:
         raise HTTPException(status_code=404, detail="User not found — call /users/sync first")
     return row["id"]

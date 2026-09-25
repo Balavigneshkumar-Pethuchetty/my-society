@@ -26,7 +26,7 @@ from app.database import get_pool
 
 async def _backfill_users(conn) -> tuple[int, int]:
     rows = await conn.fetch(
-        "SELECT id, phone, email FROM users "
+        "SELECT id, phone, email FROM user_svc.users "
         "WHERE (phone IS NOT NULL AND phone_hash IS NULL) "
         "OR (email IS NOT NULL AND email_hash IS NULL)"
     )
@@ -43,7 +43,7 @@ async def _backfill_users(conn) -> tuple[int, int]:
             email_count += 1
         set_parts = [f"{col} = ${i + 2}" for i, col in enumerate(updates)]
         await conn.execute(
-            f"UPDATE users SET {', '.join(set_parts)} WHERE id = $1",
+            f"UPDATE user_svc.users SET {', '.join(set_parts)} WHERE id = $1",
             r["id"], *updates.values(),
         )
     return phone_count, email_count

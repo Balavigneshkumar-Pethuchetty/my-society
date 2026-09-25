@@ -27,7 +27,7 @@ def require_role(*roles: str):
         if sub:
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(
-                    "SELECT role FROM users WHERE keycloak_sub = $1", sub
+                    "SELECT role FROM user_svc.users WHERE keycloak_sub = $1", sub
                 )
             if row and row["role"] in roles:
                 return claims
