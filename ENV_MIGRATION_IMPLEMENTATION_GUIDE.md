@@ -167,7 +167,7 @@ APP_PUBLIC_URL=https://gm-global-techies-town.club
 
 # === Email ===
 GMAIL_SMTP_USER=gm.gtt.club@gmail.com
-GMAIL_APP_PASSWORD=fiqx zajl xdlo bumu
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
 
 # === Monitoring ===
 SPLUNK_HEC_TOKEN=a1b2c3d4-e5f6-7890-abcd-ef1234567890
@@ -224,7 +224,7 @@ SOCIETY_BANK_IFSC=ICIC0000001
 
 # === Email ===
 GMAIL_SMTP_USER=gm.gtt.club@gmail.com
-GMAIL_APP_PASSWORD=fiqx zajl xdlo bumu
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
 
 # === Monitoring ===
 SPLUNK_HEC_TOKEN=a1b2c3d4-e5f6-7890-abcd-ef1234567890
@@ -313,7 +313,7 @@ SOCIETY_BANK_IFSC=ICIC0000001
 
 # === Email ===
 GMAIL_SMTP_USER=gm.gtt.club@gmail.com
-GMAIL_APP_PASSWORD=fiqx zajl xdlo bumu
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
 
 # === MinIO ===
 MINIO_ROOT_USER=minio_admin
@@ -362,10 +362,10 @@ PAYMENT_SERVICE_ENV=testing
 
 # === AI Provider ===
 CLAUDE_MODEL=claude-sonnet-4-6
-ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
 
 # === Auth Service ===
-AUTH_SERVICE_API_KEY=eDv-RXEnQm1lrUwQe77ligJm3QwPuQ7lbCrreOyZejU
+AUTH_SERVICE_API_KEY=<your-auth-service-api-key>
 
 # === Society Config ===
 SOCIETY_NAME=GM Global Techies Town
@@ -375,7 +375,7 @@ APP_PUBLIC_URL=https://gm-global-techies-town.club
 
 # === Email ===
 GMAIL_SMTP_USER=gm.gtt.club@gmail.com
-GMAIL_APP_PASSWORD=fiqx zajl xdlo bumu
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
 
 # === MinIO ===
 MINIO_ROOT_USER=minio_admin
@@ -466,7 +466,7 @@ AUTH_SERVICE_API_KEY=eDv-RXEnQm1lrUwQe77ligJm3QwPuQ7lbCrreOyZejU
 
 # === Email ===
 GMAIL_SMTP_USER=gm.gtt.club@gmail.com
-GMAIL_APP_PASSWORD=fiqx zajl xdlo bumu
+GMAIL_APP_PASSWORD=<your-gmail-app-password>
 
 # === Keycloak ===
 KEYCLOAK_URL=https://auth.gm-global-techies-town.club
