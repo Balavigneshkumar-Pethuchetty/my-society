@@ -308,7 +308,7 @@ CREATE INDEX IF NOT EXISTS idx_ticket_qr_token ON ticket_svc.ticket (qr_token);
 CREATE TABLE IF NOT EXISTS registration_svc.payment (
     id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     registration_id     UUID        NOT NULL REFERENCES registration_svc.registration(id),
-    gateway_name        VARCHAR(100) NOT NULL,          -- 'razorpay' | 'cashfree' | 'stripe'
+    gateway_name        VARCHAR(100) NOT NULL,          -- 'razorpay' | 'cashfree' | 'stripe' | 'manual'
     gateway_order_id    VARCHAR(255),
     gateway_txn_id      VARCHAR(255) UNIQUE,
     original_amount     NUMERIC(10,2) NOT NULL,         -- amount shown to user
@@ -318,9 +318,13 @@ CREATE TABLE IF NOT EXISTS registration_svc.payment (
     exchange_rate_used  NUMERIC(18,8) NOT NULL DEFAULT 1.0,
     exchange_rate_id    UUID        REFERENCES core.exchange_rate(id),
     status              VARCHAR(50) NOT NULL DEFAULT 'pending',
-                        -- 'pending' | 'success' | 'failed' | 'refunded'
+                        -- 'pending' | 'success' | 'failed' | 'refunded' | 'pending_screenshot' | 'pending_review' | 'approved' | 'rejected'
     gateway_response    JSONB,                          -- full webhook payload
+    screenshot_path     TEXT,                           -- UPI payment screenshot for manual review
+    utr_number          VARCHAR(100),                   -- UPI transaction reference number
+    review_notes        TEXT,                           -- admin notes during manual payment review
     paid_at             TIMESTAMPTZ,
+    reviewed_at         TIMESTAMPTZ,                    -- when admin reviewed the payment
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
