@@ -1467,6 +1467,11 @@ async def _keycloak_assign_role(keycloak_sub: str, role_name: str) -> None:
             headers=headers,
             json=[{"id": role_rep["id"], "name": role_rep["name"]}],
         )
+        if assign_resp.status_code == 404:
+            raise HTTPException(
+                status_code=409,
+                detail="This user has no matching Keycloak account (e.g. seed/demo data) — role cannot be assigned. Reject the user instead.",
+            )
         if assign_resp.status_code not in (200, 204):
             raise HTTPException(status_code=502, detail=f"Keycloak role assign failed: {assign_resp.text}")
 

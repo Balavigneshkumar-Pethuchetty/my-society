@@ -42,7 +42,7 @@ interface AdminStats {
   by_admin: AdminBreakdown[]; recent_actions: AdminAction[];
 }
 
-const ASSIGNABLE_ROLES = ['resident', 'committee_member', 'security_guard'];
+const ASSIGNABLE_ROLES = ['resident', 'committee_member', 'security_guard', 'admin'];
 const ALL_ROLES = ['admin', 'committee_member', 'resident', 'security_guard', 'sponsor'];
 
 const ACTION_COLORS: Record<string, { bg: string; color: string }> = {

@@ -32,3 +32,8 @@ Thumbs.db
 
 # ── Docker volumes / build cache (never tracked) ──────────────────────────────
 *.tar
+
+# ── Backups (may contain secrets) ─────────────────────────────────────────────
+*.bak
+*.bak-*
+.env.bak*
