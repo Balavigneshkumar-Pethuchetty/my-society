@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
@@ -16,6 +17,7 @@ from app.models import SocietyConfig
 from app.routes import users, internal, notifications, logs, building, leave_requests
 from app.middleware.splunk import SplunkLoggingMiddleware
 from app.metrics_collector import collect_metrics
+from app.scripts import backfill_pii_encryption
 from shared.swagger_theme import themed_swagger_ui_html
 
 # All nginx-prefixed paths (browser-visible via http://host/api/users/...)
@@ -58,6 +60,14 @@ def create_access_token(username: str, expires_delta: timedelta = None) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await wait_for_db()
+    # Seed data (db/init/02_seed.sql) can only insert plaintext phone/email —
+    # the PII key lives outside Postgres — so encrypt any such rows on every
+    # boot. Idempotent: rows that already have a blind-index hash are skipped.
+    # Never fatal — a data conflict here must not take the service down.
+    try:
+        await backfill_pii_encryption.backfill(quiet_if_nothing=True)
+    except Exception as e:
+        logging.getLogger(__name__).error(f"PII backfill skipped: {type(e).__name__}: {e}")
     metrics_task = asyncio.create_task(collect_metrics())
     yield
     metrics_task.cancel()

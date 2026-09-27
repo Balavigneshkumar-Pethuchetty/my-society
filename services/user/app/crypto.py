@@ -40,6 +40,15 @@ def encrypt(plaintext: Optional[str]) -> Optional[str]:
     return base64.b64encode(nonce + ct).decode()
 
 
+def decrypt_strict(ciphertext: str) -> str:
+    """Reverse of encrypt() that raises on anything that isn't valid ciphertext
+    under the current key — use this to *detect* plaintext (the backfill), not
+    to read values for display."""
+    raw = base64.b64decode(ciphertext, validate=True)
+    nonce, ct = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
+    return AESGCM(_aes_key()).decrypt(nonce, ct, None).decode()
+
+
 def decrypt(ciphertext: Optional[str]) -> Optional[str]:
     """Reverse of encrypt(); None in, None out.
 
@@ -49,9 +58,7 @@ def decrypt(ciphertext: Optional[str]) -> Optional[str]:
     if not ciphertext:
         return None
     try:
-        raw = base64.b64decode(ciphertext)
-        nonce, ct = raw[:_NONCE_LEN], raw[_NONCE_LEN:]
-        return AESGCM(_aes_key()).decrypt(nonce, ct, None).decode()
+        return decrypt_strict(ciphertext)
     except (ValueError, binascii.Error, Exception) as e:
         # Likely plaintext data from before encryption, corrupted data, or wrong key.
         # Return the original value so API doesn't crash; callers see something.

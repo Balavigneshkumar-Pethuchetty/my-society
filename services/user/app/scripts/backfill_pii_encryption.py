@@ -19,39 +19,49 @@ Usage:
     docker compose run --rm user-service python -m app.scripts.backfill_pii_encryption
 """
 import asyncio
+import logging
 
 from app import crypto
 from app.database import get_pool
 
+logger = logging.getLogger(__name__)
+
 
 async def _backfill_users(conn) -> tuple[int, int]:
     rows = await conn.fetch(
-        "SELECT id, phone, email FROM user_svc.users "
+        "SELECT id, phone, email, phone_hash, email_hash FROM user_svc.users "
         "WHERE (phone IS NOT NULL AND phone_hash IS NULL) "
         "OR (email IS NOT NULL AND email_hash IS NULL)"
     )
-    phone_count = email_count = 0
+    counts = {"phone": 0, "email": 0}
     for r in rows:
-        updates: dict = {}
-        if r["phone"] is not None:
-            updates["phone"] = crypto.encrypt(r["phone"])
-            updates["phone_hash"] = crypto.blind_index(r["phone"])
-            phone_count += 1
-        if r["email"] is not None:
-            updates["email"] = crypto.encrypt(r["email"])
-            updates["email_hash"] = crypto.blind_index(r["email"])
-            email_count += 1
-        set_parts = [f"{col} = ${i + 2}" for i, col in enumerate(updates)]
-        await conn.execute(
-            f"UPDATE user_svc.users SET {', '.join(set_parts)} WHERE id = $1",
-            r["id"], *updates.values(),
-        )
-    return phone_count, email_count
+        for col in ("phone", "email"):
+            # Only touch a column whose own hash is missing — the other one may
+            # already hold ciphertext and must not be encrypted a second time.
+            if r[col] is None or r[f"{col}_hash"] is not None:
+                continue
+            h = crypto.blind_index(r[col])
+            other = await conn.fetchval(
+                f"SELECT id FROM user_svc.users WHERE {col}_hash = $1 AND id <> $2", h, r["id"]
+            )
+            if other:
+                # Plaintext rows escaped the unique index; encrypting would
+                # collide with an existing account. Leave it for an admin.
+                logger.warning(f"PII backfill: users.{col} of {r['id']} duplicates user {other} — skipped")
+                continue
+            await conn.execute(
+                f"UPDATE user_svc.users SET {col} = $1, {col}_hash = $2 WHERE id = $3",
+                crypto.encrypt(r[col]), h, r["id"],
+            )
+            counts[col] += 1
+    return counts["phone"], counts["email"]
 
 
 def _already_ciphertext(value: str) -> bool:
+    # Must be decrypt_strict: crypto.decrypt() swallows failures and returns
+    # the input, which would make every plaintext value look "already done".
     try:
-        crypto.decrypt(value)
+        crypto.decrypt_strict(value)
         return True
     except Exception:
         return False
@@ -72,13 +82,15 @@ async def _backfill_snapshot_column(conn, table: str, column: str) -> int:
     return migrated
 
 
-async def backfill() -> None:
+async def backfill(quiet_if_nothing: bool = False) -> None:
     pool = await get_pool()
-    async with pool.acquire() as conn:
+    async with pool.acquire() as conn, conn.transaction():
         phone_count, email_count = await _backfill_users(conn)
-        admin_actions_count = await _backfill_snapshot_column(conn, "admin_actions", "target_user_email")
-        leave_request_count = await _backfill_snapshot_column(conn, "leave_request", "user_email")
+        admin_actions_count = await _backfill_snapshot_column(conn, "user_svc.admin_actions", "target_user_email")
+        leave_request_count = await _backfill_snapshot_column(conn, "user_svc.leave_request", "user_email")
 
+    if quiet_if_nothing and not (phone_count or email_count or admin_actions_count or leave_request_count):
+        return
     print(
         f"Backfill complete — users.phone: {phone_count} encrypted, "
         f"users.email: {email_count} encrypted, "
