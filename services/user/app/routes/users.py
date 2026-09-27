@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from asyncpg import Pool
+from asyncpg.exceptions import ForeignKeyViolationError
 import httpx
 
 from app.database import get_pool
@@ -1151,6 +1152,15 @@ async def remove_my_unit(
     summary="List all users",
     dependencies=[Depends(require_role("admin", "committee_member"))],
 )
+# Alias used by the admin UI: browser ad-blockers (e.g. AdBlock/EasyPrivacy)
+# cancel requests shaped like `/api/users?active=...` client-side ("Failed to
+# fetch", never reaches nginx), while sub-paths like /api/users/admin-stats pass.
+@router.get(
+    "/roster",
+    response_model=UserListResponse,
+    include_in_schema=False,
+    dependencies=[Depends(require_role("admin", "committee_member"))],
+)
 async def list_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     active: Optional[str] = Query(None, description="Filter by is_active (true/false)"),
@@ -1687,7 +1697,13 @@ async def remove_user(
         )
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
-        await conn.execute("DELETE FROM user_svc.users WHERE id = $1", user_id)
+        try:
+            await conn.execute("DELETE FROM user_svc.users WHERE id = $1", user_id)
+        except ForeignKeyViolationError:
+            raise HTTPException(
+                status_code=409,
+                detail="This user has registrations, tickets or payments and cannot be removed. Revoke their access instead.",
+            )
         await _record_action(conn, claims, None, row["name"], row["email"], "removed")
 
     if row["keycloak_sub"]:

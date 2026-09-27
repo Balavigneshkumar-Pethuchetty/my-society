@@ -74,8 +74,8 @@ async function apiFetch<T>(path: string, token: string, init?: RequestInit): Pro
   return res.json() as Promise<T>;
 }
 
-const listPending    = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('?active=false', t);
-const listActive     = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('?active=true', t);
+const listPending    = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('/roster?active=false', t);
+const listActive     = (t: string) => apiFetch<{ total: number; items: DbUser[] }>('/roster?active=true', t);
 const getAdminStats  = (t: string) => apiFetch<AdminStats>('/admin-stats', t);
 const approveUser    = (t: string, id: string, role: string) =>
   apiFetch<DbUser>(`/${id}/approve`, t, { method: 'POST', body: JSON.stringify({ role }) });
