@@ -11,6 +11,18 @@ services:
       NGINX_PORT:           ${NGINX_PORT}
       NGINX_ADMIN_USER:     ${NGINX_ADMIN_USER:-admin}
       NGINX_ADMIN_PASSWORD: ${NGINX_ADMIN_PASSWORD:-}
+    # Don't accept traffic before the backends exist: without this, `make up`/
+    # `make restart` starts nginx alongside them and every API call in the
+    # first ~30s fails with "<service> could not be resolved" → 502.
+    # user-service must be healthy (login/sync depend on it); the rest only
+    # need to be started, so one unhealthy backend can't keep the whole site down.
+    depends_on:
+      user-service:         { condition: service_healthy }
+      event-service:        { condition: service_started }
+      registration-service: { condition: service_started }
+      ticket-service:       { condition: service_started }
+      payment-service:      { condition: service_started }
+      visitor-service:      { condition: service_started }
     ports:
       - "0.0.0.0:${NGINX_PORT}:${NGINX_PORT}"
     volumes:
