@@ -326,7 +326,7 @@ async def get_me(
         raise HTTPException(status_code=401, detail="Token missing 'sub' claim — add 'basic' scope to Keycloak client")
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.keycloak_sub = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.keycloak_sub = $1",
             sub,
         )
         if not row:
@@ -417,7 +417,7 @@ async def update_me(
             raise HTTPException(status_code=404, detail="User not found")
         user_id = row["id"]
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1",
             user_id,
         )
         apartments = await _fetch_user_apartments(conn, user_id)
@@ -502,7 +502,7 @@ async def upload_my_avatar(
             object_key, user_id,
         )
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
 
@@ -531,7 +531,7 @@ async def remove_my_avatar(
 
         await conn.execute("UPDATE user_svc.users SET avatar_url = NULL WHERE id = $1", user_id)
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
 
@@ -651,7 +651,7 @@ async def check_email_verification(
             raise HTTPException(status_code=503, detail="Authentication service is temporarily unavailable. Please try again in a moment.")
 
         await conn.execute("UPDATE user_svc.users SET email_verified = $1 WHERE id = $2", verified, user["id"])
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user["id"])
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user["id"])
         apartments = await _fetch_user_apartments(conn, user["id"])
         units = await _fetch_user_units(conn, user["id"])
     return _row_to_user(row, apartments, units)
