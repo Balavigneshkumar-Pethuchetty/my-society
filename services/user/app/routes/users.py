@@ -784,7 +784,7 @@ async def confirm_phone_verification(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         await conn.execute("UPDATE user_svc.users SET phone_verified = TRUE WHERE id = $1", user["id"])
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user["id"])
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user["id"])
         apartments = await _fetch_user_apartments(conn, user["id"])
         units = await _fetch_user_units(conn, user["id"])
 
@@ -989,7 +989,7 @@ async def add_my_apartment(
             user_id, body.apartment_id,
         )
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
     return _row_to_user(row, apartments, units)
@@ -1020,7 +1020,7 @@ async def remove_my_apartment(
         if deleted == "DELETE 0":
             raise HTTPException(status_code=404, detail="Apartment not linked to this user")
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
     return _row_to_user(row, apartments, units)
@@ -1093,7 +1093,7 @@ async def add_my_unit(
                     user_id, body.node_id,
                 )
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apts = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
     return _row_to_user(row, apts, units)
@@ -1137,7 +1137,7 @@ async def remove_my_unit(
                     user_id, node_id,
                 )
 
-        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id)
+        row = await conn.fetchrow(f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id)
         apartments = await _fetch_user_apartments(conn, user_id)
         units = await _fetch_user_units(conn, user_id)
     return _row_to_user(row, apartments, units)
@@ -1179,11 +1179,11 @@ async def list_users(
 
     async with pool.acquire() as conn:
         total = await conn.fetchval(
-            f"SELECT COUNT(*) FROM user_svc.usersu WHERE {where}", *params
+            f"SELECT COUNT(*) FROM user_svc.users u WHERE {where}", *params
         )
         rows = await conn.fetch(
             f"""
-            SELECT {_USER_COLS} FROM user_svc.usersu
+            SELECT {_USER_COLS} FROM user_svc.users u
             WHERE {where}
             ORDER BY u.created_at DESC
             LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
@@ -1313,7 +1313,7 @@ async def resident_directory(pool: Pool = Depends(get_pool)):
                 FROM user_apartments ua JOIN apartment a ON a.id = ua.apartment_id
                 UNION
                 SELECT u.id, sn.name AS label
-                FROM user_svc.usersu JOIN structure_nodes sn ON sn.id = u.structure_node_id
+                FROM user_svc.users u JOIN structure_nodes sn ON sn.id = u.structure_node_id
                 WHERE u.structure_node_id IS NOT NULL
             ),
             flats AS (
@@ -1322,7 +1322,7 @@ async def resident_directory(pool: Pool = Depends(get_pool)):
                 GROUP BY user_id
             )
             SELECT u.id, u.name, u.phone, flats.unit_label
-            FROM user_svc.usersu
+            FROM user_svc.users u
             JOIN flats ON flats.user_id = u.id
             WHERE u.is_active = TRUE AND u.role != 'guest'
             ORDER BY u.name
@@ -1350,7 +1350,7 @@ async def get_user(
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1",
             user_id,
         )
         if not row:
@@ -1393,7 +1393,7 @@ async def update_role(
             "role_changed", body.role,
         )
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1",
             row["id"],
         )
         apartments = await _fetch_user_apartments(conn, user_id)
@@ -1424,7 +1424,7 @@ async def set_active(
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1",
             row["id"],
         )
         apartments = await _fetch_user_apartments(conn, user_id)
@@ -1632,7 +1632,7 @@ async def approve_user(
         )
 
         full = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1",
             updated["id"],
         )
         apartments = await _fetch_user_apartments(conn, updated["id"])
@@ -1705,7 +1705,7 @@ async def revoke_user(
 ):
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu {_USER_JOIN} WHERE u.id = $1",
+            f"SELECT {_USER_COLS} FROM user_svc.users u {_USER_JOIN} WHERE u.id = $1",
             user_id,
         )
         if not row:
@@ -1713,7 +1713,7 @@ async def revoke_user(
         await conn.execute("UPDATE user_svc.users SET is_active = FALSE WHERE id = $1", user_id)
         await _record_action(conn, claims, user_id, row["name"], row["email"], "revoked")
         full = await conn.fetchrow(
-            f"SELECT {_USER_COLS} FROM user_svc.usersu WHERE u.id = $1", user_id,
+            f"SELECT {_USER_COLS} FROM user_svc.users u WHERE u.id = $1", user_id,
         )
         apartments = await _fetch_user_apartments(conn, user_id)
 
